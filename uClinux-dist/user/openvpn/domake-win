@@ -1,0 +1,53 @@
+#!/bin/sh
+
+# This is the master OpenVPN build script for Windows.
+# This script will build OpenVPN, the TAP driver, and
+# the installer from source, targeting x86 on Windows
+# 2000 and higher, and x64 on Windows 2003 and higher.
+#
+# See top-level build configuration in install-win32/settings.in
+#
+# Prerequisite installs:
+#
+# MinGW     -- for GNU C compiler
+# MSYS      -- for bash
+# msysDTK   -- for perl
+# NSIS      -- for building installer
+# svn       -- for checking out source code (or TortoiseSVN)
+# Windows Driver Kit (6001_17121_HyperV_WDK.iso) -- for building TAP driver + tapinstall
+#
+# Required libraries (must be prebuilt)
+#
+# OpenSSL       -- define OPENSSL_DIR in settings.in
+# LZO           -- define LZO_DIR in settings.in
+# PKCS11-HELPER -- define PKCS11_HELPER_DIR
+#
+# Optional OpenVPN GUI binary (prebuilt)
+#           -- define OPENVPN_GUI_DIR and OPENVPN_GUI in settings.in
+#
+# Required source code not included in OpenVPN SVN repository
+# because of MS licensing restrictions:
+#
+# ../tapinstall -- This is based on 'devcon' which is found in the
+#                  Windows Driver Kit (formerly known as DDK).
+#                  Copy the 'devcon' source tree to ../tapinstall
+#                  Edit 'sources' and modify TARGETNAME=tapinstall
+#
+# ../svc-template -- This directory should contain service.[ch]
+#                    from the MS Platform SDK.
+#
+# Example usage:
+#
+# build everything, then write installer to desktop
+#  INSTALLER_DEST="/c/Documents and Settings/James/Desktop" ./domake-win
+
+install-win32/winconfig
+install-win32/makeopenvpn
+install-win32/maketapinstall
+install-win32/maketap
+install-win32/signtap
+install-win32/makebin
+install-win32/getgui
+install-win32/buildinstaller
+install-win32/signinstaller
+install-win32/copyinstaller

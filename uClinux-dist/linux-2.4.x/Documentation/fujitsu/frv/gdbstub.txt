@@ -1,0 +1,258 @@
+			     ====================
+			     DEBUGGING FR-V LINUX
+			     ====================
+
+
+The kernel contains a GDB stub that talks GDB remote protocol across a serial
+port. This permits GDB to single step through the kernel, set breakpoints and
+trap exceptions that happen in kernel space and interrupt execution. It also
+permits serial port events to jump the kernel into the debugger.
+
+On the CPUs that have on-chip UARTs (FR400, FR403, FR405, FR555), the
+GDB stub hijacks a serial port for its own purposes, and makes it
+generate level 15 interrupts (NMI). The kernel proper cannot see the serial
+port in question under these conditions.
+
+On the MB93091-VDK CPU boards, the GDB stub uses UART1, which would otherwise
+be /dev/ttyS1. On the MB93093-PDK, the GDB stub uses UART0. Therefore, on the
+PDK there is no externally accessible serial port and the serial port to
+which the touch screen is attached becomes /dev/ttyS0.
+
+Note that the GDB stub runs entirely within CPU debug mode, and so should not
+incur any exceptions or interrupts whilst it is active. In particular, note
+that the clock will lose time since it is implemented in software.
+
+
+==================
+KERNEL PREPARATION
+==================
+
+Firstly, a debuggable kernel must be built. To do this, unpack the kernel tree
+and copy the configuration that you wish to use to .config. Then reconfigure
+the following things on the "Kernel Hacking" tab:
+
+  (*) "Include debugging information"
+
+      Set this to "Y". This causes all C and Assembly files to be compiled
+      to include debugging information.
+
+  (*) "In-kernel GDB stub"
+
+      Set this to "Y". This causes the GDB stub to be compiled into the
+      kernel.
+
+  (*) "Immediate activation"
+
+      Set this to "Y" if you want the GDB stub to activate as soon as possible
+      and wait for GDB to connect. This allows you to start tracing right from
+      the beginning of start_kernel() in init/main.c.
+
+  (*) "Console through GDB stub"
+
+      Set this to "Y" if you wish to be able to use "console=gdb0" on the
+      command line. That tells the kernel to pass system console messages to
+      GDB (which then prints them on its standard output). This is useful when
+      debugging the serial drivers that'd otherwise be used to pass console
+      messages to the outside world.
+
+Then build as usual, download to the board and execute. Note that if
+"Immediate activation" was selected, then the kernel will wait for GDB to
+attach. If not, then the kernel will boot immediately and GDB will have to
+interupt it or wait for an exception to occur if before doing anything with
+the kernel.
+
+
+=========================
+KERNEL DEBUGGING WITH GDB
+=========================
+
+Set the serial port on the computer that's going to run GDB to the appropriate
+baud rate. Assuming the board's debug port is connected to ttyS0/COM1 on the
+computer doing the debugging:
+
+	stty -F /dev/ttyS0 115200
+
+Then start GDB in the base of the kernel tree:
+
+	frv-uclinux-gdb linux		[uClinux]
+
+Or:
+
+	frv-uclinux-gdb vmlinux		[MMU linux]
+
+When the prompt appears:
+
+	GNU gdb frv-031024
+	Copyright 2003 Free Software Foundation, Inc.
+	GDB is free software, covered by the GNU General Public License, and you are
+	welcome to change it and/or distribute copies of it under certain conditions.
+	Type "show copying" to see the conditions.
+	There is absolutely no warranty for GDB.  Type "show warranty" for details.
+	This GDB was configured as "--host=i686-pc-linux-gnu --target=frv-uclinux"...
+	(gdb) 
+
+Attach to the board like this:
+
+        (gdb) target remote /dev/ttyS0
+	Remote debugging using /dev/ttyS0
+	start_kernel () at init/main.c:395
+	(gdb) 
+
+This should show the appropriate lines from the source too. The kernel can
+then be debugged almost as if it's any other program.
+
+
+===============================
+INTERRUPTING THE RUNNING KERNEL
+===============================
+
+The kernel can be interrupted whilst it is running, causing a jump back to the
+GDB stub and the debugger:
+
+  (*) Pressing Ctrl-C in GDB. This will cause GDB to try and interrupt the
+      kernel by sending an RS232 BREAK over the serial line to the GDB
+      stub. This will (mostly) immediately interrupt the kernel and return it
+      to the debugger.
+
+  (*) Setting a software breakpoint. This sets a break instruction at the
+      desired location which the GDB stub then traps the exception for.
+
+  (*) Setting a hardware breakpoint. The GDB stub is capable of using the IBAR
+      and DBAR registers to assist debugging.
+
+Furthermore, the GDB stub will intercept a number of exceptions automatically
+if they are caused by kernel execution. It will also intercept BUG() macro
+invokation.
+
+
+===================================================
+KERNEL MODULE DEBUGGING - LOADING THE KERNEL MODULE
+===================================================
+
+A kernel should be built using the procedures described in KERNEL
+PREPARATION above.  The same set of configuration options should be
+used for building kernel modules.
+
+Once the kernel module is built, use "insmod -m" to load the kernel
+module.  The "-m" flag will provide additional output that may be used
+to assist in loading the module's symbols into GDB.  For example, here
+is some of the output that might be seen when loading the cramfs
+module:
+
+    [root@frv451-2 root]# /sbin/insmod -m cramfs.o
+   Sections:       Size      Address   Align
+   .this           00000060  d0078000  2**2
+   .text           000018e0  d0078060  2**4
+   .rodata.str1.4  00000100  d0079940  2**2
+   .kstrtab        000000b8  d0079a40  2**0
+   __ksymtab       00000030  d0079af8  2**2
+   __archdata      00000000  d0079b30  2**4
+   __kallsyms      00000445  d0079b30  2**2
+   .data           0000013c  d0079f78  2**2
+   .bss            00020048  d007a0b4  2**2
+
+A list of symbols and their address is listed after the above output. 
+The section information shown above is all that is needed for
+constructing a suitable GDB command for loading the symbols.
+
+Now that the kernel module is loaded, use GDB to connect to the kernel
+stub as described above.  Make sure that the linux kernel's symbols are
+loaded into GDB in the usual way.  I.e., start GDB using either:
+
+	frv-uclinux-gdb linux		[uClinux]
+
+Or:
+
+	frv-uclinux-gdb vmlinux		[MMU linux]
+
+
+==================================================
+KERNEL MODULE DEBUGGING - LOADING SYMBOLS INTO GDB
+==================================================
+
+GDB's "add-symbol-file" command must be used to load additional
+symbols associated with the kernel module.  The initial output from
+the "insmod -m" command is used to construct an appropriate command. 
+The format of the "add-symbol-file" command is as follows:
+
+    add-symbol-file FILE ADDR [-s <SECT> <SECT_ADDR> ...]
+
+Working from the above cramfs example, FILE is "cramfs.o".  ADDR
+should be the address of the .text section or 0xd0078060.  Finally, a
+number of -s arguments need to be given for certain sections and their
+addresses.
+
+GDB won't be able to find all of the sections shown in the initial
+"insmod -m" output.  However, there is no harm in listing all of the
+sections provided therein.  GDB will just ignore those sections that
+it cannot load.  You will see a warning, however, for each section
+that it could not load.
+
+So, for the above cramfs example, the following add-symbol-file command
+could be constructed:
+
+   add-symbol-file cramfs.o 0xd0078060 \
+                   -s .this           0xd0078000 \
+                   -s.rodata.str1.4   0xd0079940 \
+                   -s .kstrtab        0xd0079a40 \
+                   -s __ksymtab       0xd0079af8 \
+                   -s __archdata      0xd0079b30 \
+                   -s __kallsyms      0xd0079b30 \
+                   -s .data           0xd0079f78 \
+                   -s .bss            0xd007a0b4
+
+When GDB runs this command, it will complain (warn) that it can't find
+.this, .kstrtab, __ksymtab, __archdata, or __kallsyms.  This complaint
+is only a warning.  GDB will still operate correctly in the presence
+of such warnings.
+
+If you want to know the minimal set of sections that must be listed
+in the "add-symbol-file" command, it is sufficient to take the intersection
+of the sections listed by "insmod -m" with those listed by "objdump -h".
+Here is a portion of the "objdump -h" output for cramfs.o:
+
+   Sections:
+   Idx Name          Size      VMA       LMA       File off  Algn
+     0 .text         000018e0  00000000  00000000  00000040  2**4
+     CONTENTS, ALLOC, LOAD, RELOC, READONLY, CODE
+     1 .modinfo      00000034  00000000  00000000  00001920  2**2
+     CONTENTS, ALLOC, LOAD, READONLY, DATA
+     2 .rodata.str1.4 00000100  00000000  00000000  00001954  2**2
+     CONTENTS, ALLOC, LOAD, READONLY, DATA
+     3 .data         0000013c  00000000  00000000  00001a54  2**2
+     CONTENTS, ALLOC, LOAD, RELOC, DATA
+     4 .bss          00020048  00000000  00000000  00001b90  2**2
+     ALLOC
+     5 .comment      0000003a  00000000  00000000  00001b90  2**0
+     CONTENTS, READONLY
+
+Thus, only addresses associated with the .text, .rodata.str1.4, .data,
+and .bss sections need to be supplied to add-symbol-file.  This means
+that the following (minimal) add-symbol-file command could be used
+instead:
+
+   add-symbol-file cramfs.o 0xd0078060 \
+                   -s.rodata.str1.4   0xd0079940 \
+                   -s .data           0xd0079f78 \
+                   -s .bss            0xd007a0b4
+
+GDB produces the following output when this command is executed.  (Note
+that the user must type a "y" at the prompt)
+
+   add symbol table from file "cramfs.o" at
+   .text_addr = 0xd0078060
+   .rodata.str1.4_addr = 0xd0079940
+   .data_addr = 0xd0079f78
+   .bss_addr = 0xd007a0b4
+   (y or n) y
+   Reading symbols from cramfs.o...done.
+
+As noted earlier, it's not really necessary to use the minimal
+command.  The first "add-symbol-file" command that we constructed
+above is perfectly fine, so long as you don't mind seeing the warnings
+about the "missing" sections from GDB.
+
+Once the kernel module's symbols have been loaded into GDB using a
+suitable "add-symbol-file" command, debugging of the kernel, or the
+module, or both may proceed as usual.
+

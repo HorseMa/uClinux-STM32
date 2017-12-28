@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# build the installer
+
+cd install-win32
+rm -f *.exe
+'/c/Program Files/NSIS/makensis' openvpn.nsi &>makensis.log
+tail -20 makensis.log

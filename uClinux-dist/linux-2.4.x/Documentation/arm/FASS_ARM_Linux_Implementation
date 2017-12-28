@@ -1,0 +1,260 @@
+ARM Linux Fast Address-Space Switching (FASS)
+
+	This is current (hopefully) as of patch
+diff-2.4.18-rmk4-fass4.
+It gives an overview of the design and describes bits of the
+implementation, its structure and status.
+	If you have any comments/corrections please let me know at
+<awiggins@cse.unsw.edu.au>
+
+	Cheers, Adam
+
+Basic Idea:
+
+  OK the basic Idea is as follows. Rather then switch page directories
+  (pg_dir) which requires cache and TLB flushes a single pg_dir is
+  used. I call this global pg_dir the "Caching Page Directory" or
+  CPD. It can be thought of as a software TLB.
+
+  The CPD stores pg_dir entries from multiple user page directories as
+  well as the kernel's pg_dir entries. The pg_dir entries are tagged
+  with ARM domains which are assigned uniquely to user tasks as well
+  as a small set being reserved for tagging kernel mappings.
+
+  A context switch from one user process to another is carried out by
+  disabling the domain of the old process and enabling the domain of
+  the new process. The set of domains allocated to the kernel mappings
+  are manipulated as in the unmodified ARM Linux kernel.
+
+  Using this technique the caches and TLBs need only be flushed if one
+  of two events happen:
+
+	1) An entry in the CPD is replace by one owned by a different user
+	process, hence tagged with a different domain.
+
+	2) A domain is currently owned by one user process is
+	reallocated to another one.
+
+  These issues both present a challenge to the design. 1) is a problem
+  since the Unix address-space layout is typically the same for every
+  process.  2) is a problem since typically we have many more
+  processes then ARM domains which are fixed at 16 by the
+  architecture.
+
+  These problems are solved as follows:
+
+    1) A dual approach is used here to handle the two types of memory
+    regions used in a user process:
+
+	a) All memory regions with run time address bindings, i.e.,
+	those mapped in by mmap() without the MAP_FIXED flag, are
+	grouped into 1MB regions (because pg_dir entries cover 1MB)
+	that are already being used by the process.  If the new
+	mapping doesn't fit in an existing 1MB region allocated to the
+	user process, a new one will be allocated. The newly allocated
+	region will be one that causes the least contention with other
+	processes using that same 1MB region, or the virtual
+	address-space. Multiple processes can use the same 1MB region
+	safely because of the domain tags and CPD mechanism. 'Least
+	contention' can be defined as either fewest processes
+	sharing a domain (likelihood of a contention) or least number
+	of previous conflicts (history of contention) or some
+	combination of the these.
+
+	b) All memory regions with compile time address bindings, the
+	text/data/bss/etc which are mapped in by mmap() with the
+	MAP_FIXED flag, are as much as possible compiled to be within
+	the first 32MB, i.e., below 0x02000000.  The mappings are then
+	relocated using the ARM PID register into one of the 32MB
+	slots in the first 2GBs of the address-space. The relocation
+	staggers 64 user processes uniquely then PIDs well have to be
+	shared. Again the overlapping is safe as the CPD mechanism
+	handles the contention. As there are more PIDs then domains
+	the number shouldn't be an issue. 
+
+	The stack is also set to the top of the 32MB region, even
+	though this could be placed anywhere, hence, staggered by 
+	1a) it is placed in the PID relocation area because fork()ing will
+	keep the same stack pointer causing a collision between the
+	two processes. While this will limit the size of brk() to be
+	inside the 32MB area it does not limit malloc() as it will use
+	mmap() to allocate new heaps if brk() fails. If the stack is
+	simply staggered by 1a) the brk() grows past the PID relocation
+	area as the PID relocation is transparent to the user process
+	and most of the kernel.  Only the CPD mechanism is aware of
+	it. Actual allocation of PIDs is still up in the air. At the
+	moment it simply round-robins through them. Smarter allocation
+	schemes might take into account the number of address-spaces
+	using the PID and allocate the one with the least usage or
+	with the least busy address-spaces, etc. To minimise
+	collisions due to fork mappings flagged MAP_PRIVATE are as
+	much as possible allocated in the 32MB relocation area.
+
+  2) At the moment the approach is to revoke what causes the least
+  amount of work.  First we look for a clean domain to revoke. This
+  means no cache flush and only invalidating the CPD entries tagged
+  with the victim domain. If no clean domains are available then a
+  dirty one is used. In both cases the one with the least number of
+  entries in the CPD is used. This might not be the most optimal way
+  of doing it as tasks newly allocated a domain may be preempted first
+  in times of domain thrashing.
+
+Data Cache Aliasing:
+
+  Aliases occur when the same physical frame is mapped to more then
+  one virtual address. This can happen within the same address-space
+  or between different address-spaces. It is only a problem for
+  writable pages as the different address lines will map to different
+  cache lines. If one is modified the other will not see the change so
+  accesses to that virtual address will access stale data.  The
+  problem can be address in one of two ways:
+
+	1) Mark the shared mapping as uncachable. This slows down
+	accesses to the shared mappings but never requires cache
+	flushing. ARM Linux currently uses this method for shared
+	mappings within the same address-space.
+
+	2) Only activate one mapping at a time. When another mapping
+	is accessed it will fault. At that stage the page in question
+	is cleaned/flushed from the DCache, the old mapping is
+	deactivated, and the accessed mapping is activated.  faster
+	accesses on the shared mappings but will cause slow downs when
+	the frame changes mappings.
+
+  I plan to implement and benchmark both solutions. Or at least
+  analyse it further, possibly have a flag to set which one is used.
+
+  If the shared mapping uses the same virtual address in each
+  address-space no cache flushing or uncachable setting is
+  needed. Although this will cause a CPD conflict anyway so no
+  gain. Separate domains for unique sharing groups could solve this
+  but is definitely future work.
+
+Lazy Cache/TLB Flushing:
+
+  All the cache and TLB flushing routines used to flush user mappings
+  make use of the following fact. If the CPD entry/entries mapping in
+  the flush range are not tagged with the domain tag of the
+  address-space being flushed, the caches cannot contain any data from
+  that address-space and the TLBs cannot contain any mappings for that
+  address-space. This is used to avoid many cache flushes.  Another
+  bit of information can be used: when the caches/TLBs are flushed all
+  domains are marked as clean with respect to them. They remain clean
+  until the domain is activated. This way an address-space with CPD
+  entries in the flush region may still be clean if none of its
+  mappings have been touched.  This technique of lazy flushing could
+  be used by normal ARM Linux using the single user domain.
+
+Shared Domains:
+
+  As well as using domains as a kind of address-space identifier
+  (ASID) tagging address-spaces uniquely, they can be used to tag
+  shared mappings that map to the same virtual addresses with the same
+  size/permissions in each of the sharing address-spaces. This is
+  known as shared domains. To support this every vm_area_struct (Linux
+  mapping representation) is allocated a region, and one is also
+  allocated to the address-space. Mappings that are private to the
+  address-space simply use the address-space's region. Domains are now
+  mapped to regions not address spaces and when we switch to a new
+  address space we enable the domains, if any, allocated to the
+  regions accessible by the address-space.
+
+Implementation Details:
+
+  The implementation is spread around a LOT of the ARM specific files.
+  However FASS slides nicely into Linux with only ARM arch specific
+  modifications.  The main part of FASS, the CPD mechanism, fits in
+  the following way:
+
+  * Entries are added into the CPD by ARM Data/Prefetch Aborts in
+    arch/arm/mm/fault-armv.c the abort handlers are modified and the
+    functions do_cpd_fault() and do_domain_fault() are added. This
+    functions go on to call CPD management functions in
+    arch/arm/mm/cpd.c
+
+  * Entries are removed from the CPD by the functions in arch/arm/mm/cpd.c
+    this includes cpd_set_pmd() which updates the CPD to reflect
+    changes in the user pg_dir. CPD entries are also removed in
+    cpd_load() due to a conflict (replacement) and in
+    domain_unallocate() due to domain preemption or the address-space
+    being torn down.
+
+  * The cache/TLB flush routines in include/asm-arm/proc-armv/cache.h all
+    call an equivalent CPD_*() functions in arch/arm/mm/cpd.c to
+    implement lazy flushing of caches/TLBs.
+
+  * ARM PID management code is in arch/arm/mm/pid.c and
+    include/asm-arm/proc-armv/pid.h
+
+  * ARM domain management code is in arch/arm/mm/cpd.c ,
+    include/asm-arm/proc-armv/cpd.h and
+    include/asm-arm/proc-armv/domain.h
+
+  * An address-space mmu_context is defined in include/asm-arm/mmu.h and
+    include/asm-arm/mmu_context.h defining a domain/PID allocated to
+    the address-space.
+
+  * Some architecture independent code changes have been made to the
+    code that deals with vma's to add a new field 'vm_sharing_data'
+    which points to the region data structure in ARM and should be
+    used for similar TLB sharing support in other architectures like
+    IA-64. 'vm_private_data' was not used as it is unclear how this
+    field is used by other Linux code such as drivers.
+
+All other changes should be clear from the patch.
+
+TO DO: 
+
+  * arch/arm/mm/pid.c:pid_allocate() simply finds a PID with the lowest
+    number of address-spaces using it. There could possibly be a
+    better way of doing this. It also needs to decide when a ARM PID
+    of 0, i.e., no VM relocation is used, this might have to be
+    decided by the caller of pid_allocate(). Binaries located outside
+    of the relocation area cause problems.
+
+  * arch/arm/mm/fault-armv.c:update_mmu_cache() allocates region_structs
+    to shared mapping to support shared domains. However at the moment
+    it doesn't check the size or protection rights of the mapping
+    allowing the max of each out the process set to be accessible to
+    all address-spaces sharing the mapping. This is incorrect
+    behaviour and needs to be dealt fixed up some how.
+
+  * arch/arm/mm/cpd.c:cpd_get_domain()/cpd_get_active_domain(), these
+    functions should be updated to use the address-spaces private
+    region's domain if the shared region has a count of one. This is
+    to minimise domain thrashing, it may not provide much benefit and
+    is a little tricky to do correctly.
+
+  * The code in cpd.c could probably be split up into separate files,
+    it really should only have the cpd_load function and some helpers.
+
+Future Work:
+
+  * Using sub-pages to deal with Cache Aliasing. This is another
+    experimental idea. If you look at the StrongARM-1 Core the cache
+    is made up of 1KB colours, if you don't understand cache colouring
+    ignore this. But basically we use the (de)activation technique 2)
+    for dealing with cache aliases except we (de)activate the 1KB
+    sub-pages and flush 1KB sub-pages at a time. This better targets
+    the flush and should reduce the overall cost. The implementation
+    might be tricky though.
+
+  * Modifying the architectural independent scheduling goodness() function
+    to schedule around flushes, ie delay the flush as long as possible
+    within a scheduling epoch. This is maybe not worth the trouble.
+
+  * Domain-less CPD entries. This is only applicable to write-back caches
+    that do not require a TLB access to retrieve the physical address
+    of a write-back such at the ARM9 with it's TAG-RAM. What we can do
+    is tag the CPD entry with a inactive domain (reserved for this
+    task) effectively disabling the region and allowing the entries to
+    get cleaned by normal operation. These domain-list CPD entries can
+    then be cleared removed on a cache flush. Very experimental idea,
+    needs a lot more thought and probably won't work. Needs an ARM9
+    core too. This actually works on the StrongARM as well. I need to
+    think about it more though.
+
+  * Anything I've forgotten, basically tuning the implementation and
+    experimenting with idea's for choosing a domain to preempt for
+    recycling, choosing an ARM PID, and choosing 1MB regions for
+    mmap().

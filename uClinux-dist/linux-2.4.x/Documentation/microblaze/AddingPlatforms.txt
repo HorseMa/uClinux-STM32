@@ -1,0 +1,142 @@
+Adding new Microblaze platforms with the auto-configuration
+architecture.
+
+(c) 2005 John Williams <jwilliams@itee.uq.edu.au>
+
+
+Any new platforms added to Microblaze should use the
+auto-configuration architecture.  This is a mechanism whereby the EDK
+tools (specifically libgen) are used to output a configuration file -
+auto-config.in - that completely specifies all parameters of the
+target hardware.  By including this file into the uClinux kernel
+build, we avoid the tedious and error-prone task of setting these
+parameters manually. 
+
+There is already a generic auto-configured platform in the source tree
+- uclinux-auto.  Use this as a starting point to create your own.  The
+process is best described by example.  Here, we will add support for a
+hypothetical new platform, which we will call NewPlatform. 
+
+1. Create a vendors subdirectory for the new platform.  These live in
+   the uClinux-dist tree.  For example, a new Xilinx board directory
+   might be created under uClinux-dist/vendors/Xilinx/NewPlatform. 
+
+  $ cd uClinux-dist/vendors/Xilinx
+  $ cp -rf uclinux-auto NewPlatform
+
+2. Create a new kernel directory for the board.  Again, this is based
+   on the uclinux-auto platform: 
+
+  $ cd uClinux-dist/linux-2.4.x/arch/microblaze/platforms
+  $ cp -rf uclinux-auto NewPlatform
+
+3. Add your new platform to the list of supported platforms.  First,
+   edit the file "linux-2.4.x/arch/microblaze/Boards.mk".  Add your
+   new board like this: 
+
+ifdef CONFIG_NEWPLATFORM
+PLATFORM := NewPlatform
+endif
+
+A few points here - you must set the PLATFORM variable to exactly the
+same name as the directory you created under the
+arch/microblaze/platforms subdirectory.  The CONFIG_NEWPLATFORM is a
+kernel configuration variable that will be set, when your new platform
+is being targeted.  This variable name can be just about anything, but
+it makes sense to base it on the actual name of your platform - and
+always include the CONFIG_ prefix.  Remember this variable, we'll use
+it in the next step. 
+
+4. Add your new platform to the kernel configuration process.  Edit
+   the file linux-2.4.x/arch/microblaze/config.in.  Add your new
+   platform in the "Platforms" list.  It will look a bit like this: 
+
+  #### Microblaze processor-specific config
+
+comment 'Platform'
+  choice 'Platform'                                             \
+       "uclinux-auto            CONFIG_UCLINUX_AUTO             \
+	...
+        MBVanilla               CONFIG_MBVANILLA                \
+        Egretv0.1               CONFIG_EGRET01                  \
+        SUZAKU                  CONFIG_SUZAKU"          uclinux-auto
+
+Add a new line like this:
+
+        NewPlatform		CONFIG_NEWPLATFORM		\
+
+Don't forget that trailing backslash character, to continue the line.
+
+Then, just below, add a snippet like this:
+
+  if [ "$CONFIG_NEWPLATFORM" = "y" ]; then
+    define_int HZ 100
+    source arch/microblaze/platform/NewPlatform/auto-config.in
+  fi
+
+This will cause the auto-config.in file to be read from the new kernel
+platform directory. 
+
+5. You are now ready to build your new platform.  From the
+  uClinux-dist directory, launch the uClinux menu configuration tool: 
+
+  $ make menuconfig
+
+Enter the Vendor/Product menu, and select your new platform.
+Enter the Kernel/Library/Defaults selection, and choose "Customize
+Kernel Settings".
+
+Enter the "Processor Type and features" submenu, and select your new platform
+from the "Platforms" list.
+
+Exit the menu config, and save your new configuration.
+
+The build tools will clean out any existing kernel builds, then the
+kernel configuration menu will launch.  Before the menu launches, you
+may be prompted to provide values for any undefined kernel
+configuration parameters, just press enter to accept the
+default. e.g.: 
+
+netperf (CONFIG_USER_NETPERF_NETPERF) [N/y/?] (NEW) 
+
+Pressing enter will accept the default (No).
+
+Once the menu launches, go into the "Processor Type and Features"
+submenu.  Change the Platform setting to your new platform -
+"NewPlatform" in this case. 
+
+Exit the menus and save your changes.
+
+This is important - launch the menuconfig again, and again go into the
+  kernel configuration submenu: 
+
+  $ make menuconfig
+
+  (Kernel/Library/Defaults Selection)
+     [X] Customize Kernel Settings
+
+Exit and save again.  Once the kernel configuration menu re-appears,
+simply exit and save. 
+
+This second invocation of the kernel configuration menu is required to
+pickup the changes with your new platform.  Failing to do this step
+may cause strange behaviour, so don't forget! 
+
+Your new platform is now ready to build.  You may now wish to look
+more closely at the kernel and vendor configurations, enabling any
+particular options or applications that you require.  It may also be a
+good idea to save the default settings for this new platform.  You can
+do this under the main config menu -> Kernel/Library/Defaults ->
+Update Default Vendor Settings option. 
+
+Now you are ready to build your new kernel and filesystem image.  From
+uClinux-dist: 
+
+  $ make dep
+  $ make all
+
+For a first build, it is advised to use only the generic uClinux MTD
+mapping.  In the kernel config menu, under "Memory Technology Devices
+Settings" -> "Mapping drivers for chip access", select only the
+"Generic uClinux RAM/ROM filesystem support".
+

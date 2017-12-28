@@ -1,0 +1,17 @@
+#
+# Fujitsu device driver configuration
+#
+mainmenu_option next_comment
+comment 'Fujitsu device drivers'
+bool 'MB93493 Companion Chip' CONFIG_FUJITSU_MB93493
+
+if [ "$CONFIG_FUJITSU_MB93493" = "y" ]; then
+   tristate '  MB93493 Video Display driver' CONFIG_FUJITSU_MB93493_VDC
+   if [ "$CONFIG_FUJITSU_MB93493_VDC" = "y" ]; then
+      string '    VDC default config' CONFIG_FUJITSU_MB93493_VDC_DEFCONFIG "ntsc*1"
+   fi
+   tristate '  MB93493 Video Capture driver' CONFIG_FUJITSU_MB93493_VCC
+   tristate '  MB93493 I2S driver' CONFIG_FUJITSU_MB93493_I2S
+fi
+
+endmenu

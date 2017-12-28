@@ -1,0 +1,19 @@
+#
+# SPI driver configuration
+#
+mainmenu_option next_comment
+comment 'SPI support'
+
+tristate 'SPI support' CONFIG_SPI
+
+if [ "$CONFIG_SPI" != "n" ]; then
+   comment 'Low level SPI device driver'
+   dep_tristate 'Motorola Coldfire QSPI driver'  CONFIG_SPI_MCF $CONFIG_SPI
+   comment 'High level SPI driver'
+   dep_tristate 'SPI character driver' CONFIG_SPI_CHAR $CONFIG_SPI
+   dep_tristate 'M41T94 RTC/WDT driver' CONFIG_SPI_M41T94 $CONFIG_SPI
+   if ["$CONFIG_SPI_M41T94" != "n" ]; then
+        int  '    CS pin used for M41T94' CONFIG_SPI_M41T94_CS 1
+   fi
+fi
+endmenu

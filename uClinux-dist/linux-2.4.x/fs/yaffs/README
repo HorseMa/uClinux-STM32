@@ -1,0 +1,28 @@
+Welcome to YAFFS, the first file system developed specifically for NAND flash.
+
+Before you go too far, you might consider looking at YAFFS2.
+
+A note on licencing
+-------------------
+YAFFS is available under GPL and via alternative licensing arrangements with
+Alpeh One. Generally, if you're using YAFFS as a Linux kernel file system
+you can use the GPL and in other cases you need to discuss licensing issues
+with Aleph One.
+
+
+Where do you want to go today?
+------------------------------
+direct       This is the userspace/RTOS variant of YAFFS. This is used for yaffs
+	     core development and for embedding YAFFS in products that don't use
+	     Linux or WinCE
+linux-module This allows you to build YAFFS as a free-standing Linux kernel
+	     module. By "free standing", I mean that this build happens
+	     outside the kernel tree. Generally you'd use this for testing.
+linux-kernel This allows you to hook YAFFS into the kernel tree, to build
+	     YAFFS within the kernel tree.
+utils        These are some utilities for Linux.
+wince	     Windows CE support. Horribly dated. Contact Aleph One is you're
+	     considering YAFFS for a WinCE project.
+mtdemul      An mtd NAND emulation driver for testing YAFFS under Linux.
+Documentation Some YAFFS documents. Also visit www.aleph1.co.uk. 
+

@@ -1,0 +1,175 @@
+{\rtf1\ansi \deff0\deflang1033
+
+{\fonttbl
+{\f0\froman Times New Roman;}
+{\f2\fswiss Arial;}
+{\f19\fmodern\fcharset0\fprq1 Courier New;}
+}
+
+{\colortbl;
+\red0\green0\blue0;
+\red0\green0\blue255;
+\red0\green255\blue255;
+\red0\green255\blue0;
+\red255\green0\blue255;
+\red255\green0\blue0;
+\red255\green255\blue0;
+\red255\green255\blue255;
+\red0\green0\blue127;
+\red0\green127\blue127;
+\red0\green127\blue0;
+\red127\green0\blue127;
+\red127\green0\blue0;
+\red127\green127\blue0;
+\red127\green127\blue127;
+\red192\green192\blue192;
+}
+
+
+{\stylesheet
+{\s243\li-1800\sl-210\tqr\tx6960 \b\f2\fs19\lang1033header;}
+{\s251\sb160\sa40\sl-280\keepn \b\f2\lang1033heading 4;}
+{\s252\sb160\sa40\sl-340\keepn \b\f2\fs30\lang1033heading 3;}
+{\s253\li-1800\sb160\sa60\sl-380\keepn \b\f0\fs34\lang1033heading 2;}
+{\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033heading 1;}
+{\*\cs10 \additive Default Paragraph Font;}
+{\sa160\sl240 \fs21\lang1033Normal;}
+{\s28\sl-220\tx380\tx760\tx1140\tx1520\tx1900\tx2280\tx2660\tx3040\tx3420\tx3800 \f19\fs16\lang1033Ex;}
+{\s44\li-1770\ri30\sb50\sl-80\brdrt\brdrs\brdrw15\brdrcf2 \fs12\lang1033header rule;}
+{\s45\li-1800\sa180\sl-440\keepn\tx0 \b\f2\fs40\up8\lang1033Rh1;}
+{\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Rmh;}
+{\s50\sl-240\keepn \f0\fs21\lang1033Term1;}
+{\s53\li280\sl-240\keepn \f0\fs21\lang1033Term2;}
+{\s54\li280\sa80\sl-240 \f0\fs21\lang1033Def1;}
+{\s55\li560\sa80\sl-240 \f0\fs21\lang1033Def2;}
+{\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033Rule;}
+{\s93\sl240 \fs21\lang1033
+Index Link;}
+{\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25Table Text;}
+}
+
+\paperw12240\paperh15840\margl3330\margr1530\margt-2540\margb-2220\gutter420
+\facingp\deftab280\widowctrl\ftnbj
+
+\sectd \binfsxn1\binsxn1\linex0\headery1990\footery360\endnhere\titlepg
+
+{\headerl \pard\plain\s243\li-1800\sl-210\tqr\tx6960 \b\f2\fs19\lang1033
+{\field\flddirty{\*\fldinst PAGE}{\fldrslt 4}}{\expnd50  }Realtek Semiconductor Corp. By Gateway FAE Team - 05/25/06\par
+\pard\plain\s44\li-1770\ri30\sb50\sl-80\brdrt\brdrs\brdrw15\brdrcf2 \fs12\lang1033\par }
+
+{\headerr \pard\plain\s243\li-1800\sl-210\tqr\tx6960 \b\f2\fs19\lang1033
+\tab Realtek Semiconductor Corp. By Gateway FAE Team - 05/25/06{\expnd50   }
+{\field\flddirty{\*\fldinst PAGE}{\fldrslt 3}}
+\par \pard\plain\s44\li-1770\ri30\sb50\sl-80\brdrt\brdrs\brdrw15\brdrcf2 \fs12\lang1033
+\par }
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033Module rtl8651_dns_domainAdvRoute.c - RTL8651 Home gateway controller domainAdvRoute API documentation\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Description\par
+\pard\plain\sa160\sl240 \fs21\lang1033This document explains the external API interface for domainAdvRoute module.Functions with rtl8651_ prefix are external functions.\par
+\pard\plain\sa160\sl240 \fs21\lang1033\par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_addDomainEntry\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b int32} {\b rtl8651_domainAdvRoute_addDomainEntry(}{\b char*} {\i domain_name}{\b , _rtl8651_domainAdvRouteProperty_t} {\i property}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033Add domain routing entry\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Parameters\par\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i domain_name}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033Domain name keyword to route.\par
+
+\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i property}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033domain's property information such as sessionId, 
+sessionIp,connstate and addPolicyRoute or demandRoute flags.\par
+
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033Add domain routing entry into both DNS module and domain advance route module database to route the target domain. 
+This is keyword match, so when user define 'abc' in {\i domain_name} , all domain names with the keyword 'abc' would hit.. 
+By the way, this domain routing function provide {\i property} to allow user set more information to domain name,such as 
+the relative sessionId,sessionIp,\tabconnstate and addPolicyRoute or demandRoute flags.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Return Codes\par
+\trowd \trgaph72\trleft-72 \cellx3078\cellx7038\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 SUCCESS\cell Entry addition success.\cell }\pard \intbl \row\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 FAILED\cell Entry addition failed.if any one of DNS module and domain advance route module database 
+is fully, the addition failed and the entry would NOT be added into BOTH DNS module and 
+domain advance route module database\cell }\pard \intbl \row\pard\plain\li240\sa0\sl240 \f2\fs20\lang1033 \par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_changeDomainProperty\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b int32} {\b rtl8651_domainAdvRoute_changeDomainProperty(}{\b char*} {\i domain_name}{\b , _rtl8651_domainAdvRouteProperty_t} {\i property}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033Change relative domain's property\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Parameters\par\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i domain_name}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033Domain name keyword.\par
+
+\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i property}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033Property would be set. Property information include sessionId,sessionIp, 
+connstate,addPolicyRoute and addDemandRoute flags.\par
+
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033change the property of relative domain whose orig_domain is keyword match {\i domain_name}. 
+This function would try to find the entry which orig_domain accord with the {\i domain_name},and change it's property,such as sessionId,sessionIp, 
+connstate,addPolicyRoute and addDemandRoute flags..if find none,it would do nothing.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Return Codes\par
+\trowd \trgaph72\trleft-72 \cellx3078\cellx7038\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 SUCCESS\cell domain's property be chenged successfully (might relative entry is not found!).\cell }\pard \intbl \row\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 FAILED\cell change property failed.\cell }\pard \intbl \row\pard\plain\li240\sa0\sl240 \f2\fs20\lang1033 \par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_changeSessionProperty\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b int32} {\b rtl8651_domainAdvRoute_changeSessionProperty(}{\b _rtl8651_domainAdvRouteProperty_t} {\i property}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033Change the property of all entry whose sessionId equal property->sessionId.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Parameters\par\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i property}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033Property would be set,such as sessionId,sessionIp,connstate,addPolicyRoute and addDemandRoute flags.\par
+
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033change the entry's property of relative entry. 
+This function would try to find the entry which sessionid accord with the sessionId of {\i property},and change it's(or their) property to be {\i property}.if find none,it would do nothing.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Return Codes\par
+\trowd \trgaph72\trleft-72 \cellx3078\cellx7038\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 SUCCESS\cell relative entry's property be chenged successfully (might relative entry is not found!).\cell }\pard \intbl \row\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 FAILED\cell change property failed.\cell }\pard \intbl \row\pard\plain\li240\sa0\sl240 \f2\fs20\lang1033 \par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_delDomainEntry\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b int32} {\b rtl8651_domainAdvRoute_delDomainEntry(}{\b char*} {\i domain_name}{\b , _rtl8651_domainAdvRouteProperty_t} {\i property}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033Delete domain routing entry\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Parameters\par\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i domain_name}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033Domain name keyword to route.\par
+
+\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i property}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033Related domain property such as sessionId, 
+sessionIp,connstate and addPolicyRoute or demandRoute flags.\par
+
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033Delete the existent domain routing entry from both DNS module and domain advance route module database. 
+Note that user MUST set appropriate information (both {\i domain_name} and {\i property}) to delete entry. this function 
+would delete the relative entry according to both {\i domain_name} and sessionId in {\i property}.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Return Codes\par
+\trowd \trgaph72\trleft-72 \cellx3078\cellx7038\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 SUCCESS\cell Entry deletion success (might entry is not found!).\cell }\pard \intbl \row\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 FAILED\cell Entry deletion failed.\cell }\pard \intbl \row\pard\plain\li240\sa0\sl240 \f2\fs20\lang1033 \par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_delPolicyOrDemandRouteBySessionId\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b int32} {\b rtl8651_domainAdvRoute_delPolicyOrDemandRouteBySessionId(}{\b uint8} {\i sessionId}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033delete the policy route or demand route which belong to {\i sessionId}\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Parameters\par\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i sessionId}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033sessionId,route entry belongs to this sessionId would be relatived.\par
+
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033delete the relative policy route or demand route that belong to {\i sessionId}.This function would try to find the entry that belong to {\i sessionId} 
+and delete the relatvie route information from Rome Drvier.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Return Codes\par
+\trowd \trgaph72\trleft-72 \cellx3078\cellx7038\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 SUCCESS\cell delete successfully (might relative entry is not found!).\cell }\pard \intbl \row\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 FAILED\cell void session Id.\cell }\pard \intbl \row\pard\plain\li240\sa0\sl240 \f2\fs20\lang1033 \par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_destroyAllRouteList\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b int32} {\b rtl8651_domainAdvRoute_destroyAllRouteList(void}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033destruct all routeList and dstIpList.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033destruct the route list and dstIp List, and free the relative memory.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Return Codes\par
+\trowd \trgaph72\trleft-72 \cellx3078\cellx7038\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 SUCCESS\cell destruct routeList and dstIpList successfully.\cell }\pard \intbl \row\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 FAILED\cell destruct failed.\cell }\pard \intbl \row\pard\plain\li240\sa0\sl240 \f2\fs20\lang1033 \par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_flushSessionEntry\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b int32} {\b rtl8651_domainAdvRoute_flushSessionEntry(}{\b uint8} {\i sessionId}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033Flush all entrys belong to {\i sessionId}\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Parameters\par\pard\plain\s50\sl-240\keepn \f0\fs21\lang1033{\i sessionId}\par
+\pard\plain\s54\li280\sa80\sl-240 \f0\fs21\lang1033sessionId,entry belongs to this session would be flushed.\par
+
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033flush all the entrys belong to {\i sessionId}. 
+This function would try to find the entrys which sessionId accord with the {\i sessionId},and flush them.if find none,it would do nothing.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Return Codes\par
+\trowd \trgaph72\trleft-72 \cellx3078\cellx7038\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 SUCCESS\cell relative entry be flushed successfully (might relative entry is not found!).\cell }\pard \intbl \row\pard\plain\intbl\s25\sa80\widctlpar\intbl \f4\fs21\lang1024 \sbasedon0\snext25{\fs18 FAILED\cell flush entry failed.\cell }\pard \intbl \row\pard\plain\li240\sa0\sl240 \f2\fs20\lang1033 \par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+\pard\plain\s57\li-1770\ri30\sb280\sa250\sl-120\keepn\brdrb\brdrs\brdrw15\brdrcf2 \fs8\cf8\lang1033\par
+\pard\plain\s254\li-1800\sb200\sa80\sl-440\keepn \b\f0\fs40\lang1033rtl8651_domainAdvRoute_reInitRouteList\par
+\pard \plain \sa160\sl240 \fs21\lang1033{\b void} {\b rtl8651_domainAdvRoute_reInitRouteList(void}{\b ) }\par
+\pard\plain\sa160\sl240 \fs21\lang1033reinit all routeList and dstIpList.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033Comments\par\pard\plain\sa160\sl240 \fs21\lang1033reinit the routeList and dstIpList, After this action,the state of domain advance route module database would be the same 
+as that of initialization.\par
+\pard\plain\s46\sb20\sl-220\keepn\pvpara\phpg\posy0\absw1560\dxfrtext240\dfrmtxtx240\dfrmtxty240 \b\f2\fs21\lang1033\cf6 Developer Notes\par\pard\plain\sa160\sl240 \fs21\lang1033\cf6 \par
+}

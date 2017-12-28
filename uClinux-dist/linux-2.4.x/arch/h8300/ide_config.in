@@ -1,0 +1,7 @@
+# uClinux H8/300 Target Board Selection Menu (IDE)
+
+if [ "$CONFIG_BOARD_AKI3068NET" = "y" ]; then
+  hex 'IDE regitser base address' CONFIG_H8300_IDE_BASE 0x600000
+  hex 'IDE regitser alternate address' CONFIG_H8300_IDE_ALT 0x600020
+  int 'IDE IRQ no' CONFIG_H8300_IDE_IRQNO 4
+fi

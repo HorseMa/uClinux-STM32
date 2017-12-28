@@ -1,0 +1,51 @@
+# Platfrom drivers configuration
+
+source "arch/nios2nommu/drivers/pci/Kconfig"
+
+config FB_ALTERA
+	tristate "Avalon VGA controller support"
+	default N
+	select FB
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	help
+	  This is the frame buffer device driver for the VGA controller 
+	  in SOPC Builder.
+
+config SERIO_ALTPS2
+	tristate "PS2 controller"
+	select VT
+	default N
+	select SERIO
+
+config I2C_NIOS2_GPIO
+	tristate "GPIO-Based I2C Interface"
+	default N
+	select I2C
+	select I2C_ALGOBIT
+	help
+	  Say Y here if you use GPIO lines for an I2C bus.
+
+config BLK_DEV_ALTCF
+	tristate "Altera CF (IDE mode) interface (Avalon bus) support"
+	select IDE
+	select BLK_DEV_IDE
+	default N
+	help
+	  This driver provides support for the Altera Compact flash core (with
+	  Avalon interface) support. If you have an Altera or Microtronix
+	  development board you can build support into the FPGA device for this.
+
+config NIOS_SPI
+	bool "Nios SPI device support"
+	depends on NIOS || NIOS2
+	help
+	  This driver supports the Nios softcore SPI device.
+
+config NIOS_SD_HOST
+	tristate "NIOS SD/SDIO/MMC Host"
+	depends on NIOS || NIOS2
+	help
+		This driver supports the FPS-Tech SD/SDIO/MMC Host IP
+

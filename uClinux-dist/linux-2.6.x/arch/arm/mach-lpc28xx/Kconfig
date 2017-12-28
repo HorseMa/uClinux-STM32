@@ -1,0 +1,28 @@
+#	linux/arch/arm/mach-lpc28xx/Kconfig	
+#	Copyright (C) 2007 NXP
+#
+
+menu "NXP LPC28xx Options"
+	depends on ARCH_LPC28XX
+
+config MACH_LPC28XX
+        bool
+        default y
+        help
+                Phillips LPC28XX Family
+
+config LPC28XX_XTAL
+    int	"Oscillator Frequency"
+    default 12000000
+    help
+	Oscillator frequency. The defualt is 12MHz. 
+	Change it according to your board.
+	
+config ARM_CLK
+	int 'Arm Core Clock'
+	default 60000000
+	help
+	CPU core clock frequency. The default is 60MHz.
+	Change it according to your application needs.
+
+endmenu

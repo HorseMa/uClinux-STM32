@@ -1,0 +1,123 @@
+This is designed for ROME driver to sniffer packets.
+
+In the ROME driver, packet structure are listed as follow:
+
+  pktHdr <---> mBuf ---> Cluster Data
+
+We can express as p-m-c.
+
+The whole packet will be stored one-by-one in SDRAM for the following format:
+
+  +================+
+  |  frame Header  |
+  +================+
+  |  packet header |
+  +================+
+  |   mBuf header  |
+  +================+
+  |    Cluster     |
+  +================+
+
+
+frame Header (frameHdr):
+  +--------------------+
+  | uint32 timestamp   |
+  +--------------------+
+  | uint32 capturedSize|
+  +--------------------+
+  | uint32 actualSize  |
+  +--------------------+
+  | uint32 recordPoint |
+  +--------------------+
+  | PKTHDR* pktHdr     |
+  +--------------------+
+  | MBUF* mbuf         |
+  +--------------------+
+  | char* cluster      |
+  +--------------------+
+  | frameHdr* next     |
+  +--------------------+
+
+packet header:
+	see ROME Driver
+
+mBuf header:
+	see ROME Driver
+
+Cluster:
+	see ROME Driver
+
+
+============================================================================
+APIs:
+
+int32 rtl8651_romerealInit(void* buffer, uint32 size, uint32 mode);
+	mode -- ROMEREAL_MODE_DEFUALT: default, stop record packets when out of buffer.
+			ROMEREAL_MODE_CIRCULAR: overwrite existing packet when out of buffer.
+
+int32 rtl8651_romerealEnable( int8 enable );
+
+int32 rtl8651_romerealFilterMask( uint32 mask );
+	mask --   3         2         1         0
+	         10987654321098765432109876543210
+	         --------------------------------
+	                              |         1--- capture packets recv from external VLAN
+	                              |        1---- capture packets recv from internel VLAN
+	                              |       1----- capture packets send to external VLAN
+	                              |      1------ cpature packets send to internal VLAN
+	                                       
+
+int32 rtl8651_romerealRecord(pktHdr* pkt, uint32 recordPoint);
+	recordPoint --- see mask definition of rtl8651_romerealFilter()
+
+frameHdr* rtl8651_romerealNext( frameHdr* curr );
+	curr -- NULL, from the first packet
+
+============================================================================
+libpap file formate can be found at http://www.tcpdump.org/lists/workers/2002/04/msg00096.html .
+
+The file header consists of, in order:
+	a 32-bit "magic number";
+	a 16-bit major version number;
+	a 16-bit minor version number;
+	a 32-bit "time zone offset" field that's actually not used, so
+		you can (and probably should) just make it 0;
+	a 32-bit "time stamp accuracy" field that's not actually used,
+		so you can (and probably should) just make it 0;
+	a 32-bit "snapshot length" field;
+	a 32-bit "link layer type" field.
+
+The frame header consists of:
+	a time stamp, consisting of:
+		a UNIX-format time-in-seconds when the packet was
+		captured, i.e. the number of seconds since January 1,
+		1970, 00:00:00 GMT (that's GMT, *NOT* local time!);
+		the number of microseconds since that second when the
+		packet was captured;
+	a 32-bit value giving the number of bytes of packet data that
+		were captured;
+	a 32-bit value giving the actual length of the packet, in bytes
+		(which may be greater than the previous number, if you're not
+		saving the entire packet).
+
+
+=== Usage ==================================================================
+
+cleshell> drv romereal init 0x80000400 0x78000 0
+cleshell> drv romereal start
+cleshell> drv romereal dump
+cleshell> drv romereal stop
+cleshell> drv romereal save /tmp/test.dump
+cleshell> drv romereal filter 0x00000001
+
+
+=== References =============================================================
+
++ libpcap intefaces list and file format specification
+	http://www.tcpdump.org/lists/workers/2002/04/msg00096.html
++ PCAP New Generation Dump File Format
+	http://custom.lab.unb.br/pub/net/libpcap/doc/pcap.html
++ Using libpcapnav
+	http://netdude.sourceforge.net/doco/libpcapnav/c60.html
++ Making System Calls from Kernel Space
+	http://www.linux-mag.com/2000-11/gear_01.html

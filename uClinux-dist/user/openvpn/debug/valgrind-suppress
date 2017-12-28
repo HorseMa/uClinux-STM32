@@ -1,0 +1,122 @@
+# Valgrind suppressions file for OpenVPN.
+#
+# Mostly deal with uninitialized data warnings
+# in OpenSSL.
+
+{
+   cond_BN
+   Memcheck:Cond
+   fun:BN_*
+}
+
+{
+   value4_BN
+   Memcheck:Value4
+   fun:BN_*
+}
+
+{
+   cond_bn
+   Memcheck:Cond
+   fun:bn_*
+}
+
+{
+   value4_bn
+   Memcheck:Value4
+   fun:bn_*
+}
+
+{
+   cond_SHA1_Update
+   Memcheck:Cond
+   fun:SHA1_Update
+}
+
+{
+   value4_SHA1_Update
+   Memcheck:Value4
+   fun:SHA1_Update
+}
+
+{
+   cond_ssl3_read_bytes
+   Memcheck:Cond
+   fun:ssl3_read_bytes
+}
+
+{
+   cond_crypto
+   Memcheck:Cond
+   obj:/lib/libcrypto.so.*
+}
+
+{
+   value4_crypto
+   Memcheck:Value4
+   obj:/lib/libcrypto.so.*
+}
+
+{
+   cond_ssl
+   Memcheck:Cond
+   obj:/lib/libssl.so.*
+}
+
+{
+   value4_ssl
+   Memcheck:Value4
+   obj:/lib/libssl.so.*
+}
+
+{
+   addr4_AES_cbc_encrypt
+   Memcheck:Addr4
+   fun:AES_cbc_encrypt
+}
+
+{
+   cond_memcpy_ssl3_read_bytes
+   Memcheck:Cond
+   fun:memcpy
+   fun:ssl3_read_bytes
+}
+
+{
+   value4_memcpy_ssl3_read_bytes
+   Memcheck:Value4
+   fun:memcpy
+   fun:ssl3_read_bytes
+}
+
+{
+   cond_memset_BUF_MEM_grow_clean
+   Memcheck:Cond
+   fun:memset
+   fun:BUF_MEM_grow_clean
+}
+
+{
+   value4_memset_BUF_MEM_grow_clean
+   Memcheck:Value4
+   fun:memset
+   fun:BUF_MEM_grow_clean
+}
+
+{
+   SSL_get_ex_new_index
+   Memcheck:Leak
+   fun:malloc
+   obj:/lib/libcrypto.so.*
+   fun:CRYPTO_malloc
+   fun:lh_new
+   obj:/lib/libcrypto.so.*
+   obj:/lib/libcrypto.so.*
+   obj:/lib/libcrypto.so.*
+   fun:CRYPTO_get_ex_new_index
+   fun:SSL_get_ex_new_index
+   fun:ssl_set_mydata_index
+   fun:init_ssl_lib
+   fun:init_static
+   fun:main
+}

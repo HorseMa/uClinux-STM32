@@ -1,0 +1,4 @@
+
+NOTE: it seems this fcrypt causes problems with XAUTH + MD5 style passwords.
+
+See: http://bugs.xelerance.com/view.php?id=898

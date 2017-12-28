@@ -1,0 +1,28 @@
+#
+# Misc strange devices
+#
+mainmenu_option next_comment
+comment 'Misc devices'
+
+if [ "$CONFIG_MICROBLAZE" = "y" ]; then
+  tristate 'FSL FIFO driver' CONFIG_MICROBLAZE_FSLFIFO 
+
+  if [ "$CONFIG_MICROBLAZE_FSLFIFO" = "y" -o \
+	"$CONFIG_MICROBLAZE_FSLFIFO" = "m" ]; then
+    bool '  FIFO on FSL0' CONFIG_MICROBLAZE_FSLFIFO0
+    bool '  FIFO on FSL1' CONFIG_MICROBLAZE_FSLFIFO1
+    bool '  FIFO on FSL2' CONFIG_MICROBLAZE_FSLFIFO2
+    bool '  FIFO on FSL3' CONFIG_MICROBLAZE_FSLFIFO3
+    bool '  FIFO on FSL4' CONFIG_MICROBLAZE_FSLFIFO4
+    bool '  FIFO on FSL5' CONFIG_MICROBLAZE_FSLFIFO5
+    bool '  FIFO on FSL6' CONFIG_MICROBLAZE_FSLFIFO6
+    bool '  FIFO on FSL7' CONFIG_MICROBLAZE_FSLFIFO7
+  fi
+
+fi
+
+if [ "$CONFIG_MICROBLAZE" = "y" ]; then
+  tristate 'Xilinx ICAP driver' CONFIG_XILINX_HWICAP
+fi
+
+endmenu

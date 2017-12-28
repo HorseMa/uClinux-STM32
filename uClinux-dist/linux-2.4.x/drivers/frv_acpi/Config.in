@@ -1,0 +1,10 @@
+#
+# Fujitsu ACPI emulation
+#
+mainmenu_option next_comment
+
+comment 'Fujitsu ACPI Emulation'
+
+dep_tristate 'ACPI Emulation' CONFIG_FRV_ACPI_EMU $CONFIG_PROC_FS
+
+endmenu

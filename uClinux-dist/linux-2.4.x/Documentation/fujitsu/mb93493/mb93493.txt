@@ -1,0 +1,104 @@
+				  ==============================
+				  FUJITSU MB93493 COMPANION CHIP
+				  ==============================
+
+				 ================================
+				 VISUAL DISPLAY CONTROLLER DRIVER
+				 ================================
+
+
+The MB93493 VDC is a piece of hardware that turns the data it is given into a video signal on its
+output in one of a number of formats. The VDC has no display memory of its own, and has to be fed
+everything in 32 byte chunks by the CPU (the CPU has DMA controllers available). This means that
+the kernel has to set aside a contiguous piece of memory for use as an image buffer.
+
+
+====================
+COMMAND LINE OPTIONS
+====================
+
+The VDC driver takes a kernel command line option to give it two pieces of information: how much
+memory it should allocate, and the default image parameters it should assume.
+
+The option takes one of the following forms:
+
+ (*) vdc=nnnK
+ (*) vdc=nnnM
+
+     Allocate a buffer of the specified amount of memory, using the default image format.
+
+ (*) vdc=AAAxBBB[suboptions]
+
+     Allocate a buffer big enough to hold at least one image of the size AAAxBBB.
+
+ (*) vdc=pal[suboptions]
+ (*) vdc=ntsc[suboptions]
+
+     Allocate a buffer big enough to hold a PAL or NTSC television image. The basic image
+     parameters are defaulted to be appropriate to the desired image format.
+
+ (*) vdc=vga[suboptions]
+
+     Allocates a buffer big enough to hold an 640x480 RGB image.
+
+ (*) vdc=lcd[suboptions]
+
+     This option is only available on the MB93093 PDK, and it allocates a buffer big enough to
+     hold an RGB image for display on the PDK's LCD display.
+
+
+Suboptions can be given to some of the main option strings to further configure the display
+parameters and the number of images slots to be allocated:
+
+ (*) [...]-16
+ (*) [...]-24
+ (*) [...]-32
+
+     This suboption, if present, specifies the number of bits to allocate per pixel.
+
+ (*) [...]*<n>
+
+     This suboption, if present, specifies the number of image slots to allocate.
+
+ (*) [...]:isb
+
+     This suboption, if present, specifies that the bottom field of an interlaced frame should
+     be skipped when displaying. No space will be allocated in the buffer for the missing field.
+
+
+============
+DEVICE FILES
+============
+
+The driver supports two miscellaneous character device files:
+
+ (*) /dev/fr400cc_vdc [major 10, minor 244]
+
+     This device file is the main display driver interface. It can be mmapped to gain access to
+     the image buffer, and it can be polled and read to gain access to error event records.
+
+ (*) /dev/fr400cc_vdc_vsync [major 10, minor 245]
+
+     This device file is an interface by which an application can be gain notification of VSYNC
+     events on the VDC though poll and read.
+
+ (*) /dev/fr400cc_vcc [major 10, minor 240]
+
+     This device file is the main video capture interface.
+
+ (*) /dev/fr400cc_vcc_vsync  [major 10, minor 241]
+
+     This device file is an interface by which an application can be gain notification of VSYNC
+     events on the VCC though poll and read.
+
+ (*) /dev/fr400cc_i2s  [major 10, minor 250]
+
+
+If the device files do not exist, the 'mknod' command may be used to create them:
+
+  # mknod /dev/fr400cc_vdc c 10 244
+
+or
+
+  # mknod /dev/fr400cc_vdc_vsync c 10 245
+

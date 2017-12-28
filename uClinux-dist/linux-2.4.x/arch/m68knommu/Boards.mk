@@ -1,0 +1,242 @@
+# Put definitions for platforms and boards in here.
+
+ifdef CONFIG_M68328
+PLATFORM := 68328
+ifdef CONFIG_PILOT
+BOARD := pilot
+endif
+endif
+
+ifdef CONFIG_M68EZ328
+PLATFORM := 68EZ328
+ifdef CONFIG_PILOT
+BOARD := PalmV
+endif
+ifdef CONFIG_UCSIMM
+BOARD := ucsimm
+endif
+ifdef CONFIG_CWEZ328
+BOARD := cwez328
+endif
+ifdef CONFIG_ALMA_ANS
+BOARD := alma_ans
+endif
+ifdef CONFIG_M68EZ328ADS
+BOARD := ads
+endif
+endif
+
+#(es)
+ifdef CONFIG_M68VZ328
+PLATFORM := 68VZ328
+ifdef CONFIG_UCDIMM
+BOARD := ucdimm
+endif
+ifdef CONFIG_CWVZ328
+BOARD := cwvz328
+endif
+ifdef CONFIG_DRAGEN2
+BOARD := de2
+endif
+ifdef CONFIG_DRAGONIXVZ
+BOARD := dragonixvz
+endif
+ifdef CONFIG_CLIE
+BOARD := clie
+endif
+endif
+#(/es)
+
+ifdef CONFIG_M68332
+PLATFORM := 68332
+endif
+
+ifdef CONFIG_M68EN302
+PLATFORM := 68EN302
+endif
+
+ifdef CONFIG_M68360
+PLATFORM := 68360
+BOARD :=uCquicc
+endif
+
+ifdef CONFIG_M5204
+PLATFORM := 5204
+BOARD := SBC5204
+endif
+
+ifdef CONFIG_M5208
+PLATFORM := 5208
+BOARD := M5208EVB
+endif
+
+ifdef CONFIG_M5206
+PLATFORM := 5206
+BOARD := ARNEWSH
+endif
+
+ifdef CONFIG_M5206e
+PLATFORM := 5206e
+ifdef CONFIG_MOTOROLA
+BOARD := MOTOROLA
+endif
+ifdef CONFIG_ELITE
+BOARD := eLITE
+endif
+ifdef CONFIG_NETtel
+BOARD := NETtel
+endif
+ifdef CONFIG_TELOS
+BOARD := toolvox
+endif
+ifdef CONFIG_CFV240
+BOARD := CFV240
+endif
+endif
+
+ifdef CONFIG_M5235
+PLATFORM := 5235
+ifdef CONFIG_M5235EVB
+BOARD := M5235EVB
+endif
+endif
+
+ifdef CONFIG_M5249
+PLATFORM := 5249
+ifdef CONFIG_MOTOROLA
+BOARD := MOTOROLA
+endif
+ifdef CONFIG_NETBURNER
+BOARD := NETBURNER
+endif
+endif
+
+ifdef CONFIG_M527x
+PLATFORM := 527x
+ifdef CONFIG_M5271EVB
+BOARD := M5271EVB
+endif
+ifdef CONFIG_M5275EVB
+BOARD := M5275EVB
+endif
+endif
+
+ifdef CONFIG_M5272
+PLATFORM := 5272
+ifdef CONFIG_MOTOROLA
+BOARD := MOTOROLA
+endif
+ifdef CONFIG_NETtel
+BOARD := NETtel
+endif
+ifdef CONFIG_SE1100
+BOARD := SE1100
+endif
+ifdef CONFIG_GILBARCONAP
+BOARD := NAP
+endif
+ifdef CONFIG_COBRA5272
+BOARD := senTec
+endif
+ifdef CONFIG_BOARD_UC5272
+BOARD := uC5272
+endif
+ifdef CONFIG_BOARD_MOD5272
+BOARD := MOD5272
+endif
+ifdef CONFIG_CANCam
+BOARD := CANCam
+endif
+ifdef CONFIG_SCALES
+BOARD := SCALES
+endif
+ifdef CONFIG_SIGNAL_MCP751
+BOARD := MCP751
+endif
+ifdef CONFIG_SNEHA
+BOARD := SNEHA
+endif
+endif
+
+ifdef CONFIG_M5280
+PLATFORM := 5280
+ifdef CONFIG_SSV
+BOARD := SSV
+endif
+endif
+
+ifdef CONFIG_M5282
+PLATFORM := 5282
+ifdef CONFIG_MOTOROLA
+BOARD := MOTOROLA
+endif
+ifdef CONFIG_SSV
+BOARD := SSV
+endif
+ifdef CONFIG_NETBURNER
+BOARD := NETBURNER
+endif
+ifdef CONFIG_FUTURENETBURNER
+BOARD := FutureNetBurnerBadge
+endif
+ifdef CONFIG_AVNET
+BOARD := AVNET
+endif
+ifdef CONFIG_COBRA5282
+BOARD := senTec
+endif
+ifdef CONFIG_BOARD_UC5282
+BOARD := uC5282
+endif
+ifdef CONFIG_SERRA
+BOARD := SERRA
+endif
+endif
+
+ifdef CONFIG_M5307
+PLATFORM := 5307
+ifdef CONFIG_ARNEWSH
+BOARD := ARNEWSH
+endif
+ifdef CONFIG_NETtel
+BOARD := NETtel
+endif
+ifdef CONFIG_eLIA
+BOARD := eLIA
+endif
+ifdef CONFIG_DISKtel
+BOARD := DISKtel
+endif
+ifdef CONFIG_SECUREEDGEMP3
+BOARD := MP3
+endif
+ifdef CONFIG_MOTOROLA
+BOARD := MOTOROLA
+endif
+ifdef CONFIG_CLEOPATRA
+BOARD := CLEOPATRA
+endif
+endif
+
+ifdef CONFIG_M5407
+PLATFORM := 5407
+ifdef CONFIG_MOTOROLA
+BOARD := MOTOROLA
+endif
+ifdef CONFIG_CLEOPATRA
+BOARD := CLEOPATRA
+endif
+ifdef CONFIG_SED_SIOSIII
+BOARD := sed_sios
+endif
+endif
+
+ifdef CONFIG_M547x
+PLATFORM := 547x
+ifdef CONFIG_M5475EVB
+BOARD := M5475EVB
+endif
+endif
+
+export BOARD
+export PLATFORM

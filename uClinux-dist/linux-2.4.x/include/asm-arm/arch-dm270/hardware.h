@@ -1,0 +1,889 @@
+/***********************************************************************
+ * linux/include/asm-armnommu/arch-dm270/hardware.h
+ *
+ *   Derived from asm/arch-armnommu/arch-c5471/irq.h
+ *
+ *   Copyright (C) 2004 InnoMedia Pte Ltd. All rights reserved.
+ *   cheetim_loh@innomedia.com.sg  <www.innomedia.com>
+ *
+ * This program is free software; you can redistribute  it and/or modify it
+ * under  the terms of  the GNU General  Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
+ *
+ * THIS  SOFTWARE  IS PROVIDED   ``AS  IS'' AND   ANY  EXPRESS OR IMPLIED
+ * WARRANTIES,   INCLUDING, BUT NOT  LIMITED  TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN
+ * NO  EVENT  SHALL   THE AUTHOR  BE    LIABLE FOR ANY   DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED   TO, PROCUREMENT OF  SUBSTITUTE GOODS  OR SERVICES; LOSS OF
+ * USE, DATA,  OR PROFITS; OR  BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ * ANY THEORY OF LIABILITY, WHETHER IN  CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * You should have received a copy of the  GNU General Public License along
+ * with this program; if not, write  to the Free Software Foundation, Inc.,
+ * 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ ***********************************************************************/
+
+#ifndef __ASM_ARCH_HARDWARE_H
+#define __ASM_ARCH_HARDWARE_H
+
+#include <linux/config.h>
+#include <asm/mach-types.h>
+
+/* HARD_RESET_N0W: This is used in drivers/block/block.c.
+ */
+
+#define HARD_RESET_NOW()
+
+/* TI TMS320DM270 Peripheral Registers ------------------------------------- */
+
+#define DM270_REG_BASE                  0x00030000
+
+/* Clock Controller -------------------------------------------------------- */
+
+#define DM270_CLKC_BASE                 (DM270_REG_BASE + 0x0880)
+
+#define DM270_CLKC_OFFSET_PLLA          0x0000
+#define DM270_CLKC_OFFSET_PLLB          0x0002
+#define DM270_CLKC_OFFSET_CLKC          0x0004
+#define DM270_CLKC_OFFSET_SEL           0x0006
+#define DM270_CLKC_OFFSET_DIV           0x0008
+#define DM270_CLKC_OFFSET_BYP           0x000a
+#define DM270_CLKC_OFFSET_MMCCLK        0x000c
+#define DM270_CLKC_OFFSET_MSCLK         0x000e
+#define DM270_CLKC_OFFSET_MOD0          0x0010
+#define DM270_CLKC_OFFSET_MOD1          0x0012
+#define DM270_CLKC_OFFSET_MOD2          0x0014
+#define DM270_CLKC_OFFSET_LPCTL0        0x0016
+#define DM270_CLKC_OFFSET_LPCTL1        0x0018
+#define DM270_CLKC_OFFSET_OSEL          0x001a
+#define DM270_CLKC_OFFSET_O0DIV         0x001c
+#define DM270_CLKC_OFFSET_O1DIV         0x001e
+#define DM270_CLKC_OFFSET_O2DIV         0x0020
+#define DM270_CLKC_OFFSET_PWM0C         0x0022
+#define DM270_CLKC_OFFSET_PWM0H         0x0024
+#define DM270_CLKC_OFFSET_PWM1C         0x0026
+#define DM270_CLKC_OFFSET_PWM1H         0x0028
+
+#define DM270_CLKC_PLLA                 (DM270_CLKC_BASE + DM270_CLKC_OFFSET_PLLA)
+#define DM270_CLKC_PLLB                 (DM270_CLKC_BASE + DM270_CLKC_OFFSET_PLLB)
+#define DM270_CLKC_CLKC                 (DM270_CLKC_BASE + DM270_CLKC_OFFSET_CLKC)
+#define DM270_CLKC_SEL                  (DM270_CLKC_BASE + DM270_CLKC_OFFSET_SEL)
+#define DM270_CLKC_DIV                  (DM270_CLKC_BASE + DM270_CLKC_OFFSET_DIV)
+#define DM270_CLKC_BYP                  (DM270_CLKC_BASE + DM270_CLKC_OFFSET_BYP)
+#define DM270_CLKC_MMCCLK               (DM270_CLKC_BASE + DM270_CLKC_OFFSET_MMCCLK)
+#define DM270_CLKC_MSCLK                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_MSCLK)
+#define DM270_CLKC_MOD0                 (DM270_CLKC_BASE + DM270_CLKC_OFFSET_MOD0)
+#define DM270_CLKC_MOD1                 (DM270_CLKC_BASE + DM270_CLKC_OFFSET_MOD1)
+#define DM270_CLKC_MOD2                 (DM270_CLKC_BASE + DM270_CLKC_OFFSET_MOD2)
+#define DM270_CLKC_LPCTL0               (DM270_CLKC_BASE + DM270_CLKC_OFFSET_LPCTL0)
+#define DM270_CLKC_LPCTL1               (DM270_CLKC_BASE + DM270_CLKC_OFFSET_LPCTL1)
+#define DM270_CLKC_OSEL                 (DM270_CLKC_BASE + DM270_CLKC_OFFSET_OSEL)
+#define DM270_CLKC_O0DIV                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_O0DIV)
+#define DM270_CLKC_O1DIV                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_O1DIV)
+#define DM270_CLKC_O2DIV                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_O2DIV)
+#define DM270_CLKC_PWM0C                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_PWM0C)
+#define DM270_CLKC_PWM0H                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_PWM0H)
+#define DM270_CLKC_PWM1C                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_PWM1C)
+#define DM270_CLKC_PWM1H                (DM270_CLKC_BASE + DM270_CLKC_OFFSET_PWM1H)
+
+#define DM270_CLKC_CLKC_CTM0S           0x0020
+#define DM270_CLKC_CLKC_CTM3S           0x0100
+#define DM270_CLKC_CLKC_CUAS0           0x0200
+#define DM270_CLKC_CLKC_CMSS            0x0800
+#define DM270_CLKC_CLKC_CMCIV           0x4000
+#define DM270_CLKC_BYP_CAB              0x0001
+#define DM270_CLKC_BYP_CDB              0x0010
+#define DM270_CLKC_BYP_CSB              0x0100
+#define DM270_CLKC_BYP_CMB              0x1000
+#define DM270_CLKC_MOD0_CACORE          0x0001
+#define DM270_CLKC_MOD0_CBUSC           0x0002
+#define DM270_CLKC_MOD0_CICA            0x0004
+#define DM270_CLKC_MOD0_CADMAC          0x0008
+#define DM270_CLKC_MOD0_CATM            0x0010
+#define DM270_CLKC_MOD0_CINTC           0x0020
+#define DM270_CLKC_MOD0_CEMIF           0x0040
+#define DM270_CLKC_MOD0_CSDRC           0x0080
+#define DM270_CLKC_MOD0_CEHIF           0x0100
+#define DM270_CLKC_MOD0_C5409           0x0200
+#define DM270_CLKC_MOD0_CHPIB           0x0400
+#define DM270_CLKC_MOD0_TEST            0x8000
+#define DM270_CLKC_MOD0_RSV_MASK        0x7800
+#define DM270_CLKC_MOD2_CTMR0           0x0002
+#define DM270_CLKC_MOD2_CTMR3           0x0010
+#define DM270_CLKC_MOD2_CGIO            0x0020
+#define DM270_CLKC_MOD2_CUAS0           0x0200
+#define DM270_CLKC_MOD2_CUAT0           0x0080
+#define DM270_CLKC_MOD2_RSV_MASK        0xc000
+
+#define DM270_CLKC_CLKC_CUAS            DM270_CLKC_CLKC_CUAS0
+#define DM270_CLKC_MOD2_CUAS            DM270_CLKC_MOD2_CUAS0
+#define DM270_CLKC_MOD2_CUAT            DM270_CLKC_MOD2_CUAT0
+
+/* Watch Dog Timer --------------------------------------------------------- */
+
+#define DM270_WDT_BASE                  (DM270_REG_BASE + 0x0400)
+
+#define DM270_WDT_OFFSET_WDTMD          0x0000
+#define DM270_WDT_OFFSET_WDTRST         0x0002
+#define DM270_WDT_OFFSET_WDTPRSCL       0x0004
+#define DM270_WDT_OFFSET_WDTVAL         0x0006
+#define DM270_WDT_OFFSET_WDTEXRST       0x0008
+
+#define DM270_WDT_WDTMD                 (DM270_WDT_BASE + DM270_WDT_OFFSET_WDTMD)
+#define DM270_WDT_WDTRST                (DM270_WDT_BASE + DM270_WDT_OFFSET_WDTRST)
+#define DM270_WDT_WDTPRSCL              (DM270_WDT_BASE + DM270_WDT_OFFSET_WDTPRSCL)
+#define DM270_WDT_WDTVAL                (DM270_WDT_BASE + DM270_WDT_OFFSET_WDTVAL)
+#define DM270_WDT_WDTEXRST              (DM270_WDT_BASE + DM270_WDT_OFFSET_WDTEXRST)
+
+/* External Memory Interface ----------------------------------------------- */
+
+#define DM270_EMIF_BASE                 (DM270_REG_BASE + 0x0a00)
+
+#define DM270_EMIF_OFFSET_CS3CTRL2      0x0010
+#define DM270_EMIF_OFFSET_CS4CTRL1      0x0012
+#define DM270_EMIF_OFFSET_CS4CTRL2      0x0014
+
+#define DM270_EMIF_CS0CTRL1             (DM270_EMIF_BASE + 0x0000)
+#define DM270_EMIF_CS0CTRL2             (DM270_EMIF_BASE + 0x0002)
+#define DM270_EMIF_CS1CTRL1A            (DM270_EMIF_BASE + 0x0004)
+#define DM270_EMIF_CS1CTRL1B            (DM270_EMIF_BASE + 0x0006)
+#define DM270_EMIF_CS1CTRL2             (DM270_EMIF_BASE + 0x0008)
+#define DM270_EMIF_CS2CTRL1             (DM270_EMIF_BASE + 0x000a)
+#define DM270_EMIF_CS2CTRL2             (DM270_EMIF_BASE + 0x000c)
+#define DM270_EMIF_CS3CTRL1             (DM270_EMIF_BASE + 0x000e)
+#define DM270_EMIF_CS3CTRL2             (DM270_EMIF_BASE + DM270_EMIF_OFFSET_CS3CTRL2)
+#define DM270_EMIF_CS4CTRL1             (DM270_EMIF_BASE + DM270_EMIF_OFFSET_CS4CTRL1)
+#define DM270_EMIF_CS4CTRL2             (DM270_EMIF_BASE + DM270_EMIF_OFFSET_CS4CTRL2)
+#define DM270_EMIF_BUSCTRL              (DM270_EMIF_BASE + 0x0016)
+#define DM270_EMIF_BUSRLS               (DM270_EMIF_BASE + 0x0018)
+#define DM270_EMIF_CFCTRL1              (DM270_EMIF_BASE + 0x001a)
+#define DM270_EMIF_CFCTRL2              (DM270_EMIF_BASE + 0x001c)
+#define DM270_EMIF_SMCTRL               (DM270_EMIF_BASE + 0x001e)
+#define DM270_EMIF_BUSINTEN             (DM270_EMIF_BASE + 0x0020)
+#define DM270_EMIF_BUSSTS               (DM270_EMIF_BASE + 0x0024)
+#define DM270_EMIF_BUSWAITMD            (DM270_EMIF_BASE + 0x0026)
+#define DM270_EMIF_ECC1CP               (DM270_EMIF_BASE + 0x0028)
+#define DM270_EMIF_ECC1LP               (DM270_EMIF_BASE + 0x002a)
+#define DM270_EMIF_ECC2CP               (DM270_EMIF_BASE + 0x002c)
+#define DM270_EMIF_ECC2LP               (DM270_EMIF_BASE + 0x002e)
+#define DM270_EMIF_ECCCLR               (DM270_EMIF_BASE + 0x0030)
+#define DM270_EMIF_PAGESZ               (DM270_EMIF_BASE + 0x0032)
+#define DM270_EMIF_IMGDSPDEST           (DM270_EMIF_BASE + 0x0034)
+#define DM270_EMIF_PRIOCTL              (DM270_EMIF_BASE + 0x0036)
+#define DM270_EMIF_SOURCEADDH           (DM270_EMIF_BASE + 0x0038)
+#define DM270_EMIF_SOURCEADDL           (DM270_EMIF_BASE + 0x003a)
+#define DM270_EMIF_DESTADDH             (DM270_EMIF_BASE + 0x003c)
+#define DM270_EMIF_DESTADDL             (DM270_EMIF_BASE + 0x003e)
+#define DM270_EMIF_DMASIZE              (DM270_EMIF_BASE + 0x0040)
+#define DM270_EMIF_DMADEVSEL            (DM270_EMIF_BASE + 0x0042)
+#define DM270_EMIF_DMACTL               (DM270_EMIF_BASE + 0x0044)
+#define DM270_EMIF_IMGDSPADDH           (DM270_EMIF_BASE + 0x0046)
+#define DM270_EMIF_IMGDSPADDL           (DM270_EMIF_BASE + 0x0048)
+#define DM270_EMIF_DPSTR0               (DM270_EMIF_BASE + 0x004a)
+#define DM270_EMIF_DPSTR1               (DM270_EMIF_BASE + 0x004c)
+#define DM270_EMIF_DPSTR2               (DM270_EMIF_BASE + 0x004e)
+#define DM270_EMIF_DPSTR3               (DM270_EMIF_BASE + 0x0050)
+#define DM270_EMIF_DPSTR4               (DM270_EMIF_BASE + 0x0052)
+#define DM270_EMIF_DPSTR5               (DM270_EMIF_BASE + 0x0054)
+
+#define DM270_EMIF_CS0CTRL1_CYCL_MASK   0x000f
+#define DM270_EMIF_CS0CTRL1_CEC_MASK    0x00f0
+#define DM270_EMIF_CS0CTRL1_WEC_MASK    0x0f00
+#define DM270_EMIF_CS0CTRL1_OEC_MASK    0xf000
+
+#define DM270_EMIF_CS2CTRL1_RSV_MASK    0x00f0
+
+#define DM270_EMIF_CS0CTRL2_CESU_MASK   0x000f
+#define DM270_EMIF_CS0CTRL2_WESU_MASK   0x00f0
+#define DM270_EMIF_CS0CTRL2_OESU_MASK   0x0f00
+#define DM270_EMIF_CS0CTRL2_IDLE_MASK   0x3000
+#define DM270_EMIF_CS0CTRL2_RSV_MASK    0xc000
+
+#define DM270_EMIF_CS1CTRL1A_CYCL_MASK  0x001f
+#define DM270_EMIF_CS1CTRL1A_CEC_MASK   0x1f00
+#define DM270_EMIF_CS1CTRL1A_RSV_MASK   0xe0e0
+
+#define DM270_EMIF_CS1CTRL1B_WEC_MASK   0x001f
+#define DM270_EMIF_CS1CTRL1B_OEC_MASK   0x1f00
+#define DM270_EMIF_CS1CTRL1B_RSV_MASK   0xe0e0
+
+#define DM270_EMIF_CS1CTRL2_CESU_MASK   0x000f
+#define DM270_EMIF_CS1CTRL2_WESU_MASK   0x00f0
+#define DM270_EMIF_CS1CTRL2_OESU_MASK   0x0f00
+#define DM270_EMIF_CS1CTRL2_IDLE_MASK   0x3000
+#define DM270_EMIF_CS1CTRL2_RSV_MASK    0xc000
+
+#define DM270_EMIF_CS2CTRL1_CYCL_MASK   0x000f
+#define DM270_EMIF_CS2CTRL1_WEC_MASK    0x0f00
+#define DM270_EMIF_CS2CTRL1_OEC_MASK    0xf000
+#define DM270_EMIF_CS2CTRL1_RSV_MASK    0x00f0
+
+#define DM270_EMIF_CS2CTRL2_RESU_MASK   0x000f
+#define DM270_EMIF_CS2CTRL2_WESU_MASK   0x00f0
+#define DM270_EMIF_CS2CTRL2_OESU_MASK   0x0f00
+#define DM270_EMIF_CS2CTRL2_IDLE_MASK   0x3000
+#define DM270_EMIF_CS2CTRL2_RSV_MASK    0xc000
+
+#define DM270_EMIF_CS3CTRL1_CYCL_MASK   0x000f
+#define DM270_EMIF_CS3CTRL1_CEC_MASK    0x00f0
+#define DM270_EMIF_CS3CTRL1_WEC_MASK    0x0f00
+#define DM270_EMIF_CS3CTRL1_OEC_MASK    0xf000
+
+#define DM270_EMIF_CS3CTRL2_BUSW        0x4000
+#define DM270_EMIF_CS3CTRL2_CESU_MASK   0x000f
+#define DM270_EMIF_CS3CTRL2_WESU_MASK   0x00f0
+#define DM270_EMIF_CS3CTRL2_OESU_MASK   0x0f00
+#define DM270_EMIF_CS3CTRL2_IDLE_MASK   0x3000
+#define DM270_EMIF_CS3CTRL2_RSV_MASK    0x8000
+#define DM270_EMIF_CS3CTRL2_WESU1       0x0010
+#define DM270_EMIF_CS3CTRL2_OESU1       0x0100
+#define DM270_EMIF_CS3CTRL2_IDLE1       0x1000
+#define DM270_EMIF_CS3CTRL2_BUSW16      (DM270_EMIF_CS3CTRL2_BUSW)
+
+#define DM270_EMIF_CS4CTRL1_CYCL_MASK   0x000f
+#define DM270_EMIF_CS4CTRL1_CEC_MASK    0x00f0
+#define DM270_EMIF_CS4CTRL1_WEC_MASK    0x0f00
+#define DM270_EMIF_CS4CTRL1_OEC_MASK    0xf000
+#define DM270_EMIF_CS4CTRL1_CYCL16      0x000f
+#define DM270_EMIF_CS4CTRL1_CEC16       0x00f0
+#define DM270_EMIF_CS4CTRL1_WEC10       0x0900
+#define DM270_EMIF_CS4CTRL1_OEC13       0xc000
+
+#define DM270_EMIF_CS4CTRL2_BUSW        0x4000
+#define DM270_EMIF_CS4CTRL2_CESL        0x8000
+#define DM270_EMIF_CS4CTRL2_CESU_MASK   0x000f
+#define DM270_EMIF_CS4CTRL2_WESU_MASK   0x00f0
+#define DM270_EMIF_CS4CTRL2_OESU_MASK   0x0f00
+#define DM270_EMIF_CS4CTRL2_IDLE_MASK   0x3000
+#define DM270_EMIF_CS4CTRL2_WESU2       0x0020
+#define DM270_EMIF_CS4CTRL2_OESU2       0x0200
+#define DM270_EMIF_CS4CTRL2_IDLE3       0x3000
+#define DM270_EMIF_CS4CTRL2_BUSW16      (DM270_EMIF_CS4CTRL2_BUSW)
+
+#define DM270_EMIF_BUSCTRL_EMWE3        0x0001
+#define DM270_EMIF_BUSCTRL_EMWE4        0x0002
+#define DM270_EMIF_BUSCTRL_RSV_MASK     0xfffc
+
+#define DM270_EMIF_BUSRLS_EMREL         0x0001
+#define DM270_EMIF_BUSRLS_SDREL         0x0002
+#define DM270_EMIF_BUSRLS_BUSSEL        0x0004
+#define DM270_EMIF_BUSRLS_RSV_MASK      0xfff8
+
+#define DM270_EMIF_CFCTRL1_CFSEL        0x0001
+#define DM270_EMIF_CFCTRL1_RSV_MASK     0xfffe
+
+#define DM270_EMIF_CFCTRL2_CFMOD        0x0001
+#define DM270_EMIF_CFCTRL2_BUSSZ        0x0010
+#define DM270_EMIF_CFCTRL2_RSV_MASK     0xffee
+
+#define DM270_EMIF_SMCTRL_SCEH          0x0001
+#define DM270_EMIF_SMCTRL_RSV_MASK      0xfffe
+
+#define DM270_EMIF_BUSINTEN_CBIEN       0x0001
+#define DM270_EMIF_BUSINTEN_CBCND       0x0002
+#define DM270_EMIF_BUSINTEN_RSV_MASK    0xfffc
+
+#define DM270_EMIF_BUSSTS_CFRDY         0x0001
+#define DM270_EMIF_BUSSTS_CFWAIT        0x0002
+#define DM270_EMIF_BUSSTS_IOIS16        0x0004
+#define DM270_EMIF_BUSSTS_EMWAIT        0x0008
+#define DM270_EMIF_BUSSTS_RSV_MASK      0xfff0
+
+#define DM270_EMIF_BUSWAITMD_CFRW       0x0001
+#define DM270_EMIF_BUSWAITMD_CFRSL      0x0002
+#define DM270_EMIF_BUSWAITMD_RSV_MASK   0xfffc
+
+#define DM270_EMIF_ECCCP_RD1_MASK       0x0003
+#define DM270_EMIF_ECCCP_CP_MASK        0x00fc
+#define DM270_EMIF_ECCCP_RSV_MASK       0xff00
+
+#define DM270_EMIF_ECCCLR_ECLR          0x0001
+#define DM270_EMIF_ECCCLR_RSV_MASK      0xfffe
+
+#define DM270_EMIF_PAGESZ_PAGESZ        0x0001
+#define DM270_EMIF_PAGESZ_RSV_MASK      0xfffe
+
+#define DM270_EMIF_IMGDSPDEST_DDST_MASK 0x0007
+#define DM270_EMIF_IMGDSPDEST_IDST_MASK 0x0070
+#define DM270_EMIF_IMGDSPDEST_RSV_MASK  0xff88
+
+#define DM270_EMIF_PRIOCTL_PRY4_MASK    0x0003
+#define DM270_EMIF_PRIOCTL_PRY3_MASK    0x000c
+#define DM270_EMIF_PRIOCTL_PRY2_MASK    0x0030
+#define DM270_EMIF_PRIOCTL_PRY1_MASK    0x00c0
+#define DM270_EMIF_PRIOCTL_RSV_MASK     0xff00
+
+#define DM270_EMIF_SOURCEADDH_SAH_MASK  0x03ff
+#define DM270_EMIF_SOURCEADDH_SAFIX     0x1000
+#define DM270_EMIF_SOURCEADDH_RSV_MASK  0xec00
+
+#define DM270_EMIF_DESTADDH_DAH_MASK    0x03ff
+#define DM270_EMIF_DESTADDH_DAFIX       0x1000
+#define DM270_EMIF_DESTADDH_RSV_MASK    0xec00
+
+#define DM270_EMIF_DMADEVSEL_DDV_MASK   0x0007
+#define DM270_EMIF_DMADEVSEL_SDV_MASK   0x0070
+#define DM270_EMIF_DMADEVSEL_RSV_MASK   0xff88
+
+#define DM270_EMIF_DMACTL_GO            0x0001
+#define DM270_EMIF_DMACTL_ENDI_MASK     0x0300
+#define DM270_EMIF_DMACTL_RSV_MASK      0xfcfe
+
+#define DM270_EMIF_IMGDSPADDH_CDAH_MASK 0x007f
+#define DM270_EMIF_IMGDSPADDH_RSV_MASK  0xff80
+
+#define DM270_EMIF_DPSTR_DST_MASK       0x00ff
+#define DM270_EMIF_DPSTR_RSV_MASK       0xff00
+
+/* SDRAM Controller -------------------------------------------------------- */
+
+#define DM270_SDRC_BASE                 (DM270_REG_BASE + 0x0980)
+
+#define DM270_SDRC_OFFSET_SDMODE        0x0026
+#define DM270_SDRC_OFFSET_REFCTL        0x0028
+
+#define DM270_SDRC_SDBUFD0L             (DM270_SDRC_BASE + 0x0000)
+#define DM270_SDRC_SDBUFD0H             (DM270_SDRC_BASE + 0x0002)
+#define DM270_SDRC_SDBUFD1L             (DM270_SDRC_BASE + 0x0004)
+#define DM270_SDRC_SDBUFD1H             (DM270_SDRC_BASE + 0x0006)
+#define DM270_SDRC_SDBUFD2L             (DM270_SDRC_BASE + 0x0008)
+#define DM270_SDRC_SDBUFD2H             (DM270_SDRC_BASE + 0x000a)
+#define DM270_SDRC_SDBUFD3L             (DM270_SDRC_BASE + 0x000c)
+#define DM270_SDRC_SDBUFD3H             (DM270_SDRC_BASE + 0x000e)
+#define DM270_SDRC_SDBUFD4L             (DM270_SDRC_BASE + 0x0010)
+#define DM270_SDRC_SDBUFD4H             (DM270_SDRC_BASE + 0x0012)
+#define DM270_SDRC_SDBUFD5L             (DM270_SDRC_BASE + 0x0014)
+#define DM270_SDRC_SDBUFD5H             (DM270_SDRC_BASE + 0x0016)
+#define DM270_SDRC_SDBUFD6L             (DM270_SDRC_BASE + 0x0018)
+#define DM270_SDRC_SDBUFD6H             (DM270_SDRC_BASE + 0x001a)
+#define DM270_SDRC_SDBUFD7L             (DM270_SDRC_BASE + 0x001c)
+#define DM270_SDRC_SDBUFD7H             (DM270_SDRC_BASE + 0x001e)
+#define DM270_SDRC_SDBUFAD1             (DM270_SDRC_BASE + 0x0020)
+#define DM270_SDRC_SDBUFAD2             (DM270_SDRC_BASE + 0x0022)
+#define DM270_SDRC_SDBUFCTL             (DM270_SDRC_BASE + 0x0024)
+#define DM270_SDRC_SDMODE               (DM270_SDRC_BASE + DM270_SDRC_OFFSET_SDMODE)
+#define DM270_SDRC_REFCTL               (DM270_SDRC_BASE + DM270_SDRC_OFFSET_REFCTL)
+#define DM270_SDRC_SDPRTY1              (DM270_SDRC_BASE + 0x002a)
+#define DM270_SDRC_SDPRTY2              (DM270_SDRC_BASE + 0x002c)
+#define DM270_SDRC_SDPRTY3              (DM270_SDRC_BASE + 0x002e)
+#define DM270_SDRC_SDPRTY4              (DM270_SDRC_BASE + 0x0030)
+#define DM270_SDRC_SDPRTY5              (DM270_SDRC_BASE + 0x0032)
+#define DM270_SDRC_SDPRTY6              (DM270_SDRC_BASE + 0x0034)
+#define DM270_SDRC_SDPRTY7              (DM270_SDRC_BASE + 0x0036)
+#define DM270_SDRC_SDPRTY8              (DM270_SDRC_BASE + 0x0038)
+#define DM270_SDRC_SDPRTY9              (DM270_SDRC_BASE + 0x003a)
+#define DM270_SDRC_SDPRTY10             (DM270_SDRC_BASE + 0x003c)
+#define DM270_SDRC_PRTYON               (DM270_SDRC_BASE + 0x003e)
+#define DM270_SDRC_SDRCTEST             (DM270_SDRC_BASE + 0x0040)
+
+#define DM270_SDRC_SDBUFAD1_SDAH_MASK   0x003f
+#define DM270_SDRC_SDBUFAD1_AAI         0x0100
+#define DM270_SDRC_SDBUFAD1_RSV_MASK    0xfec0
+
+#define DM270_SDRC_SDBUFCTL_RSD         0x0001
+#define DM270_SDRC_SDBUFCTL_WA          0x0002
+#define DM270_SDRC_SDBUFCTL_WM          0x0004
+#define DM270_SDRC_SDBUFCTL_BUFC        0x0008
+#define DM270_SDRC_SDBUFCTL_PTSEL_MASK  0x0030
+#define DM270_SDRC_SDBUFCTL_RSV_MASK    0xffc0
+
+#define DM270_SDRC_SDMODE_SDCTL_MASK    0x003f
+#define DM270_SDRC_SDMODE_SDCTL_NOP     0x0000 /* NOP:   No operation */
+#define DM270_SDRC_SDMODE_SDCTL_MSR     0x0001 /* MSR:   Sets mode */
+#define DM270_SDRC_SDMODE_SDCTL_PREA    0x0002 /* PREA:  Precharges all banks */
+#define DM270_SDRC_SDMODE_SDCTL_REF     0x0004 /* REF:   Issues auto refresh command */
+#define DM270_SDRC_SDMODE_SDCTL_SELF    0x0008 /* SELF:  Enters self refresh mode */
+#define DM270_SDRC_SDMODE_SDCTL_SELFC   0x0010 /* SELFC: Cancels self refresh/power down mode */
+#define DM270_SDRC_SDMODE_SDCTL_PDN     0x0020 /* PDN:   Enters power down mode */
+/* Added in ES1.1 for mobile SDRAM support */
+#define DM270_SDRC_SDMODE_SDCTL_DPDN    0x0030 /* DPDN:  Deep powerdown mode */
+#define DM270_SDRC_SDMODE_SDCTL_EMSR    0x0011 /* EMSR:  Set extended mode register */
+#define DM270_SDRC_SDMODE_APO           0x0040
+#define DM270_SDRC_SDMODE_DQMC          0x0080
+#define DM270_SDRC_SDMODE_MEMT_MASK     0x0300
+#define DM270_SDRC_SDMODE_CASL          0x0400
+#define DM270_SDRC_SDMODE_BNS           0x1000
+#define DM270_SDRC_SDMODE_TRCD          0x2000
+#define DM270_SDRC_SDMODE_SDBW          0x4000
+#define DM270_SDRC_SDMODE_TRDL          0x8000
+#define DM270_SDRC_SDMODE_RSV_MASK      0x0800
+
+#define DM270_SDRC_REFCTL_REFC_MASK     0x00ff
+#define DM270_SDRC_REFCTL_REFEN         0x0100
+#define DM270_SDRC_REFCTL_SDMA2_MASK    0x1c00
+#define DM270_SDRC_REFCTL_SDMA2_EMIF    0x0000
+#define DM270_SDRC_REFCTL_SDMA2_SERIAL  0x0400
+#define DM270_SDRC_REFCTL_SDMA2_USB     0x0800
+#define DM270_SDRC_REFCTL_SDMA2_MMCSD   0x0c00
+#define DM270_SDRC_REFCTL_SDMA2_HPIB    0x1000
+#define DM270_SDRC_REFCTL_SDMA1_MASK    0xe000
+#define DM270_SDRC_REFCTL_SDMA1_EMIF    0x0000
+#define DM270_SDRC_REFCTL_SDMA1_SERIAL  0x2000
+#define DM270_SDRC_REFCTL_SDMA1_USB     0x4000
+#define DM270_SDRC_REFCTL_SDMA1_MMCSD   0x6000
+#define DM270_SDRC_REFCTL_SDMA1_HPIB    0x8000
+#define DM270_SDRC_REFCTL_RSV_MASK      0x0200
+
+#define DM270_SDRC_SDPRTY_PRTY_MASK     0x03ff
+#define DM270_SDRC_SDPRTY_RSV_MASK      0xfc00
+
+#define DM270_SDRC_PRTYON_PTYON         0x0001
+#define DM270_SDRC_PRTYON_RSV_MASK      0xfffe
+
+#define DM270_SDRC_SDRCTEST_TEST        0x0001
+#define DM270_SDRC_SDRCTEST_RSV_MASK    0xfffe
+
+#define DM270_SDRC_SDMODE_8K512         0x0300
+#define DM270_SDRC_SDMODE_CL3           0x0400
+#define DM270_SDRC_SDMODE_4BANK         0x1000
+#define DM270_SDRC_SDMODE_32BIT         0x0000
+#define DM270_SDRC_SDMODE_TRDL2         0x8000
+
+/* Interrupt Controller ---------------------------------------------------- */
+
+#define DM270_INTC_BASE                 (DM270_REG_BASE + 0x0500)
+
+#define DM270_INTC_OFFSET_EINT0         0x0028
+#define DM270_INTC_OFFSET_EINT1         0x002a
+#define DM270_INTC_OFFSET_EINT2         0x002c
+
+#define DM270_INTC_FIQ0                 (DM270_INTC_BASE + 0x0000)
+#define DM270_INTC_FIQ1                 (DM270_INTC_BASE + 0x0002)
+#define DM270_INTC_FIQ2                 (DM270_INTC_BASE + 0x0004)
+#define DM270_INTC_IRQ0                 (DM270_INTC_BASE + 0x0008)
+#define DM270_INTC_IRQ1                 (DM270_INTC_BASE + 0x000a)
+#define DM270_INTC_IRQ2                 (DM270_INTC_BASE + 0x000c)
+#define DM270_INTC_FIQENTRY0            (DM270_INTC_BASE + 0x0010)
+#define DM270_INTC_FIQENTRY1            (DM270_INTC_BASE + 0x0012)
+#define DM270_INTC_IRQENTRY0            (DM270_INTC_BASE + 0x0018)
+#define DM270_INTC_IRQENTRY1            (DM270_INTC_BASE + 0x001a)
+#define DM270_INTC_FISEL0               (DM270_INTC_BASE + 0x0020)
+#define DM270_INTC_FISEL1               (DM270_INTC_BASE + 0x0022)
+#define DM270_INTC_FISEL2               (DM270_INTC_BASE + 0x0024)
+#define DM270_INTC_EINT0                (DM270_INTC_BASE + DM270_INTC_OFFSET_EINT0)
+#define DM270_INTC_EINT1                (DM270_INTC_BASE + DM270_INTC_OFFSET_EINT1)
+#define DM270_INTC_EINT2                (DM270_INTC_BASE + DM270_INTC_OFFSET_EINT2)
+#define DM270_INTC_INTRAW               (DM270_INTC_BASE + 0x0030)
+#define DM270_INTC_EABASE0              (DM270_INTC_BASE + 0x0038)
+#define DM270_INTC_EABASE1              (DM270_INTC_BASE + 0x003a)
+#define DM270_INTC_INTPRI00             (DM270_INTC_BASE + 0x0040)
+#define DM270_INTC_INTPRI01             (DM270_INTC_BASE + 0x0042)
+#define DM270_INTC_INTPRI02             (DM270_INTC_BASE + 0x0044)
+#define DM270_INTC_INTPRI03             (DM270_INTC_BASE + 0x0046)
+#define DM270_INTC_INTPRI04             (DM270_INTC_BASE + 0x0048)
+#define DM270_INTC_INTPRI05             (DM270_INTC_BASE + 0x004a)
+#define DM270_INTC_INTPRI06             (DM270_INTC_BASE + 0x004c)
+#define DM270_INTC_INTPRI07             (DM270_INTC_BASE + 0x004e)
+#define DM270_INTC_INTPRI08             (DM270_INTC_BASE + 0x0050)
+#define DM270_INTC_INTPRI09             (DM270_INTC_BASE + 0x0052)
+#define DM270_INTC_INTPRI10             (DM270_INTC_BASE + 0x0054)
+#define DM270_INTC_INTPRI11             (DM270_INTC_BASE + 0x0056)
+#define DM270_INTC_INTPRI12             (DM270_INTC_BASE + 0x0058)
+#define DM270_INTC_INTPRI13             (DM270_INTC_BASE + 0x005a)
+#define DM270_INTC_INTPRI14             (DM270_INTC_BASE + 0x005c)
+#define DM270_INTC_INTPRI15             (DM270_INTC_BASE + 0x005e)
+#define DM270_INTC_INTPRI16             (DM270_INTC_BASE + 0x0060)
+#define DM270_INTC_INTPRI17             (DM270_INTC_BASE + 0x0062)
+#define DM270_INTC_INTPRI18             (DM270_INTC_BASE + 0x0064)
+#define DM270_INTC_INTPRI19             (DM270_INTC_BASE + 0x0066)
+
+#define DM270_INTC_EINT(vector)         ((vector < 16) ? DM270_INTC_EINT0 : \
+                                            ((vector < 32) ? DM270_INTC_EINT1 : DM270_INTC_EINT2))
+#define DM270_INTC_FIQ(vector)          ((vector < 16) ? DM270_INTC_FIQ0 : \
+                                            ((vector < 32) ? DM270_INTC_FIQ1 : DM270_INTC_FIQ2))
+#define DM270_INTC_IRQ(vector)          ((vector < 16) ? DM270_INTC_IRQ0 : \
+                                            ((vector < 32) ? DM270_INTC_IRQ1 : DM270_INTC_IRQ2))
+#define DM270_INTC_EINT_SHIFT(vector)   ((vector < 16) ? vector : \
+                                            ((vector < 32) ? (vector - 16) : (vector - 32)))
+#define DM270_INTC_FIQ_SHIFT(vector)    DM270_INTC_EINT_SHIFT(vector)
+#define DM270_INTC_IRQ_SHIFT(vector)    DM270_INTC_EINT_SHIFT(vector)
+
+#define DM270_INTC_TMR0_BIT             0x0001
+#define DM270_INTC_TMR1_BIT             0x0002
+#define DM270_INTC_TMR2_BIT             0x0004
+#define DM270_INTC_TMR3_BIT             0x0008
+#define DM270_INTC_CCDVD0_BIT           0x0010
+#define DM270_INTC_CCDVD1_BIT           0x0020
+#define DM270_INTC_CCDVD2_BIT           0x0040
+#define DM270_INTC_OSD_BIT              0x0080
+#define DM270_INTC_SP0_BIT              0x0100
+#define DM270_INTC_SP1_BIT              0x0200
+#define DM270_INTC_EXTHOST_BIT          0x0400
+#define DM270_INTC_DSPHINT_BIT          0x0800
+#define DM270_INTC_UART0_BIT            0x1000
+#define DM270_INTC_UART1_BIT            0x2000
+#define DM270_INTC_USB_BIT              0x4000
+#define DM270_INTC_MTC0_BIT             0x8000
+
+#define DM270_INTC_MTC1_BIT             0x0001
+#define DM270_INTC_MMCSD0_BIT           0x0002
+#define DM270_INTC_MMCSD1_BIT           0x0004
+#define DM270_INTC_RSVINT0_BIT          0x0008
+#define DM270_INTC_EXT1_BIT             0x0010
+#define DM270_INTC_EXT2_BIT             0x0020
+#define DM270_INTC_EXT3_BIT             0x0040
+#define DM270_INTC_EXT4_BIT             0x0080
+#define DM270_INTC_EXT5_BIT             0x0100
+#define DM270_INTC_EXT6_BIT             0x0200
+#define DM270_INTC_EXT7_BIT             0x0400
+#define DM270_INTC_EXT8_BIT             0x0800
+#define DM270_INTC_EXT9_BIT             0x1000
+#define DM270_INTC_EXT10_BIT            0x2000
+#define DM270_INTC_EXT11_BIT            0x4000
+#define DM270_INTC_EXT12_BIT            0x8000
+
+#define DM270_INTC_EXT13_BIT            0x0001
+#define DM270_INTC_EXT14_BIT            0x0002
+#define DM270_INTC_EXT15_BIT            0x0004
+#define DM270_INTC_PREV_BIT             0x0008
+#define DM270_INTC_WDT_BIT              0x0010
+#define DM270_INTC_I2C_BIT              0x0020
+#define DM270_INTC_CLKC_BIT             0x0040
+#define DM270_INTC_RSVINT1_BIT          0x0080
+#define DM270_INTC_RSV_MASK             0xff00
+
+#define DM270_INTC_FIQENTRY1_RSV_MASK   0xe000
+
+#define DM270_INTC_IRQENTRY1_RSV_MASK   0xe000
+
+#define DM270_INTC_INTRAW_FIQ           0x0001
+#define DM270_INTC_INTRAW_IRQ           0x0002
+#define DM270_INTC_INTRAW_RSV_MASK      0xfffc
+
+#define DM270_INTC_EABASE0_TSIZE_MASK   0x0003
+#define DM270_INTC_EABASE0_EABL_MASK    0xfff8
+#define DM270_INTC_EABASE0_RSV_MASK     0x0004
+
+#define DM270_INTC_EABASE1_EABH_MASK    0x1fff
+#define DM270_INTC_EABASE1_RSV_MASK     0xe000
+
+#define DM270_INTC_INTPRI_PRIOL_MASK    0x003f
+#define DM270_INTC_INTPRI_PRIOH_MASK    0x3f00
+#define DM270_INTC_INTPRI_RSV_MASK      0xc0c0
+
+/* GIO --------------------------------------------------------------------- */
+
+#define DM270_GIO_BASE                  (DM270_REG_BASE + 0x0580)
+
+#define DM270_GIO_OFFSET_DIR0           0x0000
+#define DM270_GIO_OFFSET_DIR1           0x0002
+#define DM270_GIO_OFFSET_DIR2           0x0004
+#define DM270_GIO_OFFSET_INV0           0x0006
+#define DM270_GIO_OFFSET_INV1           0x0008
+#define DM270_GIO_OFFSET_INV2           0x000a
+#define DM270_GIO_OFFSET_BITSET0        0x000c
+#define DM270_GIO_OFFSET_BITSET1        0x000e
+#define DM270_GIO_OFFSET_BITSET2        0x0010
+#define DM270_GIO_OFFSET_BITCLR0        0x0012
+#define DM270_GIO_OFFSET_BITCLR1        0x0014
+#define DM270_GIO_OFFSET_BITCLR2        0x0016
+#define DM270_GIO_OFFSET_IRQPORT        0x0018
+#define DM270_GIO_OFFSET_IRQEDGE        0x001a
+#define DM270_GIO_OFFSET_CHAT0          0x001c
+#define DM270_GIO_OFFSET_CHAT1          0x001e
+#define DM270_GIO_OFFSET_CHAT2          0x0020
+#define DM270_GIO_OFFSET_NCHAT          0x0022
+#define DM270_GIO_OFFSET_FSEL0          0x0024
+#define DM270_GIO_OFFSET_FSEL1          0x0026
+
+#define DM270_GIO_DIR0                  (DM270_GIO_BASE + DM270_GIO_OFFSET_DIR0)
+#define DM270_GIO_DIR1                  (DM270_GIO_BASE + DM270_GIO_OFFSET_DIR1)
+#define DM270_GIO_DIR2                  (DM270_GIO_BASE + DM270_GIO_OFFSET_DIR2)
+#define DM270_GIO_INV0                  (DM270_GIO_BASE + DM270_GIO_OFFSET_INV0)
+#define DM270_GIO_INV1                  (DM270_GIO_BASE + DM270_GIO_OFFSET_INV1)
+#define DM270_GIO_INV2                  (DM270_GIO_BASE + DM270_GIO_OFFSET_INV2)
+#define DM270_GIO_BITSET0               (DM270_GIO_BASE + DM270_GIO_OFFSET_BITSET0)
+#define DM270_GIO_BITSET1               (DM270_GIO_BASE + DM270_GIO_OFFSET_BITSET1)
+#define DM270_GIO_BITSET2               (DM270_GIO_BASE + DM270_GIO_OFFSET_BITSET2)
+#define DM270_GIO_BITCLR0               (DM270_GIO_BASE + DM270_GIO_OFFSET_BITCLR0)
+#define DM270_GIO_BITCLR1               (DM270_GIO_BASE + DM270_GIO_OFFSET_BITCLR1)
+#define DM270_GIO_BITCLR2               (DM270_GIO_BASE + DM270_GIO_OFFSET_BITCLR2)
+#define DM270_GIO_IRQPORT               (DM270_GIO_BASE + DM270_GIO_OFFSET_IRQPORT)
+#define DM270_GIO_IRQEDGE               (DM270_GIO_BASE + DM270_GIO_OFFSET_IRQEDGE)
+#define DM270_GIO_CHAT0                 (DM270_GIO_BASE + DM270_GIO_OFFSET_CHAT0)
+#define DM270_GIO_CHAT1                 (DM270_GIO_BASE + DM270_GIO_OFFSET_CHAT1)
+#define DM270_GIO_CHAT2                 (DM270_GIO_BASE + DM270_GIO_OFFSET_CHAT2)
+#define DM270_GIO_NCHAT                 (DM270_GIO_BASE + DM270_GIO_OFFSET_NCHAT)
+#define DM270_GIO_FSEL0                 (DM270_GIO_BASE + DM270_GIO_OFFSET_FSEL0)
+#define DM270_GIO_FSEL1                 (DM270_GIO_BASE + DM270_GIO_OFFSET_FSEL1)
+
+#define DM270_GIO_DIR(vector)           (((vector - DM270_INTERRUPT_RSVINT0) < 16) ? DM270_GIO_DIR0 : \
+                                            (((vector - DM270_INTERRUPT_RSVINT0) < 32) ? DM270_GIO_DIR1 : DM270_GIO_DIR2))
+#define DM270_GIO_INV(vector)           (((vector - DM270_INTERRUPT_RSVINT0) < 16) ? DM270_GIO_INV0 : \
+                                            (((vector - DM270_INTERRUPT_RSVINT0) < 32) ? DM270_GIO_INV1 : DM270_GIO_INV2))
+#define DM270_GIO_DIR_SHIFT(vector)     (((vector - DM270_INTERRUPT_RSVINT0) < 16) ? (vector - DM270_INTERRUPT_RSVINT0) : \
+                                            (((vector - DM270_INTERRUPT_RSVINT0) < 32) ? (vector - DM270_INTERRUPT_RSVINT0 - 16) : \
+                                            (vector - DM270_INTERRUPT_RSVINT0 - 32)))
+#define DM270_GIO_IRQPORT_SHIFT(vector) DM270_GIO_DIR_SHIFT(vector)
+#define DM270_GIO_INV_SHIFT(vector)     DM270_GIO_DIR_SHIFT(vector)
+#define DM270_GIO_IRQEDGE_SHIFT(vector) DM270_GIO_DIR_SHIFT(vector)
+
+#define DM270_GIO_RSV_BIT               0x0001
+#define DM270_GIO_GIO01_BIT             0x0002
+#define DM270_GIO_GIO02_BIT             0x0004
+#define DM270_GIO_GIO03_BIT             0x0008
+#define DM270_GIO_GIO04_BIT             0x0010
+#define DM270_GIO_GIO05_BIT             0x0020
+#define DM270_GIO_GIO06_BIT             0x0040
+#define DM270_GIO_GIO07_BIT             0x0080
+#define DM270_GIO_GIO08_BIT             0x0100
+#define DM270_GIO_GIO09_BIT             0x0200
+#define DM270_GIO_GIO10_BIT             0x0400
+#define DM270_GIO_GIO11_BIT             0x0800
+#define DM270_GIO_GIO12_BIT             0x1000
+#define DM270_GIO_GIO13_BIT             0x2000
+#define DM270_GIO_GIO14_BIT             0x4000
+#define DM270_GIO_GIO15_BIT             0x8000
+
+#define DM270_GIO_GIO16_BIT             0x0001
+#define DM270_GIO_GIO17_BIT             0x0002
+#define DM270_GIO_GIO18_BIT             0x0004
+#define DM270_GIO_GIO19_BIT             0x0008
+#define DM270_GIO_GIO20_BIT             0x0010
+#define DM270_GIO_GIO21_BIT             0x0020
+#define DM270_GIO_GIO22_BIT             0x0040
+#define DM270_GIO_GIO23_BIT             0x0080
+#define DM270_GIO_GIO24_BIT             0x0100
+#define DM270_GIO_GIO25_BIT             0x0200
+#define DM270_GIO_GIO26_BIT             0x0400
+#define DM270_GIO_GIO27_BIT             0x0800
+#define DM270_GIO_GIO28_BIT             0x1000
+#define DM270_GIO_GIO29_BIT             0x2000
+#define DM270_GIO_GIO30_BIT             0x4000
+#define DM270_GIO_GIO31_BIT             0x8000
+
+#define DM270_GIO_GIO32_BIT             0x0001
+#define DM270_GIO_GIO33_BIT             0x0002
+#define DM270_GIO_RSV_MASK              0xfffc
+
+#define DM270_GIO_NCHAT_NCH_MASK        0x000f
+#define DM270_GIO_NCHAT_RSV_MASK        0xfff0
+
+#define DM270_GIO_FSEL0_GIO08SEL_BIT    0x0001
+#define DM270_GIO_FSEL0_GIO09SEL_BIT    0x0002
+#define DM270_GIO_FSEL0_GIO10SEL_BIT    0x0004
+#define DM270_GIO_FSEL0_GIO11SEL_BIT    0x0008
+#define DM270_GIO_FSEL0_GIO12SEL_BIT    0x0010
+#define DM270_GIO_FSEL0_GIO13SEL_BIT    0x0020
+#define DM270_GIO_FSEL0_GIO14SEL_BIT    0x0040
+#define DM270_GIO_FSEL0_GIO15SEL_BIT    0x0080
+#define DM270_GIO_FSEL0_GIO16SEL_BIT    0x0100
+#define DM270_GIO_FSEL0_GIO17SEL_BIT    0x0200
+#define DM270_GIO_FSEL0_GIO18SEL_BIT    0x0400
+#define DM270_GIO_FSEL0_GIO19SEL_BIT    0x0800
+#define DM270_GIO_FSEL0_GIO20SEL_BIT    0x1000
+#define DM270_GIO_FSEL0_GIO21SEL_BIT    0x2000
+
+#define DM270_GIO_FSEL0_GIO23SEL_BIT    0x8000
+
+#define DM270_GIO_FSEL1_GIO24SEL_BIT    0x0001
+#define DM270_GIO_FSEL1_GIO25SEL_MASK   0x0006
+#define DM270_GIO_FSEL1_GIO26SEL_BIT    0x0008
+#define DM270_GIO_FSEL1_GIO27SEL_BIT    0x0010
+#define DM270_GIO_FSEL1_GIO28SEL_BIT    0x0020
+#define DM270_GIO_FSEL1_GIO29SEL_BIT    0x0040
+#define DM270_GIO_FSEL1_GIO30SEL_BIT    0x0080
+#define DM270_GIO_FSEL1_GIO31SEL_BIT    0x0100
+#define DM270_GIO_FSEL1_GIO32SEL_BIT    0x0200
+#define DM270_GIO_FSEL1_GIO33SEL_BIT    0x0400
+#define DM270_GIO_FSEL1_HDVDSEL_BIT     0x2000
+#define DM270_GIO_FSEL1_RGB666SEL_BIT   0x4000
+#define DM270_GIO_FSEL1_RSV_MASK        0x9800
+
+#define DM270_GIO_FSEL_DSP_BFSR1        DM270_GIO_FSEL0_GIO08SEL_BIT
+#define DM270_GIO_FSEL_DSP_BCLKR1       DM270_GIO_FSEL0_GIO09SEL_BIT
+#define DM270_GIO_FSEL_DSP_BDR1         DM270_GIO_FSEL0_GIO10SEL_BIT
+#define DM270_GIO_FSEL_DSP_BFSX1        DM270_GIO_FSEL0_GIO11SEL_BIT
+#define DM270_GIO_FSEL_DSP_BCLKX1       DM270_GIO_FSEL0_GIO12SEL_BIT
+#define DM270_GIO_FSEL_DSP_BDX1         DM270_GIO_FSEL0_GIO13SEL_BIT
+#define DM270_GIO_FSEL_DSP_CLKS1        DM270_GIO_FSEL0_GIO14SEL_BIT
+#define DM270_GIO_FSEL_DSP_XF           DM270_GIO_FSEL0_GIO15SEL_BIT
+#define DM270_GIO_FSEL_CLKOUT0          DM270_GIO_FSEL0_GIO16SEL_BIT
+#define DM270_GIO_FSEL_CLKOUT1          DM270_GIO_FSEL0_GIO17SEL_BIT
+#define DM270_GIO_FSEL_CLKOUT2          DM270_GIO_FSEL0_GIO18SEL_BIT
+#define DM270_GIO_FSEL_SDO1             DM270_GIO_FSEL0_GIO19SEL_BIT
+#define DM270_GIO_FSEL_SDI1             DM270_GIO_FSEL0_GIO20SEL_BIT
+#define DM270_GIO_FSEL_SCLK1            DM270_GIO_FSEL0_GIO21SEL_BIT
+#define DM270_GIO_FSEL_SDEN1            DM270_GIO_FSEL0_GIO22SEL_BIT
+#define DM270_GIO_FSEL_RXD1             DM270_GIO_FSEL0_GIO23SEL_BIT
+#define DM270_GIO_FSEL_TXD1             DM270_GIO_FSEL1_GIO24SEL_BIT
+#define DM270_GIO_FSEL_MIRQ             0x0002
+#define DM270_GIO_FSEL_MRST             0x0004
+#define DM270_GIO_FSEL_C_WEN            DM270_GIO_FSEL1_GIO26SEL_BIT
+#define DM270_GIO_FSEL_CCDC_SHUT        DM270_GIO_FSEL1_GIO27SEL_BIT
+#define DM270_GIO_FSEL_LCD_OE           DM270_GIO_FSEL1_GIO28SEL_BIT
+#define DM270_GIO_FSEL_VENC_EXT_FIELD   DM270_GIO_FSEL1_GIO28SEL_BIT
+#define DM270_GIO_FSEL_PWM0             DM270_GIO_FSEL1_GIO29SEL_BIT
+#define DM270_GIO_FSEL_PWM1             DM270_GIO_FSEL1_GIO30SEL_BIT
+#define DM270_GIO_FSEL_VENC_EXT_HD      DM270_GIO_FSEL1_GIO30SEL_BIT
+#define DM270_GIO_FSEL_SCL              DM270_GIO_FSEL1_GIO31SEL_BIT
+#define DM270_GIO_FSEL_SDA              DM270_GIO_FSEL1_GIO32SEL_BIT
+#define DM270_GIO_FSEL_EXT_LINE_ID      DM270_GIO_FSEL1_GIO33SEL_BIT
+#define DM270_GIO_FSEL_VENC_EXT_VD      DM270_GIO_FSEL1_GIO33SEL_BIT
+
+/* Timer 0 - 3 ------------------------------------------------------------- */
+
+#define DM270_TMR0_BASE                 (DM270_REG_BASE + 0x0000)
+#define DM270_TMR1_BASE                 (DM270_REG_BASE + 0x0080)
+#define DM270_TMR2_BASE                 (DM270_REG_BASE + 0x0100)
+#define DM270_TMR3_BASE                 (DM270_REG_BASE + 0x0180)
+
+#define DM270_TMR_TMMD                  0x0000
+#define DM270_TMR_TMRSV                 0x0002
+#define DM270_TMR_TMPRSCL               0x0004
+#define DM270_TMR_TMVAL                 0x0006
+#define DM270_TMR_TMTRG                 0x0008
+#define DM270_TMR_TMCNT                 0x000a
+
+#define DM270_TMR0_TMMD                 (DM270_TMR0_BASE + 0x0000)
+#define DM270_TMR0_TMRSV                (DM270_TMR0_BASE + 0x0002)
+#define DM270_TMR0_TMPRSCL              (DM270_TMR0_BASE + 0x0004)
+#define DM270_TMR0_TMVAL                (DM270_TMR0_BASE + 0x0006)
+#define DM270_TMR0_TMTRG                (DM270_TMR0_BASE + 0x0008)
+#define DM270_TMR0_TMCNT                (DM270_TMR0_BASE + 0x000a)
+
+#define DM270_TMR1_TMMD                 (DM270_TMR1_BASE + 0x0000)
+#define DM270_TMR1_TMRSV                (DM270_TMR1_BASE + 0x0002)
+#define DM270_TMR1_TMPRSCL              (DM270_TMR1_BASE + 0x0004)
+#define DM270_TMR1_TMVAL                (DM270_TMR1_BASE + 0x0006)
+#define DM270_TMR1_TMTRG                (DM270_TMR1_BASE + 0x0008)
+#define DM270_TMR1_TMCNT                (DM270_TMR1_BASE + 0x000a)
+
+#define DM270_TMR2_TMMD                 (DM270_TMR2_BASE + 0x0000)
+#define DM270_TMR2_TMRSV                (DM270_TMR2_BASE + 0x0002)
+#define DM270_TMR2_TMPRSCL              (DM270_TMR2_BASE + 0x0004)
+#define DM270_TMR2_TMVAL                (DM270_TMR2_BASE + 0x0006)
+#define DM270_TMR2_TMTRG                (DM270_TMR2_BASE + 0x0008)
+#define DM270_TMR2_TMCNT                (DM270_TMR2_BASE + 0x000a)
+
+#define DM270_TMR3_TMMD                 (DM270_TMR3_BASE + 0x0000)
+#define DM270_TMR3_TMRSV                (DM270_TMR3_BASE + 0x0002)
+#define DM270_TMR3_TMPRSCL              (DM270_TMR3_BASE + 0x0004)
+#define DM270_TMR3_TMVAL                (DM270_TMR3_BASE + 0x0006)
+#define DM270_TMR3_TMTRG                (DM270_TMR3_BASE + 0x0008)
+#define DM270_TMR3_TMCNT                (DM270_TMR3_BASE + 0x000a)
+
+#define DM270_TMR_TMMD_MODE_STOP        0x0000
+#define DM270_TMR_TMMD_MODE_ONESHOT     0x0001
+#define DM270_TMR_TMMD_MODE_FREERUN     0x0002
+#define DM270_TMR_TMMD_MODE_MASK        0x0003
+#define DM270_TMR_TMMD_TEST_MASK        0x00fc
+#define DM270_TMR_TMMD_RSV_MASK         0xff00
+
+#define DM270_TMR_TMPRSCL_PRSCL_MASK    0x03ff
+#define DM270_TMR_TMPRSCL_RSV_MASK      0xfc00
+
+#define DM270_TMR_TMTRG_TRG             0x0001
+#define DM270_TMR_TMTRG_RSV_MASK        0xfffe
+
+/* UART 0, 1 --------------------------------------------------------------- */
+
+#define DM270_UART0_BASE                (DM270_REG_BASE + 0x0300)
+#define DM270_UART1_BASE                (DM270_REG_BASE + 0x0380)
+
+#define DM270_UART_DTRR                 0x0000
+#define DM270_UART_BRSR                 0x0002
+#define DM270_UART_MSR                  0x0004
+#define DM270_UART_RFCR                 0x0006
+#define DM270_UART_TFCR                 0x0008
+#define DM270_UART_LCR                  0x000a
+#define DM270_UART_SR                   0x000c
+
+#define DM270_UART_DTRR_DTR_MASK        0x00ff
+#define DM270_UART_DTRR_PEF             0x0100
+#define DM270_UART_DTRR_ORF             0x0200
+#define DM270_UART_DTRR_FE              0x0400
+#define DM270_UART_DTRR_BF              0x0800
+#define DM270_UART_DTRR_RVF             0x1000
+#define DM270_UART_DTRR_RSV_MASK        0xe000
+
+#define DM270_UART_BRSR_VAL(baud)       ((CONFIG_ARM_CLK/(16*(baud))) - 1)
+
+#define DM270_UART_MSR_CLS              0x0001
+#define DM270_UART_MSR_SBLS             0x0004
+#define DM270_UART_MSR_PSB              0x0008
+#define DM270_UART_MSR_PEB              0x0010
+#define DM270_UART_MSR_TOIC_MASK        0x0c00
+#define DM270_UART_MSR_REIE             0x2000
+#define DM270_UART_MSR_TFTIE            0x4000
+#define DM270_UART_MSR_RFTIE            0x8000
+#define DM270_UART_MSR_RSV_MASK         0x13e2
+
+#define DM270_UART_RFCR_RWC_MASK        0x003f
+#define DM270_UART_RFCR_RTL_MASK        0x0700
+#define DM270_UART_RFCR_RDEF            0x4000
+#define DM270_UART_RFCR_RFCB            0x8000
+#define DM270_UART_RFCR_RSV_MASK        0x38c0
+
+#define DM270_UART_TFCR_TWC_MASK        0x003f
+#define DM270_UART_TFCR_TTL_MASK        0x0700
+#define DM270_UART_TFCR_TFCB            0x8000
+#define DM270_UART_TFCR_RSV_MASK        0x78c0
+
+#define DM270_UART_LCR_BOC              0x0100
+#define DM270_UART_LCR_UTST             0x4000
+#define DM270_UART_LCR_RSV_MASK         0xbeff
+
+#define DM270_UART_SR_TREF              0x0001
+#define DM270_UART_SR_TFEF              0x0002
+#define DM270_UART_SR_RFNEF             0x0004
+#define DM270_UART_SR_TOIF              0x0100
+#define DM270_UART_SR_RFER              0x0200
+#define DM270_UART_SR_TFTI              0x0400
+#define DM270_UART_SR_RFTI              0x0800
+#define DM270_UART_SR_RSV_MASK          0xf0f8
+
+#define DM270_UART_DTRR_VALID           (DM270_UART_DTRR_RVF)
+
+#define DM270_UART_MSR_8_DBITS          0x0000
+#define DM270_UART_MSR_7_DBITS          (DM270_UART_MSR_CLS)
+#define DM270_UART_MSR_1_SBITS          0x0000
+#define DM270_UART_MSR_2_SBITS          (DM270_UART_MSR_SBLS)
+#define DM270_UART_MSR_PARITY_MASK      (DM270_UART_MSR_PSB|DM270_UART_MSR_PEB)
+#define DM270_UART_MSR_NO_PARITY        0x0000
+#define DM270_UART_MSR_EVEN_PARITY      (DM270_UART_MSR_PEB)
+#define DM270_UART_MSR_ODD_PARITY       (DM270_UART_MSR_PSB|DM270_UART_MSR_PEB)
+#define DM270_UART_MSR_TIMEOUT_DISABLED 0x0000
+#define DM270_UART_MSR_TIMEOUT_3        0x0400
+#define DM270_UART_MSR_TIMEOUT_7        0x0800
+#define DM270_UART_MSR_TIMEOUT_15       0x0c00
+
+#define DM270_UART_RFCR_TRG_1           0x0000
+#define DM270_UART_RFCR_TRG_4           0x0100
+#define DM270_UART_RFCR_TRG_8           0x0200
+#define DM270_UART_RFCR_TRG_16          0x0300
+#define DM270_UART_RFCR_TRG_24          0x0400
+#define DM270_UART_RFCR_TRG_32          0x0500
+#define DM270_UART_RFCR_RESET           DM270_UART_RFCR_RDEF
+#define DM270_UART_RFCR_CLEAR           DM270_UART_RFCR_RFCB
+
+#define DM270_UART_TFCR_TRG_1           0x0000
+#define DM270_UART_TFCR_TRG_4           0x0100
+#define DM270_UART_TFCR_TRG_8           0x0200
+#define DM270_UART_TFCR_TRG_16          0x0300
+#define DM270_UART_TFCR_TRG_24          0x0400
+#define DM270_UART_TFCR_TRG_32          0x0500
+#define DM270_UART_TFCR_CLEAR           DM270_UART_TFCR_TFCB
+
+#define DM270_UART_RXFIFO_BYTESIZE      32
+#define DM270_UART_TXFIFO_BYTESIZE      32
+
+/* Instruction Cache ------------------------------------------------------- */
+
+#define DM270_ICACHE_BASE               (DM270_REG_BASE + 0x0e00)
+
+#define DM270_ICACHE_OFFSET_ICAMODE     0x0000
+
+#define DM270_ICACHE_ICAMODE            (DM270_ICACHE_BASE + DM270_ICACHE_OFFSET_ICAMODE)
+
+#define DM270_ICACHE_ICAMODE_ICAENB     0x0001
+#define DM270_ICACHE_ICAMODE_ICACLR     0x0002
+#define DM270_ICACHE_ICAMODE_REQ4W      0x0100
+#define DM270_ICACHE_ICAMODE_RSV_MASK   0xfefc
+
+#endif  /* __ASM_ARCH_HARDWARE_H */

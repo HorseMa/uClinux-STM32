@@ -1,0 +1,72 @@
+include ../../config.mk
+
+# For some reason keep your hands of "-O3"
+CFLAGS = -O3 -Wall -Wstrict-prototypes -pipe
+CPPFLAGS += $(PCDEBUG) -D__KERNEL__ -DMODULE 
+CPPFLAGS += -DBLOB_V2 -I . -I../../include/intersil
+CC = $(KCC) $(AFLAGS) $(KFLAGS)
+
+OBJECTS = isl_gen.o isl_38xx.o islpci_dev.o islpci_eth.o islpci_mgt.o 
+SRCS    = isl_gen.c isl_38xx.c islpci_dev.c islpci_eth.c islpci_mgt.c 
+
+ifdef CONFIG_CARDBUS
+SRCS    += islpci_pcmcia.c 
+OBJECTS += islpci_pcmcia.o 
+else
+SRCS    += islpci_hotplug.c 
+OBJECTS += islpci_hotplug.o 
+endif
+
+ifdef WIRELESS_IOCTLS
+SRCS    += isl_ioctl.c 
+OBJECTS += isl_ioctl.o 
+endif
+
+ifdef WIRELESS_EVENTS
+endif
+
+ifdef INTERSIL_EVENTS
+SRCS    += isl_mgt.c 
+OBJECTS += isl_mgt.o 
+endif
+ifdef WDS_LINKS
+SRCS    += isl_wds.c 
+OBJECTS += isl_wds.o 
+endif
+
+XFLAGS = $(CFLAGS) $(CPPFLAGS) $(MFLAG) -DEXPORT_SYMTAB
+
+ifdef CONFIG_CARDBUS
+MODULES = islpci_cb.o
+else
+MODULES = islpci.o
+endif
+
+all:	$(OBJECTS) $(MODULES)
+
+%o: %c
+	$(CC) -MD -c $(XFLAGS) $<
+	@mkdir -p .depfiles ; mv $*d .depfiles
+
+
+islpci_cb.o: $(OBJECTS)
+	$(LD) -r -o .$@ $(OBJECTS)
+	mv .$@ $@ ; chmod -x $@
+
+islpci.o: $(OBJECTS)
+	$(LD) -r -o .$@ $(OBJECTS)
+	mv .$@ $@ ; chmod -x $@
+
+clean:
+	rm -f *.o .*.o .depfiles/*.d
+
+install: install-modules
+	 cp islpci.conf /etc/pcmcia
+ifdef CONFIG_CARDBUS
+	 cp *.arm /etc/pcmcia
+else
+	 cp *.arm /etc/hotplug
+endif
+
+include ../../rules.mk
+

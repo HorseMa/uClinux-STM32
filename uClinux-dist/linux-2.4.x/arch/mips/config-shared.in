@@ -1,0 +1,1715 @@
+mainmenu_name "Linux/MIPS Kernel Configuration"
+
+mainmenu_option next_comment
+comment 'Code maturity level options'
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+endmenu
+
+mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
+fi
+endmenu
+
+#
+# Keep these alphabetically sorted
+#
+mainmenu_option next_comment
+comment 'Machine selection'
+dep_bool 'Support for Acer PICA 1 chipset (EXPERIMENTAL)' CONFIG_ACER_PICA_61 $CONFIG_EXPERIMENTAL
+dep_bool 'Support for Alchemy Bosporus board' CONFIG_MIPS_BOSPORUS $CONFIG_MIPS32
+dep_bool 'Support for Alchemy Mirage board' CONFIG_MIPS_MIRAGE $CONFIG_MIPS32
+dep_bool 'Support for Alchemy Db1000 board' CONFIG_MIPS_DB1000 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy Db1100 board' CONFIG_MIPS_DB1100 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy Db1500 board' CONFIG_MIPS_DB1500 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy Db1550 board' CONFIG_MIPS_DB1550 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy PB1000 board' CONFIG_MIPS_PB1000 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy PB1100 board' CONFIG_MIPS_PB1100 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy PB1500 board' CONFIG_MIPS_PB1500 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy Hydrogen3 board' CONFIG_MIPS_HYDROGEN3 $CONFIG_MIPS32
+dep_bool 'Support for Alchemy PB1550 board' CONFIG_MIPS_PB1550 $CONFIG_MIPS32
+dep_bool 'Support for MyCable XXS1500 board' CONFIG_MIPS_XXS1500 $CONFIG_MIPS32
+dep_bool 'Support for 4G Systems MTX-1 board' CONFIG_MIPS_MTX1 $CONFIG_MIPS32
+dep_bool 'Support for Velseis Vegas board' CONFIG_MIPS_VEGAS $CONFIG_MIPS32
+dep_bool 'Support for Cogent CSB250 board' CONFIG_COGENT_CSB250 $CONFIG_MIPS32
+dep_bool 'Support for BAGET MIPS series (EXPERIMENTAL)' CONFIG_BAGET_MIPS $CONFIG_MIPS32 $CONFIG_EXPERIMENTAL
+bool 'Support for CASIO CASSIOPEIA E-10/15/55/65' CONFIG_CASIO_E55
+dep_bool 'Support for Cobalt Server (EXPERIMENTAL)' CONFIG_MIPS_COBALT $CONFIG_EXPERIMENTAL
+if [ "$CONFIG_MIPS32" = "y" -o "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool 'Support for DECstations' CONFIG_DECSTATION
+fi
+dep_bool 'Support for Galileo EV64120 Evaluation board (EXPERIMENTAL)' CONFIG_MIPS_EV64120 $CONFIG_EXPERIMENTAL
+if [ "$CONFIG_MIPS_EV64120" = "y" ]; then
+   bool '  Enable Second PCI (PCI1)' CONFIG_EVB_PCI1
+   choice '  Galileo Chip Clock' \
+	"75	CONFIG_SYSCLK_75 \
+	 83.3	CONFIG_SYSCLK_83 \
+	 100	CONFIG_SYSCLK_100" 83.3
+fi
+dep_bool 'Support for Galileo EV96100 Evaluation board (EXPERIMENTAL)' CONFIG_MIPS_EV96100 $CONFIG_EXPERIMENTAL
+bool 'Support for Globespan IVR board' CONFIG_MIPS_IVR
+bool 'Support for Hewlett Packard LaserJet board' CONFIG_HP_LASERJET
+bool 'Support for IBM WorkPad z50' CONFIG_IBM_WORKPAD
+if [ "$CONFIG_IBM_WORKPAD" = "y" ]; then
+   tristate '  NEC VRC4171 support' CONFIG_VRC4171
+fi
+bool 'Support for LASAT Networks platforms' CONFIG_LASAT
+if [ "$CONFIG_LASAT" = "y" ]; then
+   tristate '  PICVUE LCD display driver' CONFIG_PICVUE
+   dep_tristate '   PICVUE LCD display driver /proc interface' CONFIG_PICVUE_PROC $CONFIG_PICVUE
+   bool '  DS1603 RTC driver' CONFIG_DS1603
+   if [ "$CONFIG_DS1603" = "y" ]; then
+      define_bool CONFIG_MIPS_RTC y
+   fi
+   bool '  LASAT sysctl interface' CONFIG_LASAT_SYSCTL
+fi
+bool 'Support for ITE 8172G board' CONFIG_MIPS_ITE8172
+if [ "$CONFIG_MIPS_ITE8172" = "y" ]; then
+   bool '  Support for older IT8172 (Rev C)' CONFIG_IT8172_REVC
+fi
+bool 'Support for MIPS Atlas board' CONFIG_MIPS_ATLAS
+bool 'Support for MIPS Magnum 4000' CONFIG_MIPS_MAGNUM_4000
+bool 'Support for MIPS Malta board' CONFIG_MIPS_MALTA
+dep_bool 'Support for MIPS SEAD board (EXPERIMENTAL)' CONFIG_MIPS_SEAD $CONFIG_EXPERIMENTAL
+bool 'Support for Momentum Ocelot board' CONFIG_MOMENCO_OCELOT
+bool 'Support for Momentum Ocelot-G board' CONFIG_MOMENCO_OCELOT_G
+bool 'Support for Momentum Ocelot-C and -CS boards' CONFIG_MOMENCO_OCELOT_C
+bool 'Support for Momentum Jaguar-ATX boards' CONFIG_MOMENCO_JAGUAR_ATX
+bool 'Support for PMC-Sierra Big Sur board' CONFIG_PMC_BIG_SUR
+bool 'Support for PMC-Sierra Stretch board' CONFIG_PMC_STRETCH
+bool 'Support for PMC-Sierra Yosemite board' CONFIG_PMC_YOSEMITE
+if [ "$CONFIG_PMC_YOSEMITE" = "y" ]; then
+   bool '  Hypertransport Support for PMC-Sierra Yosemite'  CONFIG_HYPERTRANSPORT
+fi
+dep_bool 'Support for NEC DDB Vrc-5074 (EXPERIMENTAL)' CONFIG_DDB5074 $CONFIG_EXPERIMENTAL
+bool 'Support for NEC DDB Vrc-5476' CONFIG_DDB5476
+bool 'Support for NEC DDB Vrc-5477' CONFIG_DDB5477
+if [ "$CONFIG_DDB5477" = "y" ]; then
+   int '   bus frequency (in kHZ, 0 for auto-detect)' CONFIG_DDB5477_BUS_FREQUENCY 0
+fi
+bool 'Support for NEC Osprey board' CONFIG_NEC_OSPREY
+bool 'Support for NEC Eagle/Hawk board' CONFIG_NEC_EAGLE
+if [ "$CONFIG_NEC_EAGLE" = "y" ]; then
+   tristate '  NEC VRC4173 support' CONFIG_VRC4173
+fi
+bool 'Support for Olivetti M700-10' CONFIG_OLIVETTI_M700
+dep_bool 'Support for Philips Nino (EXPERIMENTAL)' CONFIG_NINO $CONFIG_MIPS32 $CONFIG_EXPERIMENTAL
+if [ "$CONFIG_NINO" = "y" ]; then
+   choice 'Nino Model Number' \
+	"Model-300/301/302/319			CONFIG_NINO_4MB \
+	 Model-200/210/312/320/325/350/390	CONFIG_NINO_8MB \
+	 Model-500/510				CONFIG_NINO_16MB" Model-200
+fi
+
+dep_bool 'Support for Realtek RTL865X advanced gateway/router SoC' CONFIG_RTL865X_DEVBRD  $CONFIG_MIPS32
+dep_bool 'Support for Realtek RTL8186 SoC' CONFIG_RTL8186  $CONFIG_MIPS32
+if [ "$CONFIG_RTL8186" = "y" ]; then
+   bool '  Engineering CLE interface support' CONFIG_RTL865X_CLE
+fi
+
+dep_bool 'Support for SecureComputing SG310' CONFIG_SG310  $CONFIG_MIPS32
+
+bool 'Support for SGI IP22 (Indy/Indigo2)' CONFIG_SGI_IP22
+dep_bool 'Support for SGI IP27 (Origin200/2000)' CONFIG_SGI_IP27 $CONFIG_MIPS64
+if [ "$CONFIG_SGI_IP27" = "y" ]; then
+   bool '  IP27 N-Mode' CONFIG_SGI_SN0_N_MODE
+   bool '  Discontiguous Memory Support' CONFIG_DISCONTIGMEM
+   bool '  NUMA Support' CONFIG_NUMA
+   bool '  Mapped kernel support' CONFIG_MAPPED_KERNEL
+   bool '  Kernel text replication support' CONFIG_REPLICATE_KTEXT
+   bool '  Exception handler replication support' CONFIG_REPLICATE_EXHANDLERS
+   define_bool CONFIG_SMP_CAPABLE y
+   #bool '  IP27 XXL' CONFIG_SGI_SN0_XXL
+fi
+dep_bool 'Support for Broadcom BCM1xxx SOCs (EXPERIMENTAL)' CONFIG_SIBYTE_SB1xxx_SOC $CONFIG_EXPERIMENTAL
+if [ "$CONFIG_SIBYTE_SB1xxx_SOC" = "y" ]; then
+   choice '   BCM1xxx SOC-based board' \
+          "BCM91250A-SWARM      CONFIG_SIBYTE_SWARM \
+           BCM91250E-Sentosa    CONFIG_SIBYTE_SENTOSA \
+           BCM91125E-Rhone      CONFIG_SIBYTE_RHONE \
+           BCM91120x-Carmel     CONFIG_SIBYTE_CARMEL \
+           BCM91250PT-PTSwarm   CONFIG_SIBYTE_PTSWARM \
+           BCM91250C2-LittleSur CONFIG_SIBYTE_LITTLESUR \
+           BCM91120C-CRhine     CONFIG_SIBYTE_CRHINE \
+           BCM91125C-CRhone     CONFIG_SIBYTE_CRHONE \
+           Other                CONFIG_SIBYTE_UNKNOWN" BCM91250A-SWARM
+
+   if [ "$CONFIG_SIBYTE_UNKNOWN" = "y" ]; then
+      choice '   BCM1xxx SOC Type' \
+          "BCM1250     CONFIG_SIBYTE_SB1250 \
+           BCM1120     CONFIG_SIBYTE_BCM1120 \
+           BCM1125     CONFIG_SIBYTE_BCM1125 \
+           BCM1125H    CONFIG_SIBYTE_BCM1125H" BCM1250
+      unset CONFIG_SIBYTE_BOARD
+   else
+      define_bool CONFIG_SIBYTE_BOARD y
+      if [ "$CONFIG_SIBYTE_SWARM" = "y" -o \
+           "$CONFIG_SIBYTE_LITTLESUR" = "y" -o \
+           "$CONFIG_SIBYTE_PTSWARM" = "y" -o \
+           "$CONFIG_SIBYTE_SENTOSA" = "y" ]; then
+         define_bool CONFIG_SIBYTE_SB1250 y
+         unset CONFIG_SIBYTE_BCM1120
+         unset CONFIG_SIBYTE_BCM1125
+         unset CONFIG_SIBYTE_BCM1125H
+      fi
+      if [ "$CONFIG_SIBYTE_CRHINE" = "y" -o \
+           "$CONFIG_SIBYTE_CARMEL" = "y" ]; then
+         define_bool CONFIG_SIBYTE_BCM1120 y
+         unset CONFIG_SIBYTE_SB1250
+         unset CONFIG_SIBYTE_BCM1125
+         unset CONFIG_SIBYTE_BCM1125H
+      fi
+      if [ "$CONFIG_SIBYTE_CRHONE" = "y" -o \
+           "$CONFIG_SIBYTE_RHONE" = "y" ]; then
+         define_bool CONFIG_SIBYTE_BCM1125H y
+         unset CONFIG_SIBYTE_SB1250
+         unset CONFIG_SIBYTE_BCM1120
+         unset CONFIG_SIBYTE_BCM1125
+      fi
+   fi
+
+   if [ "$CONFIG_SIBYTE_BCM1120" = "y" -o \
+        "$CONFIG_SIBYTE_BCM1125" = "y" -o \
+        "$CONFIG_SIBYTE_BCM1125H" = "y" ]; then
+      define_bool CONFIG_SIBYTE_BCM112X y
+      choice 'BCM112x Stepping' \
+         "Hybrid CONFIG_CPU_SB1_PASS_2 \
+          An     CONFIG_CPU_SB1_PASS_3" An
+   else
+      unset CONFIG_SIBYTE_BCM112X
+      choice 'BCM1250 Stepping' \
+         "Pass1   CONFIG_CPU_SB1_PASS_1 \
+          An      CONFIG_CPU_SB1_PASS_2 \
+          Bn      CONFIG_CPU_SB1_PASS_2_2 \
+          Cn      CONFIG_CPU_SB1_PASS_4" An
+   fi
+
+   bool '   Booting from CFE' CONFIG_SIBYTE_CFE
+   dep_bool '     Use firmware console' CONFIG_SIBYTE_CFE_CONSOLE $CONFIG_SIBYTE_CFE
+   if [ "$CONFIG_SIBYTE_CFE" = "n" ]; then
+      define_bool CONFIG_SIBYTE_STANDALONE y
+      int  '   Memory size (in megabytes)' CONFIG_SIBYTE_STANDALONE_RAM_SIZE 32
+   fi
+
+   bool '   Support for Bus Watcher statistics' CONFIG_SIBYTE_BUS_WATCHER
+   if [ "$CONFIG_SIBYTE_TBPROF" = "n" ]; then
+      dep_bool '     Capture bus trace before bus error' CONFIG_SIBYTE_BW_TRACE $CONFIG_SIBYTE_BUS_WATCHER
+   fi
+
+   bool '   Support for SB1/SOC profiling - SB1/SCD perf counters' CONFIG_SIBYTE_SB1250_PROF
+   bool '   Support for ZBbus profiling' CONFIG_SIBYTE_TBPROF
+
+   if [ "$CONFIG_SIBYTE_SWARM" = "y" -o \
+        "$CONFIG_SIBYTE_LITTLESUR" = "y" -o \
+        "$CONFIG_SIBYTE_PTSWARM" = "y" -o \
+        "$CONFIG_SIBYTE_CARMEL" = "y" ]; then
+      define_bool CONFIG_SIBYTE_GENBUS_IDE y
+   fi
+
+   if [ "$CONFIG_SIBYTE_SB1250" = "y" -a \
+        "$CONFIG_SIBYTE_STANDALONE" != "y" ]; then
+      define_bool CONFIG_SMP_CAPABLE y
+   fi
+   define_bool CONFIG_MIPS_RTC y
+fi
+bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
+bool 'Support for TANBAC TB0226 (Mbase)' CONFIG_TANBAC_TB0226
+bool 'Support for TANBAC TB0229 (VR4131DIMM)' CONFIG_TANBAC_TB0229
+if [ "$CONFIG_TANBAC_TB0229" = "y" ]; then
+   bool '  Add TANBAC TB0219 Base board support' CONFIG_TANBAC_TB0219
+fi
+
+dep_bool 'Support for Toshiba JMR-TX3927 board' CONFIG_TOSHIBA_JMR3927 $CONFIG_MIPS32
+bool 'Support for Toshiba RBTX49[23]7 Reference Board' CONFIG_TOSHIBA_RBTX4927
+bool 'Support for Victor MP-C303/304' CONFIG_VICTOR_MPC30X
+if [ "$CONFIG_VICTOR_MPC30X" = "y" ]; then
+   tristate '  NEC VRC4173 support' CONFIG_VRC4173
+fi
+bool 'Support for ZAO Networks Capcella' CONFIG_ZAO_CAPCELLA
+
+dep_bool 'High Memory Support' CONFIG_HIGHMEM $CONFIG_MIPS32
+
+define_bool CONFIG_RWSEM_GENERIC_SPINLOCK y
+define_bool CONFIG_RWSEM_XCHGADD_ALGORITHM n
+
+#
+# Select some configuration options automatically based on user selections.
+#
+if [ "$CONFIG_ACER_PICA_61" = "y" ]; then
+   define_bool CONFIG_ARC32 y
+   define_bool CONFIG_I8259 y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_MIPS_JAZZ y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_CASIO_E55" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_DUMMY_KEYB y
+   define_bool CONFIG_SCSI n
+fi
+if [ "$CONFIG_MIPS_MIRAGE" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1500 y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_MIPS_BOSPORUS" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1500 y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_MIPS_PB1000" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1000 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+fi
+if [ "$CONFIG_MIPS_PB1100" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1100 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+fi
+if [ "$CONFIG_MIPS_PB1500" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1500 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_DB1000" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1000 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_SWAP_IO_SPACE y
+fi
+if [ "$CONFIG_MIPS_DB1500" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1500 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_DB1550" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1550 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_DB1100" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1100 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_SWAP_IO_SPACE y
+fi
+if [ "$CONFIG_MIPS_HYDROGEN3" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1100 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_SWAP_IO_SPACE y
+fi
+if [ "$CONFIG_MIPS_XXS1500" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1500 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_MTX1" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1500 y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_COGENT_CSB250" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1500 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_PB1550" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1550 y
+   define_bool CONFIG_NONCOHERENT_IO n
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_COBALT" = "y" ]; then
+   define_bool CONFIG_BOOT_ELF32 y
+   define_bool CONFIG_COBALT_LCD y
+   define_bool CONFIG_I8259 y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_DECSTATION" = "y" ]; then
+   define_bool CONFIG_EARLY_PRINTK y
+   define_bool CONFIG_BOOT_ELF32 y
+   define_bool CONFIG_IRQ_CPU y
+   define_int CONFIG_L1_CACHE_SHIFT 4
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_MIPS_VEGAS" = "y" ]; then
+   define_bool CONFIG_SOC_AU1X00 y
+   define_bool CONFIG_SOC_AU1100 y
+   define_bool CONFIG_PCI n
+   define_bool CONFIG_PCI_AUTO n
+   define_bool CONFIG_NEW_PCI n
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB n
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_AU1X00_USB_DEVICE n
+   define_bool CONFIG_NEW_TIME_C n
+fi
+if [ "$CONFIG_MIPS_EV64120" = "y" ]; then
+   define_bool CONFIG_MIPS_GT64120 y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_MIPS_EV96100" = "y" ]; then
+   define_bool CONFIG_MIPS_GT64120 y
+   define_bool CONFIG_MIPS_GT96100 y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+fi
+if [ "$CONFIG_MIPS_IVR" = "y" ]; then
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_IT8172_CIR y
+fi
+if [ "$CONFIG_HP_LASERJET" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_IBM_WORKPAD" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_SCSI n
+fi
+if [ "$CONFIG_LASAT" = "y" ]; then
+   define_bool CONFIG_BOARD_SCACHE y
+   define_bool CONFIG_R5000_CPU_SCACHE y
+   define_bool CONFIG_MIPS_GT64120 y
+   define_bool CONFIG_MIPS_NILE4 y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_MIPS_ITE8172" = "y" ]; then
+   define_bool CONFIG_IT8712 y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_IT8172_CIR y
+fi
+if [ "$CONFIG_MIPS_ATLAS" = "y" ]; then
+   define_bool CONFIG_BOOT_ELF32 y
+   define_int CONFIG_L1_CACHE_SHIFT 5
+   define_bool CONFIG_MIPS_BONITO64 y
+   define_bool CONFIG_MIPS_GT64120 y
+   define_bool CONFIG_MIPS_MSC y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+fi
+if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
+     "$CONFIG_OLIVETTI_M700"    = "y" ]; then
+   define_bool CONFIG_ARC32 y
+   define_bool CONFIG_I8259 y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_FB y
+   define_bool CONFIG_FB_G364 y
+   define_bool CONFIG_MIPS_JAZZ y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_MALTA" = "y" ]; then
+   define_bool CONFIG_BOOT_ELF32 y
+   define_bool CONFIG_HAVE_STD_PC_SERIAL_PORT y
+   define_bool CONFIG_I8259 y
+   define_bool CONFIG_MIPS_BONITO64 y
+   define_bool CONFIG_MIPS_GT64120 y
+   define_bool CONFIG_MIPS_MSC y
+   define_int CONFIG_L1_CACHE_SHIFT 5
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_MIPS_SEAD" = "y" ]; then
+   define_bool CONFIG_BOOT_ELF32 y
+   define_int CONFIG_L1_CACHE_SHIFT 5
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_MOMENCO_OCELOT" = "y" ]; then
+   define_bool CONFIG_SYSCLK_100 y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_MOMENCO_OCELOT_G" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_IRQ_CPU_RM7K y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_SYSCLK_100 y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+fi
+if [ "$CONFIG_MOMENCO_OCELOT_C" = "y" ]; then
+   define_bool CONFIG_SWAP_IO_SPACE y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_BOOT_ELF32 y
+fi
+if [ "$CONFIG_PMC_BIG_SUR" = "y" ]; then
+   define_bool CONFIG_BOOT_ELF32 y
+fi
+if [ "$CONFIG_MOMENCO_JAGUAR_ATX" = "y" ]; then
+   define_bool CONFIG_SWAP_IO_SPACE y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_BOOT_ELF32 y
+fi
+
+if [ "$CONFIG_PMC_STRETCH" = "y" ]; then
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_PCI y
+   define_bool CONFIG_BOOT_ELF32 y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+
+if [ "$CONFIG_PMC_YOSEMITE" = "y" ]; then
+   define_bool CONFIG_SWAP_IO_SPACE y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_BOOT_ELF32 y
+   define_bool CONFIG_HIGHMEM y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+
+if [ "$CONFIG_DDB5074" = "y" ]; then
+   define_bool CONFIG_HAVE_STD_PC_SERIAL_PORT y
+   define_bool CONFIG_I8259 y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_IRQ_CPU y
+fi
+if [ "$CONFIG_DDB5476"  = "y" ]; then
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_I8259 y
+   define_bool CONFIG_HAVE_STD_PC_SERIAL_PORT y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_DDB5477" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_I8259 y
+fi
+if [ "$CONFIG_NEC_OSPREY" = "y" ]; then
+   define_bool CONFIG_VR4181 y
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_DUMMY_KEYB y
+   define_bool CONFIG_SCSI n
+fi
+if [ "$CONFIG_NEC_EAGLE" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_DUMMY_KEYB y
+   define_bool CONFIG_SCSI n
+fi
+if [ "$CONFIG_NINO" = "y" ]; then
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_RTL865X_DEVBRD" = "y" ]; then
+   define_bool CONFIG_NEW_TIME_C y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_RTL8186" = "y" ]; then
+   define_bool CONFIG_NEW_TIME_C y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_SG310" = "y" ]; then
+   define_bool CONFIG_NEW_TIME_C y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_SGI_IP22" = "y" ]; then
+   define_bool CONFIG_ARC32 y
+   define_bool CONFIG_ARC_PROMLIB y
+   define_bool CONFIG_BOARD_SCACHE y
+   define_bool CONFIG_BOOT_ELF32 y
+   define_bool CONFIG_SWAP_IO_SPACE_W n
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_IRQ_CPU y
+   define_int CONFIG_L1_CACHE_SHIFT 5
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_SGI_IP27" = "y" ]; then
+   define_bool CONFIG_BOOT_ELF64 y
+   define_bool CONFIG_ARC64 y
+   define_int CONFIG_L1_CACHE_SHIFT 7
+   #define_bool CONFIG_MAPPED_PCI_IO y
+   define_bool CONFIG_QL_ISP_A64 y
+fi
+if [ "$CONFIG_SIBYTE_SB1xxx_SOC" = "y" ]; then
+   define_bool CONFIG_DUMMY_KEYB y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_BOOT_ELF32 y
+fi
+if [ "$CONFIG_SNI_RM200_PCI" = "y" ]; then
+   define_bool CONFIG_ARC32 y
+   define_bool CONFIG_ARC_MEMORY y
+   define_bool CONFIG_ARC_PROMLIB y
+   define_bool CONFIG_I8259 y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_TANBAC_TB0226" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_DUMMY_KEYB y
+   define_bool CONFIG_SERIAL_MANY_PORTS y
+fi
+if [ "$CONFIG_TANBAC_TB0229" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_DUMMY_KEYB y
+   define_bool CONFIG_SERIAL_MANY_PORTS y
+fi
+if [ "$CONFIG_TOSHIBA_JMR3927" = "y" ]; then
+   define_bool CONFIG_TOSHIBA_BOARDS y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_PC_KEYB y
+fi
+if [ "$CONFIG_TOSHIBA_RBTX4927" = "y" ]; then
+   define_bool CONFIG_SWAP_IO_SPACE_W y
+   define_bool CONFIG_SWAP_IO_SPACE_L y
+   define_bool CONFIG_ISA y
+   define_bool CONFIG_NONCOHERENT_IO y
+fi
+if [ "$CONFIG_VICTOR_MPC30X" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_SCSI n
+fi
+if [ "$CONFIG_ZAO_CAPCELLA" = "y" ]; then
+   define_bool CONFIG_IRQ_CPU y
+   define_bool CONFIG_NONCOHERENT_IO y
+   define_bool CONFIG_DUMMY_KEYB y
+   define_bool CONFIG_SCSI n
+fi
+
+if [ "$CONFIG_MIPS_AU1000" != "y" ]; then
+   define_bool CONFIG_MIPS_AU1000 n
+fi
+endmenu
+
+#############################################################################
+
+if [ "$CONFIG_RTL865X_DEVBRD" = "y" -o "$CONFIG_SG310" = "y" ]; then
+	define_bool CONFIG_RTL865X y
+fi
+
+if [ "$CONFIG_RTL865X_DEVBRD" = "y" -o "$CONFIG_SG310" = "y" ]; then
+
+mainmenu_option next_comment
+comment 'RealTek RTL865x Options'
+
+	choice 'IC Version' \
+		"865xB	CONFIG_RTL865XB \
+		865xC	CONFIG_RTL865XC" 865xB
+	define_bool CONFIG_PCI y
+   	bool '  RomeDrv Modulization' 	CONFIG_RTL865X_MODULE_ROMEDRV
+	bool '  Enable switch core and onchip NIC' CONFIG_RE865X
+	dep_bool '  NIC RX DEFICIT ROUND ROBIN(DRR)' CONFIG_865XC_NIC_RX_DRR $CONFIG_RTL865XC
+
+
+	if [ "$CONFIG_RE865X" = "y" ]; then
+		choice 'Driver type selection' \
+			"Rome_Driver		CONFIG_RTL865X_ROMEDRV\
+			 Light_Rome_Driver	CONFIG_RTL865X_LIGHT_ROMEDRV" Rome_Driver
+
+		if [ "$CONFIG_RTL865X_ROMEDRV" = "y" ]; then
+			choice 'Driver mode selection' \
+				"Layer2		CONFIG_RTL865X_LAYER2_BSP\
+				 Multilayer	CONFIG_RTL865X_MULTILAYER_BSP" Multilayer
+		
+			choice 'Log Language selection' \
+				"zh_CN		CONFIG_RTL865X_LOG_ZH_CN\
+				 zh_TW		CONFIG_RTL865X_LOG_ZH_TW\
+				 English	CONFIG_RTL865X_LOG_EN" English
+		
+			if [ "$CONFIG_RTL865XB" = "y" -o "$CONFIG_RTL865XC" = "y" ]; then
+				dep_bool '     PPTP/L2TP HW acceleration' CONFIG_RTL865XB_PPTPL2TP $CONFIG_RTL865X_MULTILAYER_BSP
+				dep_bool '     WLAN HW acceleration' CONFIG_RTL865XB_EXP_WLAN $CONFIG_RTL865X_MULTILAYER_BSP
+				dep_bool '     3G HW acceleration' CONFIG_RTL865XB_3G $CONFIG_RTL865X_MULTILAYER_BSP
+				dep_bool '     Glue Device support' CONFIG_RTL865XB_GLUEDEV $CONFIG_RTL865X_MULTILAYER_BSP
+				bool '     865XB Verification package' CONFIG_RTL865XB_EXP_VERI
+				bool '     865X Model Code' CONFIG_RTL865X_MODEL_KERNEL
+				dep_bool '      IC FT2 Testing Code' CONFIG_RTL865X_MODEL_TEST_FT2 $CONFIG_RTL865X_MODEL_KERNEL
+				bool '     Build for FPGA' CONFIG_RTL865X_FPGA
+			fi
+			if [ "$CONFIG_RTL865XC" = "y" ]; then
+				bool '  Use RTL8212 as External PHY of Port 1 - Port 4'	CONFIG_EXTRTL8212_P1TOP4
+				if [ "$CONFIG_EXTRTL8212_P1TOP4" = "y" ]; then
+					hex '     PHY ID Assigned to Port 1 with RTL8212(hex)(must be an even value)'	CONFIG_EXTRTL8212_PHYID_P1	0x12
+					hex '     PHY ID Assigned to Port 3 with RTL8212(hex)(must be an even value)'	CONFIG_EXTRTL8212_PHYID_P3	0x14
+				fi
+				bool '  Use RTL8212 as External PHY of Port 5'	CONFIG_EXTRTL8212_P5	0x16
+				if [ "$CONFIG_EXTRTL8212_P5" = "y" ]; then
+					hex '     PHY ID Assigned to Port 5 with RTL8212(hex)'	CONFIG_EXTRTL8212_PHYID_P5	0x16
+				fi
+			fi
+			bool '  Enable RTL865xB d-cut Software Vlan' RTL865XB_DCUT_SWVLAN
+			bool '  Enable RTL865xB b-cut Rate Limit QoS Token Refilled by Software' CONFIG_RTL865XB_BCUT_RLREFILL_BYSW
+			bool '  Enable Content Filter' RTL865XB_WEB_CONTENT_HDR_FILTER
+			bool '  Enable PPTP Server' CONFIG_RTL865XB_PPTPSERVER
+			if [ "$CONFIG_RTL865XB_PPTPSERVER" = "y" ]; then
+				hex '        vlan id used by Glue Device' CONFIG_RTL865xB_GLUEDEV_VID	9
+				hex '        port number used by Glue Device' CONFIG_RTL865xB_GLUEDEV_PNUM	6
+			fi
+			bool '  IPSec Acceleration by ROME Driver' CONFIG_RTL865X_IPSEC
+     		        if [ "$CONFIG_RTL865X_IPSEC" = "y" ] ;then
+                       		define_bool CONFIG_RTL865XB_EXP_CRYPTOENGINE y
+               		fi
+		fi
+		bool '  ROMEreal (etherreal-like tool)' CONFIG_RTL865X_ROMEREAL
+		bool '  ROMEperf (performance profile)' CONFIG_RTL865X_ROMEPERF
+		bool '  Enable Watchdog' CONFIG_RTL865X_WATCHDOG
+	fi
+
+if [ "$PLEASE_REMOVE_THIS" = "y" ]; then
+	bool '  Enable Kernel KLIPS and User Application Support' CONFIG_KU_KLIPS
+fi
+
+	bool '  Hardware Cryptography Engine Library (or set by [IPSec Acceleration by ROME Driver])' CONFIG_RTL865XB_EXP_CRYPTOENGINE
+
+if [ "$PLEASE_REMOVE_THIS" = "y" ]; then
+	if [ "$CONFIG_KU_KLIPS" = "y" -o "$CONFIG_RTL865XB_EXP_CRYPTOENGINE" = "y" ];then 
+		#
+		# Kernel-part KLIPS supporting is eneabled when KLIPS KU or Crypto Engine Library is enabled.
+		#
+		define_bool CONFIG_KLIPS y
+		define_bool CONFIG_KLIPS_IPIP y
+		define_bool CONFIG_KLIPS_AH y
+		define_bool CONFIG_KLIPS_AUTH_HMAC_MD5 y
+		define_bool CONFIG_KLIPS_AUTH_HMAC_SHA1 y
+		define_bool CONFIG_KLIPS_ESP y
+		define_bool CONFIG_KLIPS_ENC_3DES y
+		define_bool CONFIG_KLIPS_ENC_AES y
+		define_bool CONFIG_KLIPS_ALG y
+		define_bool CONFIG_KLIPS_ALG_AES y
+		define_bool CONFIG_KLIPS_IPCOMP y
+		define_bool CONFIG_KLIPS_DEBUG y
+		define_bool CONFIG_IPSEC_NAT_TRAVERSAL y
+	else
+		unset	CONFIG_KLIPS 
+		unset 	CONFIG_KLIPS_IPIP 
+		unset 	CONFIG_KLIPS_AH 
+		unset 	CONFIG_KLIPS_AUTH_HMAC_MD5 
+		unset 	CONFIG_KLIPS_AUTH_HMAC_SHA1 
+		unset 	CONFIG_KLIPS_ESP 
+		unset 	CONFIG_KLIPS_ENC_3DES 
+		unset 	CONFIG_KLIPS_ENC_AES 
+		unset 	CONFIG_KLIPS_ALG 
+		unset 	CONFIG_KLIPS_ALG_AES 
+		unset 	CONFIG_KLIPS_IPCOMP 
+		unset	CONFIG_KLIPS_DEBUG 
+		unset   CONFIG_IPSEC_NAT_TRAVERSAL
+	fi
+	if [  "$CONFIG_KU_KLIPS" = "y" ];then 
+		# User-part KLIPS supporting is enabled -- ONLY when KLIPS KU is enabled.
+		define_bool CONFIG_USER_OPENSWAN y
+		define_bool CONFIG_LIB_LIBGMP y
+		define_bool CONFIG_USER_IPROUTE2 y
+		define_bool CONFIG_USER_IPROUTE2_IP_IP y
+	else
+		unset   CONFIG_USER_OPENSWAN 
+		unset	CONFIG_LIB_LIBGMP 
+		unset	CONFIG_USER_IPROUTE2 
+		unset   CONFIG_USER_IPROUTE2_IP_IP 
+		define_bool CONFIG_USER_SASH_SH y
+	fi
+fi
+	bool '  Enable ASIC VLAN table ENRTR' CONFIG_RTL865XB_ENRT
+	bool '  Enable IPTables Fast Path' CONFIG_RTL865X_IPTABLES_FAST_PATH
+	bool '  Enable User Define Tunnel' CONFIG_RTL865X_USR_DEFINE_TUNNEL
+
+if [ "$PLEASE_REMOVE_THIS" = "y" ]; then
+	choice  'Kernel Compression' \
+		"GZIP  CONFIG_GZIP_COMPRESSION \
+		 LZMA  CONFIG_LZMA_COMPRESSION \
+		 NONE  CONFIG_NONE_COMPRESSION" GZIP
+
+	choice  'Image Type'\
+		"SQUASH_RELEASE  CONFIG_IMAGE_SQUASH\
+		 SQUASH_LZMA_RELEASE   CONFIG_IMAGE_SQUASH_LZMA\
+		 CRAMFS_RELEASE  CONFIG_IMAGE_CRAMFS\
+		 ROMFS_DEBUG   	CONFIG_IMAGE_ROMFS" ROMFS_DEBUG
+	if [ "$CONFIG_IMAGE_CRAMFS" = "y"  -o  "$CONFIG_IMAGE_SQUASH" = "y"  -o  "$CONFIG_IMAGE_SQUASH_LZMA" = "y" ]; then
+		unset CONFIG_ROMFS_FS 
+		unset CONFIG_BLK_DEV_BLKMEM
+		define_bool CONFIG_MTD y
+		define_bool CONFIG_MTD_PARTITIONS y
+		define_bool CONFIG_MTD_CHAR y
+		define_bool CONFIG_MTD_BLOCK_RO y
+		define_bool CONFIG_MTD_CFI y
+		define_bool CONFIG_MTD_GEN_PROBE y
+		define_bool CONFIG_MTD_CFI_INTELEXT  y
+		define_bool CONFIG_MTD_CFI_AMDSTD y
+		define_bool CONFIG_MTD_CFI_STAA y
+		define_bool CONFIG_MTD_RTL865X y
+		hex  ' FLASH SIZE OF KERNEL OCCUPIED ' CONFIG_FLASH_SIZE_OF_KERNEL 0x100000	
+	fi
+
+	if [ "$CONFIG_IMAGE_CRAMFS" = "y" ];then
+		define_bool CONFIG_CRAMFS y
+		unset CONFIG_SQUASHFS
+		unset CONFIG_SQUASHFS_LZMA
+	fi
+	if [ "$CONFIG_IMAGE_SQUASH" = "y" ]; then
+		define_bool CONFIG_SQUASHFS y
+		unset CONFIG_CRAMFS
+		unset CONFIG_SQUASHFS_LZMA
+	fi
+	if [ "$CONFIG_IMAGE_SQUASH_LZMA" = "y" ]; then
+		define_bool CONFIG_SQUASHFS_LZMA y
+		unset CONFIG_CRAMFS
+		unset CONFIG_SQUASHFS
+	fi
+	if [ "$CONFIG_IMAGE_ROMFS" = "y" ]; then
+		define_bool CONFIG_ROMFS_FS y
+		define_bool CONFIG_BLK_DEV_BLKMEM y
+	fi
+fi
+
+	bool '  Enable PCI Slot 0 (RTL865XB B-cut)' CONFIG_RTL865XB_PCI_SLOT0
+	bool '  Enable PCI Slot 1 (RTL865XB B-cut)' CONFIG_RTL865XB_PCI_SLOT1
+	bool '  Enable PCI Slot 2 (RTL865XB B-cut)' CONFIG_RTL865XB_PCI_SLOT2
+	bool '  Enable PCI Slot 3 (RTL865XB B-cut)' CONFIG_RTL865XB_PCI_SLOT3
+	bool '  Engineering CLE interface support' CONFIG_RTL865X_CLE
+	bool '  SMI Interface Support(For RTL8366 & RTL8366s)' CONFIG_SMI
+	bool '  External switch chip connected(For RTL8366)' CONFIG_RTL8366
+	bool '  External switch chip connected(For RTL8366s)' CONFIG_RTL8366S
+	bool '  RTL8366s Asic Driver Testing(For RTL8366s)' CONFIG_RTL8366S_ASICDRV_TEST
+	bool '  MDCMDIO Interface Support(For RTL8305S)' CONFIG_MDCMDIO
+	bool '  Software Public key support (DH/RSA) ' CONFIG_RTL865x_SWPUBKEY
+
+	bool '  Bi-Color LED Support' CONFIG_RTL865X_BICOLOR_LED
+	bool '  Diag LED Support' CONFIG_RTL865X_DIAG_LED
+	bool '  Init Button Support' CONFIG_RTL865X_INIT_BUTTON
+
+
+  bool '  External switch chip (For RTL8363)' CONFIG_RTL8363
+  
+	bool '  External switch chip connected' CONFIG_RTL83XX
+	if [ "$CONFIG_RTL83XX" = "y" ]; then
+		choice 'Switch Chip Selection:' \
+			"8305S	CONFIG_RTL8305S\
+       8305SB	CONFIG_RTL8305SB\
+			 8305SC	CONFIG_RTL8305SC\
+       8306SDM CONFIG_RTL8306SDM" 8306SDM
+	fi
+
+  if [ "$CONFIG_RTL8305SB" = "y" ]; then
+    define_bool CONFIG_RTL8305S y     
+  fi               
+  if [ "$CONFIG_RTL8305SC" = "y" ]; then
+    define_bool CONFIG_RTL8305S y
+  fi               
+                        	
+	# if [ "$CONFIG_RTL8306SDM" = "y" ]; then
+	#	bool '   8306SDM IGMP SNOOPING' CONFIG_IGMP_SNOOPING
+	# fi
+
+          if [ "$CONFIG_RTL8306SDM" = "y" ]; then
+                    choice  'IGMP version selection:' \
+                             "igmpv1/v2 CONFIG_IGMP_SNOOPING\
+                               igmpv3 CONFIG_MULTICAST_SNOOPING\
+                               none CONFIG_IGMPSNOOPING_NONE" igmpv1/v2
+          fi
+          
+                if [ "$CONFIG_IGMP_SNOOPING" = "y" ]; then
+		define_bool CONFIG_IGMP_SNOOPING y
+	        fi
+	        if [ "$CONFIG_MULTICAST_SNOOPING" = "y" ]; then
+		define_bool CONFIG_MULTICAST_SNOOPING y
+	        fi
+	        
+	
+	bool '  VoIP ROME driver support' CONFIG_RTL865X_VOIP
+        bool '  Netlog ROME driver support' CONFIG_RTL865X_NETLOG 
+	bool '  PCM interface and SLIC driver' CONFIG_RTL865X_PCM
+	bool '  (Experimental) Performance evaluation' CONFIG_RTL865XB_EXP_PERFORMANCE_EVALUATION
+
+	bool '  Customize Kernel Command' CONFIG_KERNEL_CMDLINE
+	if [ "$CONFIG_KERNEL_CMDLINE" = "y" ]; then
+		string ' Kernel command line options' CONFIG_CMDLINE 
+	fi
+
+	bool '  Realtek SDK development used APIs' CONFIG_SYSTEM_VERIFICATION
+
+	# Don't touch these settings. ROME driver is built using
+	# these settings.
+	define_hex CONFIG_RTL865X_MBUF_HEADROOM		0x80
+	define_hex CONFIG_RTL865XB_WLAN1_PORT 0x6
+	define_hex CONFIG_RTL865XB_PPTPL2TP_PORT 0x7
+	define_hex CONFIG_RTL865XB_3G_PORT 0x8
+	define_hex CONFIG_RTL865XB_3G_VLAN	0xa
+	define_hex CONFIG_RTL865X_USR_DEFINE_TUNNEL_PORT 0x8
+
+endmenu
+
+
+mainmenu_option next_comment
+comment 'Loader and Board Information'
+
+	choice 'UART Selection' \
+		"AUTO_DETECT CONFIG_RTL865X_UART_AUTO \
+		 FORCE_UART0 CONFIG_RTL865X_UART_UART0 \
+		 FORCE_UART1 CONFIG_RTL865X_UART_UART1" AUTO_DETECT
+
+        bool 'Support NOR Flash CFI Auto-Detection' CONFIG_RTL865X_NOR_CFI
+
+	choice 'Supported Kernel Decompression Method' \
+		"GZIP  CONFIG_RTL865X_GZIP_DECOMPRESSION \
+		 LZMA  CONFIG_RTL865X_LZMA_DECOMPRESSION \
+		 ALL   CONFIG_RTL865X_ALL_DECOMPRESSION \
+		 NONE  CONFIG_RTL865X_NONE_DECOMPRESSION" GZIP
+ 
+	choice 'Load Address of Linux Kernel' \
+		"AT_0x81000000	CONFIG_RTL865X_LOADER_00_00_01\
+     AT_0x80080000	CONFIG_RTL865X_LOADER_00_00_10\
+		 AT_0x80000400	CONFIG_RTL865X_LOADER_00_00_11" AT_0x80080000
+  if [ "$CONFIG_RTL865X_LOADER_00_00_01" = "y" ]; then
+		define_hex CONFIG_RTL865X_RUNTIME_ADDRESS 0x81000000
+	fi
+	if [ "$CONFIG_RTL865X_LOADER_00_00_10" = "y" ]; then
+		define_hex CONFIG_RTL865X_RUNTIME_ADDRESS 0x80080000
+	fi
+	if [ "$CONFIG_RTL865X_LOADER_00_00_11" = "y" ]; then
+		define_hex CONFIG_RTL865X_RUNTIME_ADDRESS 0x80000400
+	fi
+
+	choice 'Flash Size' \
+		"1MB    CONFIG_RTL865X_FLASH_1MB \
+		 2MB    CONFIG_RTL865X_FLASH_2MB \
+		 4MB    CONFIG_RTL865X_FLASH_4MB \
+		 8MB    CONFIG_RTL865X_FLASH_8MB \
+		 16MB   CONFIG_RTL865X_FLASH_16MB" 4MB
+	if [ "$CONFIG_RTL865X_FLASH_8MB" = "y" ]; then
+		define_bool _SUPPORT_LARGE_FLASH_ y
+	fi
+	if [ "$CONFIG_RTL865X_FLASH_16MB" = "y" ]; then
+		define_bool _SUPPORT_LARGE_FLASH_ y
+	fi
+
+	bool '  Customize Flash Map' CONFIG_RTL865X_CUSTOM_FLASH_MAP
+	if [ "$CONFIG_RTL865X_CUSTOM_FLASH_MAP" = "y" ]; then
+		hex '   Flash Loader Segment 1 Address' CONFIG_RTL865X_CUSTOM_LOADER_SEG1_ADDRESS      0x00000000
+		hex '   Flash Loader Segment 1 Size' CONFIG_RTL865X_CUSTOM_LOADER_SEG1_SIZE            0x00004000
+
+		hex '   Flash BDINFO Address' CONFIG_RTL865X_CUSTOM_BDINFO_ADDRESS                     0x00004000
+		hex '   Flash BDINFO Size' CONFIG_RTL865X_CUSTOM_BDINFO_SIZE                           0x00002000
+
+		hex '   Flash CCFG Address' CONFIG_RTL865X_CUSTOM_CCFG_ADDRESS                         0x00006000
+		hex '   Flash CCFG Size' CONFIG_RTL865X_CUSTOM_CCFG_SIZE                               0x0000A000
+
+		hex '   Flash Loader Segment 2 Address' CONFIG_RTL865X_CUSTOM_LOADER_SEG2_ADDRESS      0x00010000
+		hex '   Flash Loader Segment 2 Size' CONFIG_RTL865X_CUSTOM_LOADER_SEG2_SIZE            0x00010000
+
+		hex '   Flash RUNTIME Address' CONFIG_RTL865X_CUSTOM_RUNTIME_ADDRESS                   0x00020000
+
+		if [ "$CONFIG_RTL865X_FLASH_1MB" = "y" ]; then
+			hex '   Flash RUNTIME Size' CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE                     0x000D0000
+			hex '   Flash Loader Segment 3 Address' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x000F0000
+			hex '   Flash Loader Segment 3 Size' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE 	   0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_2MB" = "y" ]; then
+			hex '   Flash RUNTIME Size' CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE                     0x001D0000
+			hex '   Flash Loader Segment 3 Address' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x001F0000
+			hex '   Flash Loader Segment 3 Size' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE 	   0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_4MB" = "y" ]; then
+			hex '   Flash RUNTIME Size' CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE                     0x003D0000
+			hex '   Flash Loader Segment 3 Address' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x003F0000
+			hex '   Flash Loader Segment 3 Size' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE 	   0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_8MB" = "y" ]; then
+			hex '   Flash RUNTIME Size' CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE                     0x007D0000
+			hex '   Flash Loader Segment 3 Address' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x007F0000
+			hex '   Flash Loader Segment 3 Size' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE 	   0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_16MB" = "y" ]; then
+			hex '   Flash RUNTIME Size' CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE                     0x00FD0000
+			hex '   Flash Loader Segment 3 Address' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x00FF0000
+			hex '   Flash Loader Segment 3 Size' CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE 	   0x00010000
+		fi
+		fi
+		fi
+		fi
+		fi
+# end of 	if [ "$CONFIG_RTL865X_CUSTOM_FLASH_MAP" = "y" ]; then 
+	else
+		define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG1_ADDRESS      0x00000000
+		define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG1_SIZE         0x00004000
+
+		define_hex CONFIG_RTL865X_CUSTOM_BDINFO_ADDRESS           0x00004000
+		define_hex CONFIG_RTL865X_CUSTOM_BDINFO_SIZE              0x00002000
+
+		define_hex CONFIG_RTL865X_CUSTOM_CCFG_ADDRESS             0x00006000
+		define_hex CONFIG_RTL865X_CUSTOM_CCFG_SIZE                0x0000A000
+
+		define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG2_ADDRESS      0x00010000
+		define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG2_SIZE         0x00010000
+
+		define_hex CONFIG_RTL865X_CUSTOM_RUNTIME_ADDRESS          0x00020000
+		if [ "$CONFIG_RTL865X_FLASH_1MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE         0x000D0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x000F0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE     0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_2MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE         0x001D0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x001F0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE     0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_4MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE         0x003D0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x003F0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE     0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_8MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE         0x007D0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x007F0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE     0x00010000
+		else
+		if [ "$CONFIG_RTL865X_FLASH_16MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_CUSTOM_RUNTIME_SIZE         0x00FD0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_ADDRESS  0x00FF0000
+			define_hex CONFIG_RTL865X_CUSTOM_LOADER_SEG3_SIZE     0x00010000
+		fi
+		fi
+		fi
+		fi
+		fi
+	fi
+
+	choice 'Bank1 Access Type' \
+		"ROM_TYPE      CONFIG_BANK1_ROM_TYPE \
+		 IO_TYPE       CONFIG_BANK1_IO_TYPE" ROM_TYPE
+	if [ "$CONFIG_BANK1_ROM_TYPE" = "y" ]; then
+		define_hex MAX_FLASH_CHIPS 2
+	fi
+	if [ "$CONFIG_BANK1_IO_TYPE" = "y" ]; then
+		define_hex MAX_FLASH_CHIPS 1
+	fi
+
+	choice 'SDRAM Per Chip Size' \
+		"2MB    PER_SDRAM_2MB \
+		 8MB    PER_SDRAM_8MB \
+		 16MB   PER_SDRAM_16MB \
+		 32MB   PER_SDRAM_32MB \
+		 64MB   PER_SDRAM_64MB " 32MB
+
+	if [ "$PER_SDRAM_64MB" != "y" ]; then
+		choice 'SDRAM Number' \
+			"one_chip  SDRAM_NUM_1 \
+			 two_chip  SDRAM_NUM_2 " one_chip
+	else
+		define_string SDRAM_NUM_1 "y"
+	fi
+
+	if [ "$PER_SDRAM_8MB" != "y" -o \
+	     "$SDRAM_NUM_1" != "y" ]; then
+		choice 'SDRAM Bus Width' \
+			"16BIT  SDRAM_BUS_WIDTH_16BIT \
+			 32BIT  SDRAM_BUS_WIDTH_32BIT " 16BIT
+	else
+		define_string SDRAM_BUS_WIDTH_16BIT "y"
+	fi
+
+	#####################################################
+	# Making CONFIG_RTL865X_MCR_FLASH with FLASH size and bus width
+	#
+	if [ "$CONFIG_RTL865X_FLASH_1MB" = "y" ]; then
+		define_hex CONFIG_RTL865X_MCR_FLASH 0x80000000
+	else
+	if [ "$CONFIG_RTL865X_FLASH_2MB" = "y" ]; then
+		define_hex CONFIG_RTL865X_MCR_FLASH 0xC0000000
+	else
+	if [ "$CONFIG_RTL865X_FLASH_4MB" = "y" ]; then
+		define_hex CONFIG_RTL865X_MCR_FLASH 0xC0001000
+	else
+	if [ "$CONFIG_RTL865X_FLASH_8MB" = "y" ]; then
+		define_hex CONFIG_RTL865X_MCR_FLASH 0xC0002000
+	else
+	if [ "$CONFIG_RTL865X_FLASH_16MB" = "y" ]; then
+		define_hex CONFIG_RTL865X_MCR_FLASH 0xC0003000
+	fi
+	fi
+	fi
+	fi
+	fi
+
+	#####################################################
+	# Making CONFIG_RTL865X_MCR_SDRAM with SDRAM size and bus width
+	#
+	if [ "$PER_SDRAM_2MB" = "y" ]; then
+		if [ "$SDRAM_BUS_WIDTH_16BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x00000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_2MB "y"
+			else
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x00000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_4MB "y"
+				define_string CONFIG_TWO_CHIP_SELECT "y"
+			fi
+			fi
+		else
+		if [ "$SDRAM_BUS_WIDTH_32BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x00100000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_4MB "y"
+			else
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM # non-sense configuration
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_2MB
+			fi
+			fi
+		fi
+		fi
+	else
+	if [ "$PER_SDRAM_8MB" = "y" ]; then
+		if [ "$SDRAM_BUS_WIDTH_16BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x10000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_8MB "y"
+			else
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x10000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_16MB "y"
+				define_string CONFIG_TWO_CHIP_SELECT "y"
+			fi
+			fi
+		else
+		if [ "$SDRAM_BUS_WIDTH_32BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x10100000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_16MB "y"
+			else
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM # non-sense configuration
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_8MB
+			fi
+			fi
+		fi
+		fi
+	else
+	if [ "$PER_SDRAM_16MB" = "y" ]; then
+		if [ "$SDRAM_BUS_WIDTH_16BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x20000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_16MB "y"
+			else
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x20000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_32MB "y"
+				define_string CONFIG_TWO_CHIP_SELECT "y"
+			fi
+			fi
+		else
+		if [ "$SDRAM_BUS_WIDTH_32BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x20100000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_32MB "y"
+			else
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x10100000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_16MB "y"
+			fi
+			fi
+		fi
+		fi
+	else
+	if [ "$PER_SDRAM_32MB" = "y" ]; then
+		if [ "$SDRAM_BUS_WIDTH_16BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x30000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_32MB "y"
+			else
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x30000000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_64MB "y"
+				define_string CONFIG_TWO_CHIP_SELECT "y"
+			fi
+			fi
+		else
+		if [ "$SDRAM_BUS_WIDTH_32BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x30100000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_64MB "y"
+			else
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x20100000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_32MB "y"
+			fi
+			fi
+		fi
+		fi
+	else
+	if [ "$PER_SDRAM_64MB" = "y" ]; then
+		if [ "$SDRAM_BUS_WIDTH_16BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x30000800
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_64MB "y"
+			else
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM # non-sense configuration
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_128MB
+				define_string CONFIG_TWO_CHIP_SELECT "y"
+			fi
+			fi
+		else
+		if [ "$SDRAM_BUS_WIDTH_32BIT" = "y" ]; then
+			if [ "$SDRAM_NUM_2" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM # non-sense configuration
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_128MB
+			else
+			if [ "$SDRAM_NUM_1" = "y" ]; then
+				define_hex CONFIG_RTL865X_MCR_SDRAM 0x30100000
+				define_string CONFIG_RTL865X_SDRAM_TOTAL_64MB "y"
+			fi
+			fi
+		fi
+		fi
+	fi
+	fi
+	fi
+	fi
+	fi
+
+
+	bool '  Customize Loader SDRAM Map' CONFIG_RTL865X_CUSTOM_LOADER_MAP
+	if [ "$CONFIG_RTL865X_CUSTOM_LOADER_MAP" = "y" ]; then
+		hex '   Loader Address in SDRAM' CONFIG_RTL865X_DRAM_MAP_LOADER_ADDR 80b00000
+		hex '   Download Buffer Address' CONFIG_RTL865X_DRAM_MAP_DLOAD_BUF_ADDR 80c00000
+	else
+		if [ "$CONFIG_RTL865X_SDRAM_TOTAL_2MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_DRAM_MAP_LOADER_ADDR 80100000
+			define_hex CONFIG_RTL865X_DRAM_MAP_DLOAD_BUF_ADDR 80180000
+		else
+		if [ "$CONFIG_RTL865X_SDRAM_TOTAL_4MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_DRAM_MAP_LOADER_ADDR 80300000
+			define_hex CONFIG_RTL865X_DRAM_MAP_DLOAD_BUF_ADDR 80380000
+		else
+		if [ "$CONFIG_RTL865X_SDRAM_TOTAL_8MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_DRAM_MAP_LOADER_ADDR 80500000
+			define_hex CONFIG_RTL865X_DRAM_MAP_DLOAD_BUF_ADDR 80600000
+		else
+		if [ "$CONFIG_RTL865X_SDRAM_TOTAL_16MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_DRAM_MAP_LOADER_ADDR 80b00000
+			define_hex CONFIG_RTL865X_DRAM_MAP_DLOAD_BUF_ADDR 80c00000
+		else
+		if [ "$CONFIG_RTL865X_SDRAM_TOTAL_32MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_DRAM_MAP_LOADER_ADDR 81700000
+			define_hex CONFIG_RTL865X_DRAM_MAP_DLOAD_BUF_ADDR 81800000
+		else
+		if [ "$CONFIG_RTL865X_SDRAM_TOTAL_64MB" = "y" ]; then
+			define_hex CONFIG_RTL865X_DRAM_MAP_LOADER_ADDR 82f00000
+			define_hex CONFIG_RTL865X_DRAM_MAP_DLOAD_BUF_ADDR 83000000
+		fi
+		fi
+		fi
+		fi
+		fi
+		fi
+	fi
+
+	bool 'Support TFTP Download' CONFIG_RTL865X_LOADER_SUPPORT_TFTP
+	bool 'Support TFTP SERVER Download' CONFIG_RTL865X_LOADER_SUPPORT_TFTP_SERVER
+	bool 'Support HTTP SERVER Download' CONFIG_RTL865X_LOADER_SUPPORT_HTTP_SERVER
+	bool 'Support DEBUG WITH GDB STUB' CONFIG_RTL865X_LOADER_SUPPORT_GDB_STUB
+
+endmenu
+
+fi
+
+#############################################################################
+
+mainmenu_option next_comment
+comment 'CPU selection'
+
+choice 'CPU type' \
+	"MIPS32	CONFIG_CPU_MIPS32 \
+	 MIPS64	CONFIG_CPU_MIPS64 \
+	 R3000	CONFIG_CPU_R3000 \
+	 R39XX	CONFIG_CPU_TX39XX \
+	 R41xx	CONFIG_CPU_VR41XX \
+	 R4300	CONFIG_CPU_R4300 \
+	 R4x00	CONFIG_CPU_R4X00 \
+	 R49XX	CONFIG_CPU_TX49XX \
+	 R5000	CONFIG_CPU_R5000 \
+	 R5432	CONFIG_CPU_R5432 \
+	 R6000	CONFIG_CPU_R6000 \
+	 R52xx	CONFIG_CPU_NEVADA \
+	 R8000	CONFIG_CPU_R8000 \
+	 R10000	CONFIG_CPU_R10000 \
+	 RM7000	CONFIG_CPU_RM7000 \
+	 RM9000	CONFIG_CPU_RM9000 \
+	 SB1	CONFIG_CPU_SB1" R4x00
+
+if [ "$CONFIG_CPU_R3000" = "n" -a "$CONFIG_CPU_TX39XX" = "n" -a \
+     "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   choice 'Kernel page size'					\
+	"4KB                    CONFIG_PAGE_SIZE_4KB		\
+	 16KB                   CONFIG_PAGE_SIZE_16KB		\
+	 64KB                   CONFIG_PAGE_SIZE_64KB" 4KB
+else
+   define_bool CONFIG_PAGE_SIZE_4KB y
+fi
+
+if [ "$CONFIG_SMP_CAPABLE" = "y" ]; then
+   bool '  Multi-Processing support' CONFIG_SMP
+fi
+ 
+if [ "$CONFIG_CPU_MIPS32" = "y" -o "$CONFIG_CPU_MIPS64" = "y" ]; then
+   define_bool CONFIG_CPU_HAS_PREFETCH y
+   bool '  Support for Virtual Tagged I-cache' CONFIG_VTAG_ICACHE
+fi
+
+if [ "$CONFIG_CPU_RM7000" = "y" ]; then
+   define_bool CONFIG_BOARD_SCACHE y
+   define_bool CONFIG_CPU_HAS_PREFETCH y
+   define_bool CONFIG_RM7000_CPU_SCACHE y
+fi
+if [ "$CONFIG_CPU_RM9000" = "y" ]; then
+   define_bool CONFIG_BOARD_SCACHE y
+   define_bool CONFIG_CPU_HAS_PREFETCH y
+   define_bool CONFIG_RM7000_CPU_SCACHE y
+fi
+
+if [ "$CONFIG_CPU_SB1" = "y" ]; then
+   bool '  Use DMA to clear/copy pages' CONFIG_SIBYTE_DMA_PAGEOPS
+   # SB1 Pass-specific options
+   if [ "$CONFIG_CPU_SB1_PASS_1" = "y" ]; then
+      define_bool CONFIG_SB1_PASS_1_WORKAROUNDS y
+   fi
+   if [ "$CONFIG_CPU_SB1_PASS_2" = "y" ]; then
+      define_bool CONFIG_SB1_PASS_2_WORKAROUNDS y
+      define_bool CONFIG_SB1_PASS_2_1_WORKAROUNDS y
+   else
+      # Avoid prefetches on Pass 2 (before 2.2)
+      bool '  Enable prefetches' CONFIG_CPU_HAS_PREFETCH
+   fi
+   if [ "$CONFIG_CPU_SB1_PASS_2_2" = "y" ]; then
+      # XXXKW for now, let 2.2 use same WORKAROUNDS flag as pre-2.2
+      define_bool CONFIG_SB1_PASS_2_WORKAROUNDS y
+   fi
+
+   define_bool CONFIG_VTAG_ICACHE y
+fi
+
+if [ "$CONFIG_CPU_R4X00"  = "y" -o \
+     "$CONFIG_CPU_R5000"  = "y" -o \
+     "$CONFIG_CPU_RM7000" = "y" -o \
+     "$CONFIG_CPU_RM9000" = "y" -o \
+     "$CONFIG_CPU_R10000" = "y" -o \
+     "$CONFIG_CPU_SB1"    = "y" -o \
+     "$CONFIG_CPU_MIPS32" = "y" -o \
+     "$CONFIG_CPU_MIPS64" = "y" ]; then
+   dep_bool '  Support for 64-bit physical address space' CONFIG_64BIT_PHYS_ADDR $CONFIG_MIPS32
+fi
+
+dep_bool 'Override CPU Options' CONFIG_CPU_ADVANCED $CONFIG_MIPS32
+if [ "$CONFIG_CPU_ADVANCED" = "y" ]; then
+   bool '  ll/sc Instructions available' CONFIG_CPU_HAS_LLSC
+   bool '  lld/scd Instructions available' CONFIG_CPU_HAS_LLDSCD
+   bool '  Writeback Buffer available' CONFIG_CPU_HAS_WB
+else
+   if [ "$CONFIG_CPU_R3000"  = "y" -o \
+        "$CONFIG_CPU_VR41XX" = "y" -o \
+        "$CONFIG_CPU_TX39XX" = "y" ]; then
+      if [ "$CONFIG_DECSTATION" = "y" ]; then
+	 define_bool CONFIG_CPU_HAS_LLSC n
+	 define_bool CONFIG_CPU_HAS_LLDSCD n
+	 define_bool CONFIG_CPU_HAS_WB y
+      else
+	 define_bool CONFIG_CPU_HAS_LLSC n
+	 define_bool CONFIG_CPU_HAS_LLDSCD n
+	 define_bool CONFIG_CPU_HAS_WB n
+      fi
+   else
+      if [ "$CONFIG_CPU_MIPS32" = "y" ]; then
+	 define_bool CONFIG_CPU_HAS_LLSC y
+	 define_bool CONFIG_CPU_HAS_LLDSCD n
+	 define_bool CONFIG_CPU_HAS_WB n
+      else
+	 define_bool CONFIG_CPU_HAS_LLSC y
+	 define_bool CONFIG_CPU_HAS_LLDSCD y
+	 define_bool CONFIG_CPU_HAS_WB n
+      fi
+   fi
+fi
+if [ "$CONFIG_CPU_R3000" = "y" ]; then
+   define_bool CONFIG_CPU_HAS_SYNC n
+else
+   define_bool CONFIG_CPU_HAS_SYNC y
+fi
+endmenu
+
+#
+# Choose endianess of code to generate.  It's a frequent trap for users so the
+# config file tries it's best to choose the right endianess for those systems
+# where we know about their endianess.  We only ask the user for systems
+# known to be bi-endian; for those systems the defconfig file should defaults
+# to the common endianess used for that system.
+#
+mainmenu_option next_comment
+comment 'General setup'
+if [ "$CONFIG_ACER_PICA_61" = "y" -o \
+     "$CONFIG_CASIO_E55" = "y" -o \
+     "$CONFIG_DDB5074" = "y" -o \
+     "$CONFIG_DDB5476" = "y" -o \
+     "$CONFIG_DDB5477" = "y" -o \
+     "$CONFIG_DECSTATION" = "y" -o \
+     "$CONFIG_HP_LASERJET" = "y" -o \
+     "$CONFIG_IBM_WORKPAD" = "y" -o \
+     "$CONFIG_LASAT" = "y" -o \
+     "$CONFIG_MIPS_COBALT" = "y" -o \
+     "$CONFIG_MIPS_ITE8172" = "y" -o \
+     "$CONFIG_MIPS_IVR" = "y" -o \
+     "$CONFIG_MIPS_PB1000" = "y" -o \
+     "$CONFIG_MIPS_PB1100" = "y" -o \
+     "$CONFIG_MIPS_PB1500" = "y" -o \
+     "$CONFIG_MIPS_VEGAS" = "y" -o \
+     "$CONFIG_NEC_OSPREY" = "y" -o \
+     "$CONFIG_NEC_EAGLE" = "y" -o \
+     "$CONFIG_NINO" = "y" -o \
+     "$CONFIG_OLIVETTI_M700" = "y" -o \
+     "$CONFIG_SNI_RM200_PCI" = "y" -o \
+     "$CONFIG_VICTOR_MPC30X" = "y" -o \
+     "$CONFIG_ZAO_CAPCELLA" = "y" ]; then
+   define_bool CONFIG_CPU_LITTLE_ENDIAN y
+else
+   if [ "$CONFIG_BAGET_MIPS" = "y" -o \
+	"$CONFIG_MIPS_EV64120" = "y" -o \
+	"$CONFIG_MIPS_EV96100" = "y" -o \
+	"$CONFIG_MOMENCO_OCELOT" = "y" -o \
+	"$CONFIG_MOMENCO_OCELOT_G" = "y" -o \
+	"$CONFIG_SGI_IP22" = "y" -o \
+	"$CONFIG_SGI_IP27" = "y" -o \
+	"$CONFIG_RTL865X" = "y" -o \
+	"$CONFIG_TOSHIBA_JMR3927" = "y" ]; then
+      define_bool CONFIG_CPU_LITTLE_ENDIAN n
+   else
+      bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
+   fi
+fi
+
+dep_bool 'Use 64-bit ELF format for building' CONFIG_BUILD_ELF64 $CONFIG_MIPS64
+
+if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
+   bool 'Include IRIX binary compatibility' CONFIG_BINFMT_IRIX
+fi
+
+if [ "$CONFIG_CPU_R10000" = "y" ]; then
+   dep_bool 'Support for large 64-bit configurations' CONFIG_MIPS_INSANE_LARGE $CONFIG_MIPS64
+fi
+
+if [ "$CONFIG_ARC32" = "y" ]; then
+   bool 'ARC console support' CONFIG_ARC_CONSOLE
+fi
+
+bool 'Networking support' CONFIG_NET
+
+if [ "$CONFIG_ACER_PICA_61" = "y" -o \
+     "$CONFIG_CASIO_E55" = "y" -o \
+     "$CONFIG_DECSTATION" = "y" -o \
+     "$CONFIG_IBM_WORKPAD" = "y" -o \
+     "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
+     "$CONFIG_MIPS_SEAD" = "y" -o \
+     "$CONFIG_NINO" = "y" -o \
+     "$CONFIG_OLIVETTI_M700" = "y" -o \
+     "$CONFIG_SGI_IP22" = "y" ]; then
+   define_bool CONFIG_PCI n
+else
+   bool 'PCI bus support' CONFIG_PCI
+   dep_bool '    New PCI bus code' CONFIG_PCI_NEW $CONFIG_PCI
+   if [ "$CONFIG_HP_LASERJET" = "y" -o \
+        "$CONFIG_LASAT" = "y" -o \
+        "$CONFIG_MIPS_ATLAS" = "y" -o \
+        "$CONFIG_MIPS_COBALT" = "y" -o \
+        "$CONFIG_MIPS_DB1000" = "y" -o \
+        "$CONFIG_MIPS_DB1100" = "y" -o \
+        "$CONFIG_MIPS_EV64120" = "y" -o \
+        "$CONFIG_MIPS_HYDROGEN3" = "y" -o \
+        "$CONFIG_MIPS_MALTA" = "y" -o \
+        "$CONFIG_MIPS_PB1100" = "y" -o \
+        "$CONFIG_MOMENCO_OCELOT" = "y" -o \
+        "$CONFIG_NEC_OSPREY" = "y" -o \
+        "$CONFIG_PMC_YOSEMITE" = "y" -o \
+        "$CONFIG_SIBYTE_SWARM" = "y" -o \
+	"$CONFIG_SNI_RM200_PCI" = "y" ]; then
+      define_bool CONFIG_PCI_AUTO n
+   else
+      define_bool CONFIG_PCI_AUTO y
+   fi
+fi
+if [ "$CONFIG_SIBYTE_SB1250" = "y" -o \
+     "$CONFIG_SIBYTE_BCM1125H" = "y" ]; then
+   if [ "$CONFIG_PCI" = "y" ]; then
+      define_bool CONFIG_SIBYTE_HAS_LDT y
+   fi
+fi
+
+if [ "$CONFIG_SGI_IP22" = "y" -o "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
+     "$CONFIG_OLIVETTI_M700" = "y" -o "$CONFIG_SNI_RM200_PCI" = "y" ]; then
+   bool 'EISA bus support' CONFIG_EISA
+fi
+
+source drivers/pci/Config.in
+
+if [ "$CONFIG_EISA" = "y" -a "$CONFIG_ISA" != "y" ]; then
+   define_bool CONFIG_ISA y
+fi
+if [ "$CONFIG_ISA" != "y" ]; then
+   define_bool CONFIG_ISA n
+fi
+
+dep_bool 'TURBOchannel support' CONFIG_TC $CONFIG_DECSTATION
+#dep_bool 'Access.Bus support' CONFIG_ACCESSBUS $CONFIG_TC
+
+define_bool CONFIG_MCA n
+define_bool CONFIG_SBUS n
+
+bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
+
+if [ "$CONFIG_HOTPLUG" = "y" ] ; then
+   source drivers/pcmcia/Config.in
+   source drivers/hotplug/Config.in
+else
+   define_bool CONFIG_PCMCIA n
+   define_bool CONFIG_HOTPLUG_PCI n
+fi
+
+bool 'System V IPC' CONFIG_SYSVIPC
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
+bool 'Sysctl support' CONFIG_SYSCTL
+define_bool CONFIG_KCORE_ELF y
+define_bool CONFIG_KCORE_AOUT n
+define_bool CONFIG_BINFMT_AOUT n
+bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+dep_bool 'Kernel support for Linux/MIPS 32-bit binary compatibility' CONFIG_MIPS32_COMPAT $CONFIG_MIPS64
+dep_bool 'Kernel support for o32 binaries' CONFIG_MIPS32_O32 $CONFIG_MIPS32_COMPAT
+dep_bool 'Kernel support for n32 binaries' CONFIG_MIPS32_N32 $CONFIG_MIPS32_COMPAT
+if [ "$CONFIG_MIPS32_O32" = "y" -o \
+     "$CONFIG_MIPS32_N32" = "y" ]; then
+   define_bool CONFIG_BINFMT_ELF32 y
+else
+   define_bool CONFIG_BINFMT_ELF32 n
+fi
+
+tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+bool 'Select task to kill on out of memory condition' CONFIG_OOM_KILLER
+
+bool 'Default bootloader kernel arguments' CONFIG_CMDLINE_BOOL
+if [ "$CONFIG_CMDLINE_BOOL" = "y" ] ; then
+  string 'Initial kernel command string' CONFIG_CMDLINE ""
+fi
+
+if [ "$CONFIG_SOC_AU1X00" = "y" ]; then
+   bool 'Power Management support' CONFIG_PM
+fi
+endmenu
+
+source drivers/mtd/Config.in
+
+source drivers/parport/Config.in
+
+source drivers/pnp/Config.in
+
+source drivers/block/Config.in
+if [ "$CONFIG_BLK_DEV_INITRD" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'MIPS initrd options'
+   bool '  Embed root filesystem ramdisk into the kernel' CONFIG_EMBEDDED_RAMDISK
+   if [ "$CONFIG_EMBEDDED_RAMDISK" = "y" ]; then
+      string '    Filename of gziped ramdisk image' CONFIG_EMBEDDED_RAMDISK_IMAGE ramdisk.gz
+   fi
+   endmenu
+fi
+
+source drivers/md/Config.in
+
+if [ "$CONFIG_NET" = "y" ]; then
+   source net/Config.in
+fi
+
+source drivers/telephony/Config.in
+
+mainmenu_option next_comment
+comment 'ATA/IDE/MFM/RLL support'
+
+tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
+
+if [ "$CONFIG_IDE" != "n" ]; then
+   source drivers/ide/Config.in
+else
+   define_bool CONFIG_BLK_DEV_HD n
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'SCSI support'
+
+tristate 'SCSI support' CONFIG_SCSI
+
+if [ "$CONFIG_SCSI" != "n" ]; then
+   source drivers/scsi/Config.in
+fi
+endmenu
+
+source drivers/message/fusion/Config.in
+
+source drivers/ieee1394/Config.in
+
+if [ "$CONFIG_PCI" = "y" -a "$CONFIG_MIPS32" = "y" ]; then
+   source drivers/message/i2o/Config.in
+fi
+
+if [ "$CONFIG_NET" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'Network device support'
+
+   bool 'Network device support' CONFIG_NETDEVICES
+   if [ "$CONFIG_NETDEVICES" = "y" ]; then
+      source drivers/net/Config.in
+      if [ "$CONFIG_ATM" = "y" -o "$CONFIG_ATM" = "m" ]; then
+	 source drivers/atm/Config.in
+      fi
+   fi
+   endmenu
+fi
+
+source net/ax25/Config.in
+
+source net/irda/Config.in
+
+if [ "$CONFIG_NET" != "n" ]; then
+   mainmenu_option next_comment
+   comment 'ISDN subsystem'
+
+   tristate 'ISDN support' CONFIG_ISDN
+   if [ "$CONFIG_ISDN" != "n" ]; then
+      source drivers/isdn/Config.in
+   fi
+   endmenu
+fi
+
+if [ "$CONFIG_ISA" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'Old CD-ROM drivers (not SCSI, not IDE)'
+
+   bool 'Support non-SCSI/IDE/ATAPI CDROM drives' CONFIG_CD_NO_IDESCSI
+   if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
+      source drivers/cdrom/Config.in
+   fi
+   endmenu
+fi
+
+#
+# input before char - char/joystick depends on it. As does USB.
+#
+source drivers/input/Config.in
+source drivers/char/Config.in
+
+#source drivers/misc/Config.in
+
+source fs/Config.in
+
+source drivers/media/Config.in
+
+if [ "$CONFIG_VT" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'Console drivers'
+   bool 'VGA text console' CONFIG_VGA_CONSOLE
+   if [ "$CONFIG_SGI_IP22" = "y" ]; then
+      tristate 'SGI Newport Console support' CONFIG_SGI_NEWPORT_CONSOLE
+      if [ "$CONFIG_SGI_NEWPORT_CONSOLE" = "y" ]; then
+         define_bool CONFIG_FONT_8x16 y
+      fi
+      define_bool CONFIG_DUMMY_CONSOLE y
+   fi
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'MDA text console (dual-headed) (EXPERIMENTAL)' CONFIG_MDA_CONSOLE
+      source drivers/video/Config.in
+   fi
+   endmenu
+fi
+
+mainmenu_option next_comment
+comment 'Sound'
+
+tristate 'Sound card support' CONFIG_SOUND
+if [ "$CONFIG_SOUND" != "n" ]; then
+   source drivers/sound/Config.in
+fi
+endmenu
+
+source drivers/usb/Config.in
+
+source net/bluetooth/Config.in
+
+mainmenu_option next_comment
+comment 'Kernel hacking'
+
+bool 'Are you using a crosscompiler' CONFIG_CROSSCOMPILE
+bool 'Enable run-time debugging' CONFIG_RUNTIME_DEBUG
+bool 'Remote GDB kernel debugging' CONFIG_KGDB
+dep_bool '  Console output to GDB' CONFIG_GDB_CONSOLE $CONFIG_KGDB
+if [ "$CONFIG_KGDB" = "y" ]; then
+   define_bool CONFIG_DEBUG_INFO y
+else
+   bool 'Debugging symbols' CONFIG_DEBUG_INFO
+fi
+if [ "$CONFIG_SIBYTE_SB1xxx_SOC" = "y" ]; then
+   dep_bool 'Compile for Corelis Debugger' CONFIG_SB1XXX_CORELIS $CONFIG_DEBUG_INFO
+fi
+bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
+if [ "$CONFIG_SMP" != "y" ]; then
+   bool 'Run uncached' CONFIG_MIPS_UNCACHED
+else
+   if [ "$CONFIG_MIPS32" = "y" ]; then
+      int  'Maximum number of CPUs (2-32)' CONFIG_NR_CPUS 32
+   else
+      if [ "$CONFIG_MIPS64" = "y" ]; then
+	 int  'Maximum number of CPUs (2-64)' CONFIG_NR_CPUS 64
+      fi
+   fi
+fi
+
+int 'Kernel messages buffer length shift (0 = default)' CONFIG_LOG_BUF_SHIFT 0
+
+endmenu
+
+source crypto/Config.in
+source lib/Config.in

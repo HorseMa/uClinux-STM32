@@ -1,0 +1,74 @@
+.\" ** You probably do not want to edit this file directly **
+.\" It was generated using the DocBook XSL Stylesheets (version 1.69.1).
+.\" Instead of manually editing it, you probably should edit the DocBook XML
+.\" source for it and then use the DocBook XSL Stylesheets to regenerate it.
+.TH "IPSEC_TNCFG" "8" "11/23/2006" "21 Jun 2000" "21 Jun 2000"
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.SH "NAME"
+ipsec tncfg \- associate IPSEC virtual interface with physical interface
+.SH "SYNOPSIS"
+.HP 6
+\fBipsec\fR \fItncfg\fR
+.br
+ \fIipsectncfg\fR \-\-attach \-\-virtual \fIvirtual\fR \-\-physical \fIphysical\fR
+.br
+ \fIipsectncfg\fR \-\-detach \-\-virtual \fIvirtual\fR
+.br
+ \fIipsectncfg\fR \-\-clear
+.br
+ \fIipsectncfg\fR \-\-version
+.br
+ \fIipsectncfg\fR \-\-help
+.SH "OBSOLETE"
+.PP
+Note that tncfg is only supported on the classic KLIPS stack. It is not supported on any other stack and will be completely removed in future versions. A replacement command still needs to be designed
+.SH "DESCRIPTION"
+.PP
+\fITncfg\fR
+attaches/detaches IPSEC virtual interfaces to/from physical interfaces, through which packets will be forwarded once processed by IPSEC.
+.PP
+The form with no additional arguments lists the contents of /proc/net/ipsec_tncfg. The format of /proc/net/ipsec_tncfg is discussed in ipsec_tncfg(5). The
+\fB\-\-attach\fR
+form attaches the
+\fIvirtual\fR
+interface to the
+\fIphysical\fR
+one. The
+\fB\-\-detach\fR
+form detaches the
+\fIvirtual\fR
+interface from whichever physical interface it is attached to. The
+\fB\-\-clear\fR
+form clears all the
+\fIvirtual\fR
+interfaces from whichever physical interfaces they were attached to.
+.PP
+Virtual interfaces typically have names like
+\fIipsec0\fR, while physical interfaces typically have names like
+\fIeth0\fR
+or
+\fIppp0\fR.
+.SH "EXAMPLES"
+.TP
+\fIipsec tncfg \-\-attach \-\-virtual ipsec0 \-\-physical eth0\fR
+attaches the
+\fIipsec0\fR
+virtual device to the
+\fIeth0\fR
+physical device.
+.SH "FILES"
+.PP
+/proc/net/ipsec_tncfg, /usr/local/bin/ipsec
+.SH "SEE ALSO"
+.PP
+ipsec(8), ipsec_manual(8), ipsec_eroute(8), ipsec_spi(8), ipsec_spigrp(8), ipsec_klipsdebug(8), ipsec_tncfg(5)
+.SH "HISTORY"
+.PP
+Written for the Linux FreeS/WAN project <[1]\&\fIhttp://www.freeswan.org/\fR> by Richard Guy Briggs.
+.SH "REFERENCES"
+.TP 3
+1.\ http://www.freeswan.org/
+\%http://www.freeswan.org/
