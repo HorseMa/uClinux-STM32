@@ -25,6 +25,7 @@
 #include <linux/smp.h>
 #include <linux/fs.h>
 
+#include <asm/unified.h>
 #include <asm/cpu.h>
 #include <asm/elf.h>
 #include <asm/procinfo.h>
@@ -110,6 +111,9 @@ EXPORT_SYMBOL(elf_platform);
 
 unsigned long phys_initrd_start __initdata = 0;
 unsigned long phys_initrd_size __initdata = 0;
+
+unsigned long memory_start;
+unsigned long memory_end;
 
 static struct meminfo meminfo __initdata = { 0, };
 static const char *cpu_name;
@@ -297,6 +301,12 @@ static void __init dump_cpu_info(int cpu)
 		printk("Cache coherency enabled\n");
 }
 
+#ifdef CONFIG_CPU_V7M
+int cpu_architecture(void)
+{
+	return CPU_ARCH_ARMv7M;
+}
+#else
 int cpu_architecture(void)
 {
 	int cpu_arch;
@@ -329,6 +339,7 @@ int cpu_architecture(void)
 
 	return cpu_arch;
 }
+#endif
 
 /*
  * These functions re-use the assembly code in head.S, which
@@ -368,9 +379,15 @@ static void __init setup_processor(void)
 	cpu_cache = *list->cache;
 #endif
 
+#ifdef CONFIG_CPU_V7M
+	printk("CPU: %s [%08x] revision %d (ARMv%sM)\n",
+	       cpu_name, processor_id, (int)processor_id & 15,
+	       proc_arch[cpu_architecture()]);
+#else
 	printk("CPU: %s [%08x] revision %d (ARMv%s), cr=%08lx\n",
 	       cpu_name, processor_id, (int)processor_id & 15,
 	       proc_arch[cpu_architecture()], cr_alignment);
+#endif
 
 	sprintf(init_utsname()->machine, "%s%c", list->arch_name, ENDIANNESS);
 	sprintf(elf_platform, "%s%c", list->elf_name, ENDIANNESS);
@@ -401,6 +418,7 @@ void cpu_init(void)
 	if (system_state == SYSTEM_BOOTING)
 		dump_cpu_info(cpu);
 
+#ifndef CONFIG_CPU_V7M
 	/*
 	 * setup stacks for re-entrant exception handlers
 	 */
@@ -414,14 +432,19 @@ void cpu_init(void)
 	"msr	cpsr_c, %7"
 	    :
 	    : "r" (stk),
-	      "I" (PSR_F_BIT | PSR_I_BIT | IRQ_MODE),
+	ARM(  "I" (PSR_F_BIT | PSR_I_BIT | IRQ_MODE),	)
+	THUMB("r" (PSR_F_BIT | PSR_I_BIT | IRQ_MODE),	)
 	      "I" (offsetof(struct stack, irq[0])),
-	      "I" (PSR_F_BIT | PSR_I_BIT | ABT_MODE),
+	ARM(  "I" (PSR_F_BIT | PSR_I_BIT | ABT_MODE),	)
+	THUMB("r" (PSR_F_BIT | PSR_I_BIT | ABT_MODE),	)
 	      "I" (offsetof(struct stack, abt[0])),
-	      "I" (PSR_F_BIT | PSR_I_BIT | UND_MODE),
+	ARM(  "I" (PSR_F_BIT | PSR_I_BIT | UND_MODE),	)
+	THUMB("r" (PSR_F_BIT | PSR_I_BIT | UND_MODE),	)
 	      "I" (offsetof(struct stack, und[0])),
-	      "I" (PSR_F_BIT | PSR_I_BIT | SVC_MODE)
+	ARM(  "I" (PSR_F_BIT | PSR_I_BIT | SVC_MODE)	)
+	THUMB("r" (PSR_F_BIT | PSR_I_BIT | SVC_MODE)	)
 	    : "r14");
+#endif
 }
 
 static struct machine_desc * __init setup_machine(unsigned int nr)
@@ -472,6 +495,12 @@ static void __init arm_add_memory(unsigned long start, unsigned long size)
 	bank->start = PAGE_ALIGN(start);
 	bank->size  = size & PAGE_MASK;
 	bank->node  = PHYS_TO_NID(start);
+
+	if (meminfo.nr_banks == 1) {
+		memory_start = bank->start;
+		memory_end = memory_start + bank->size;
+	}
+	BUG_ON(memory_start == memory_end);
 }
 
 /*

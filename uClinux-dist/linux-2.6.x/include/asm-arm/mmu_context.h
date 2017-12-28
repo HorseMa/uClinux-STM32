@@ -61,8 +61,10 @@ static inline void check_context(struct mm_struct *mm)
 #ifdef CONFIG_MMU
 static inline void check_context(struct mm_struct *mm)
 {
+#ifdef CONFIG_MMU
 	if (unlikely(mm->context.kvm_seq != init_mm.context.kvm_seq))
 		__check_kvm_seq(mm);
+#endif
 }
 #endif /* CONFIG_MMU */
 

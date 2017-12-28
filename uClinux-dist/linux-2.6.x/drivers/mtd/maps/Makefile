@@ -82,3 +82,4 @@ obj-$(CONFIG_MTD_TQM834x)	+= tqm834x.o
 obj-$(CONFIG_MTD_AVNET5282)     += avnet5282.o
 obj-$(CONFIG_MTD_UCBOOTSTRAP)   += uCbootmap.o
 obj-$(CONFIG_MTD_INTEL_VR_NOR)	+= intel_vr_nor.o
+obj-$(CONFIG_MTD_M29W128F)	+= stm3210e_eval_mtd_map.o

@@ -1409,7 +1409,52 @@ config CRAMFS
 	  directory /) cannot be compiled as a module.
 
 	  If unsure, say N.
+ 
+config CRAMFS_LINEAR
+	bool "Use linear addressing for CramFs"
+	depends on CRAMFS
+	help
+	  This option tells the CramFs driver to load data directly from
+	  a linear adressed memory range (usually non volatile memory
+	  like flash) instead of going through the block device layer.
+	  This saves some memory since no intermediate buffering is
+	  necessary.
 
+	  This is also a prerequisite for XIP of binaries stored on the
+	  filesystem.
+
+	  The location of the CramFs image in memory is board
+	  dependent. Therefore, if you say Y, you must know the proper
+	  physical address where to store the CramFs image and specify
+	  it using the physaddr=0x******** mount option (for example:
+	  "mount -t cramfs -o physaddr=0x100000 none /mnt").
+
+	  If unsure, say N.
+
+config CRAMFS_LINEAR_XIP
+	bool "Support XIP on linear CramFs"
+	depends on CRAMFS_LINEAR
+	help
+	  You must say Y to this option if you want to be able to run
+	  applications directly from non-volatile memory.  XIP
+	  applications are marked by setting the sticky bit (ie, "chmod
+	  +t <app name>").  A cramfs file system then needs to be
+	  created using mkcramfs (with XIP cramfs support in
+	  it). Applications marked for XIP execution will not be
+	  compressed since they have to run directly from flash.
+
+config ROOT_CRAMFS_LINEAR
+	bool "Root file system on linear CramFs"
+	depends on CRAMFS_LINEAR
+	help
+	  Say Y if you have enabled linear CramFs, and you want to be
+	  able to use the linear CramFs image as a root file system.  To
+	  actually have the kernel mount this CramFs image as a root
+	  file system, you must also pass the command line parameter
+	  "root=/dev/null rootflags=physaddr=0x********" to the kernel
+	  (replace 0x******** with the physical address location of the
+	  linear CramFs image to boot with).
+	  
 config SQUASHFS
 	tristate "SquashFS 2.2 - Squashed file system support"
 	depends on BLOCK

@@ -6,10 +6,10 @@
 # These flags are used for build native versions of the tools for the
 # host system so it can generate images etc
 #
-MY_CFLAGS = -I/usr/include -I.
+MY_CFLAGS = -I/usr/include -I. -I./include -I./include/mtd
 BUILD_CFLAGS += $(MY_CFLAGS)
 BUILD_CC = gcc
-CFLAGS += -D__USE_BSD -I.
+CFLAGS += -D__USE_BSD -I. -I./include -I./include/mtd
 
 TARGETS_$(CONFIG_USER_MTDUTILS_ERASE)		+= erase
 TARGETS_$(CONFIG_USER_MTDUTILS_ERASEALL)	+= eraseall
@@ -33,7 +33,7 @@ TARGETS_$(CONFIG_JFFS2_FS)			+= build/mkfs.jffs2
 
 
 SYMLINKS = 
-JFFS2_OBJS = crc32.o mkfs.jffs2.o compr_zlib.o compr_rtime.o
+JFFS2_OBJS = crc32.o mkfs.jffs2.o compr_zlib.o compr_rtime.o compr.o
 
 ifeq ($(LINUXDIR),linux-2.2.x)
 SYMLINKS += compr_rubin.h compr_rubin.c compr.c histo_mips.h pushpull.h pushpull.c

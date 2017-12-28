@@ -1,0 +1,5 @@
+#!/bin/sh
+clear
+cat /etc/motd
+Led_Show&
+exec /bin/sh

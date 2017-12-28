@@ -14,3 +14,4 @@ obj-$(CONFIG_MTD_RAM)		+= map_ram.o
 obj-$(CONFIG_MTD_ROM)		+= map_rom.o
 obj-$(CONFIG_MTD_ABSENT)	+= map_absent.o
 obj-$(CONFIG_MTD_EPCS)		+= epcs.o epcs_low.o
+obj-$(CONFIG_MTD_STM3210E_EVAL_ONBOARD_FLASH)	+= st_m29w128f_mtd.o

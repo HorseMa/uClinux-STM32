@@ -35,6 +35,9 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 
+//#undef pr_debug
+//#define pr_debug printk
+
 static struct workqueue_struct *workqueue;
 
 /*

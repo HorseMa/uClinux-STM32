@@ -238,6 +238,15 @@ config MTD_ABSENT
 	  preserves the expected registration order of MTD device nodes on
 	  the system regardless of media presence.  Device nodes created
 	  with this driver will return -ENODEV upon access.
+	  
+config MTD_STM3210E_EVAL_ONBOARD_FLASH
+	bool "Support for STM3210E-EVAL on board flash chip."
+	depends on ARCH_STM3210E_EVAL && EXPERIMENTAL
+	default y if ARCH_STM3210E_EVAL
+	help
+	  This allows MTD support to work with flash memory on 
+	  STM3210E-EVAL board. If you're not sure what this is all about
+	  then say N.
 
 config MTD_XIP
 	bool "XIP aware MTD support"

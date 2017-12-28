@@ -12,10 +12,15 @@
 */
 
 		.macro	addruart,rx
+#ifdef CONFIG_CPU_V7M
+		mov	\rx,      #0x40000000
+#else
 		mrc	p15, 0, \rx, c1, c0
 		tst	\rx, #1			@ MMU enabled?
+		ite	eq
 		moveq	\rx,      #0x10000000
 		movne	\rx,      #0xf0000000	@ virtual base
+#endif
 		orr	\rx, \rx, #0x00009000
 		.endm
 

@@ -283,6 +283,7 @@ struct amd_flash_info {
 #define SIZE_2MiB   21
 #define SIZE_4MiB   22
 #define SIZE_8MiB   23
+#define SIZE_16MiB  24
 
 
 /*
@@ -1562,7 +1563,7 @@ static const struct amd_flash_info jedec_table[] = {
 			ERASEINFO(0x08000,2),
 			ERASEINFO(0x10000,1)
 		}
-	}, {
+	},{
 		.mfr_id         = MANUFACTURER_ST,
 		.dev_id         = M29W400DB,
 		.name           = "ST M29W400DB",

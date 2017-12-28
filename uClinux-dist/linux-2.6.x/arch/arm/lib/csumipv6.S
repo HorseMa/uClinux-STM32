@@ -7,6 +7,8 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#include <asm/unified.h>
+
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 
@@ -29,4 +31,5 @@ ENTRY(__csum_ipv6_magic)
 		adcs	r0, r0, r2
 		adcs	r0, r0, #0
 		ldmfd	sp!, {pc}
+ENDPROC(__csum_ipv6_magic)
 

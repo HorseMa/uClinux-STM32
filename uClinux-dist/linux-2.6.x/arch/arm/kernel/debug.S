@@ -9,6 +9,8 @@
  *
  *  32-bit debugging code
  */
+#include <asm/unified.h>
+
 #include <linux/linkage.h>
 
 		.text
@@ -89,10 +91,12 @@
 ENTRY(printhex8)
 		mov	r1, #8
 		b	printhex
+ENDPROC(printhex8)
 
 ENTRY(printhex4)
 		mov	r1, #4
 		b	printhex
+ENDPROC(printhex4)
 
 ENTRY(printhex2)
 		mov	r1, #2
@@ -103,6 +107,7 @@ printhex:	adr	r2, hexbuf
 1:		and	r1, r0, #15
 		mov	r0, r0, lsr #4
 		cmp	r1, #10
+		ite	lt
 		addlt	r1, r1, #'0'
 		addge	r1, r1, #'a' - 10
 		strb	r1, [r3, #-1]!
@@ -110,6 +115,7 @@ printhex:	adr	r2, hexbuf
 		bne	1b
 		mov	r0, r2
 		b	printascii
+ENDPROC(printhex2)
 
 		.ltorg
 
@@ -120,18 +126,22 @@ ENTRY(printascii)
 		senduart r1, r3
 		busyuart r2, r3
 		teq	r1, #'\n'
+		itt	eq
 		moveq	r1, #'\r'
 		beq	1b
 2:		teq	r0, #0
+		itt	ne
 		ldrneb	r1, [r0], #1
 		teqne	r1, #0
 		bne	1b
 		mov	pc, lr
+ENDPROC(printascii)
 
 ENTRY(printch)
 		addruart r3
 		mov	r1, r0
 		mov	r0, #0
 		b	1b
+ENDPROC(printch)
 
 hexbuf:		.space 16

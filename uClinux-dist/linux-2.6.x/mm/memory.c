@@ -1126,7 +1126,8 @@ int get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 			continue;
 		}
 
-		if (!vma || (vma->vm_flags & (VM_IO | VM_PFNMAP))
+		if (!vma || ((vma->vm_flags & (VM_IO | VM_PFNMAP))
+				&& !(vma->vm_flags & VM_XIP))
 				|| !(vm_flags & vma->vm_flags))
 			return i ? : -EFAULT;
 
@@ -1642,6 +1643,21 @@ static inline pte_t maybe_mkwrite(pte_t pte, struct vm_area_struct *vma)
 	return pte;
 }
 
+/*
+ * We hold the mm semaphore for reading and vma->vm_mm->page_table_lock
+ */
+static inline void break_cow(struct vm_area_struct * vma, struct page * new_page, unsigned long address, 
+			      pte_t *page_table)
+{
+        pte_t entry;
+
+        entry = maybe_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot)),
+                              vma);
+        ptep_establish(vma, address, page_table, entry);
+        update_mmu_cache(vma, address, entry);
+        lazy_mmu_prot_update(entry);
+}
+
 static inline void cow_user_page(struct page *dst, struct page *src, unsigned long va, struct vm_area_struct *vma)
 {
 	/*
@@ -1691,10 +1707,54 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct *vma,
 		spinlock_t *ptl, pte_t orig_pte)
 {
 	struct page *old_page, *new_page;
+	unsigned long pfn = pte_pfn(orig_pte);
 	pte_t entry;
 	int reuse = 0, ret = 0;
 	int page_mkwrite = 0;
 	struct page *dirty_page = NULL;
+	
+	if (unlikely(!pfn_valid(pfn))) {
+                if ((vma->vm_flags & VM_XIP) && pte_present(orig_pte) && 
+			pte_read(orig_pte)) {
+                        /*
+                         * Handle COW of XIP memory.
+                         * Note that the source memory actually isn't a ram
+                         * page so no struct page is associated to the source
+                         * pte.
+                         */
+                        char *dst;
+                        int ret;
+
+                        spin_unlock(&mm->page_table_lock);
+                        new_page = alloc_page(GFP_HIGHUSER);
+                        if (!new_page)
+                                return VM_FAULT_OOM;
+
+                        /* copy XIP data to memory */
+
+                        dst = kmap_atomic(new_page, KM_USER0);
+                        ret = copy_from_user(dst, (void*)address, PAGE_SIZE);
+                        kunmap_atomic(dst, KM_USER0);
+
+                        /* make sure pte didn't change while we dropped the
+                           lock */
+                        spin_lock(&mm->page_table_lock);
+                        if (!ret && pte_same(*page_table, orig_pte)) {
+				inc_mm_counter(mm, file_rss);
+                                break_cow(vma, new_page, address, page_table);
+                                lru_cache_add(new_page);
+                                page_add_file_rmap(new_page);
+                                spin_unlock(&mm->page_table_lock);
+                                return VM_FAULT_MINOR;  /* Minor fault */
+                        }
+
+                        /* pte changed: back off */
+                        spin_unlock(&mm->page_table_lock);
+                        page_cache_release(new_page);
+                        return ret ? VM_FAULT_OOM : VM_FAULT_MINOR;
+        	}
+	}
+
 
 	old_page = vm_normal_page(vma, address, orig_pte);
 	if (!old_page) {

@@ -7,6 +7,8 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#include <asm/unified.h>
+
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/param.h>
@@ -31,7 +33,10 @@ ENTRY(__const_udelay)				@ 0 <= r0 <= 0x7fffff06
 		mov	r2, r2, lsr #10		@ max = 0x00007fff
 		mul	r0, r2, r0		@ max = 2^32-1
 		movs	r0, r0, lsr #6
+		it	eq
 		moveq	pc, lr
+ENDPROC(__udelay)
+ENDPROC(__const_udelay)				@ 0 <= r0 <= 0x7fffff06
 
 /*
  * loops = r0 * HZ * loops_per_jiffy / 1000000
@@ -58,5 +63,7 @@ ENTRY(__delay)
 		movls	pc, lr
 		subs	r0, r0, #1
 #endif
+		it	hi
 		bhi	__delay
 		mov	pc, lr
+ENDPROC(__delay)

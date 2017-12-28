@@ -47,6 +47,7 @@ comma = ,
 # Note that GCC does not numerically define an architecture version
 # macro, but instead defines a whole series of macros which makes
 # testing for a specific architecture or later rather impossible.
+arch-$(CONFIG_CPU_32v7M)	:=-D__LINUX_ARM_ARCH__=7 -march=armv7-m -Wa,-march=armv7-m
 arch-$(CONFIG_CPU_32v7)		:=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-march=armv7a,-march=armv5t -Wa$(comma)-march=armv7a)
 arch-$(CONFIG_CPU_32v6)		:=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6,-march=armv5t -Wa$(comma)-march=armv6)
 # Only override the compiler option if ARMv6. The ARMv6K extensions are
@@ -86,9 +87,16 @@ else
 CFLAGS_ABI	:=$(call cc-option,-mapcs-32,-mabi=apcs-gnu) $(call cc-option,-mno-thumb-interwork,)
 endif
 
+ifeq ($(CONFIG_THUMB2_KERNEL),y)
+# We currently suppress all the gas warnings but finer-grained option
+# will be provided for the unified assembly syntax
+CFLAGS_THUMB2	:=-mthumb -Wa$(comma)-W
+AFLAGS_THUMB2	:=-mthumb -Wa$(comma)-mthumb -Wa$(comma)-W
+endif
+
 # Need -Uarm for gcc < 3.x
-KBUILD_CFLAGS	+=$(CFLAGS_ABI) $(arch-y) $(tune-y) $(call cc-option,-mshort-load-bytes,$(call cc-option,-malignment-traps,)) -msoft-float -Uarm
-KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(arch-y) $(tune-y) -msoft-float
+KBUILD_CFLAGS	+=$(CFLAGS_ABI) $(CFLAGS_THUMB2) $(arch-y) $(tune-y) $(call cc-option,-mshort-load-bytes,$(call cc-option,-malignment-traps,)) -msoft-float -Uarm
+KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(AFLAGS_THUMB2) $(arch-y) $(tune-y) -msoft-float
 
 CHECKFLAGS	+= -D__arm__
 
@@ -161,6 +169,8 @@ textaddr-$(CONFIG_ARCH_LPC28XX)    := 0x30008000
  machine-$(CONFIG_ARCH_MX3)	   := mx3
  machine-$(CONFIG_ARCH_ORION5X)	   := orion5x
  machine-$(CONFIG_ARCH_MSM7X00A)   := msm
+ machine-$(CONFIG_ARCH_STM3210E_EVAL)   := stm3210e_eval
+ textofs-$(CONFIG_ARCH_STM3210E_EVAL) :=0x00000000
 
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 # This is what happens if you forget the IOCS16 line.

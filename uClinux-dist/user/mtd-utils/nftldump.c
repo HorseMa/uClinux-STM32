@@ -1,8 +1,8 @@
-/* 
+/*
  * nftldump.c: Dumping the content of NFTL partitions on a "Physical Disk"
  *
  *
- * $Id: nftldump.c,v 1.14 2001/07/16 16:13:50 dwmw2 Exp $
+ * $Id: nftldump.c,v 1.17 2005/11/07 11:15:13 gleixner Exp $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@
  *	2. test, test, and test !!!
  */
 
+#define _XOPEN_SOURCE 500 /* For pread */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,12 +33,12 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <errno.h>
+
 #include <sys/ioctl.h>
 #include <asm/types.h>
-#include "mtd/mtd-user.h"
-#include "mtd/nftl-user.h"
-
-extern ssize_t pread();
+#include <mtd/mtd-user.h>
+#include <mtd/nftl-user.h>
+#include <mtd_swab.h>
 
 static struct NFTLMediaHeader MedHead[2];
 static mtd_info_t meminfo;
@@ -49,26 +51,10 @@ static int NumMedHeads;
 
 static unsigned char BadUnitTable[MAX_ERASE_ZONES];
 
-/* some byte swabbing stuff from include/linux/byteorder/ */
-#define swab16(x) \
-	((__u16)( \
-		(((__u16)(x) & (__u16)0x00ffU) << 8) | \
-		(((__u16)(x) & (__u16)0xff00U) >> 8) ))
-#define swab32(x) \
-	((__u32)( \
-		(((__u32)(x) & (__u32)0x000000ffUL) << 24) | \
-		(((__u32)(x) & (__u32)0x0000ff00UL) <<  8) | \
-		(((__u32)(x) & (__u32)0x00ff0000UL) >>  8) | \
-		(((__u32)(x) & (__u32)0xff000000UL) >> 24) ))
-
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-#define cpu_to_le16(x) (x)
-#define cpu_to_le32(x) (x)
 #define SWAP16(x) do { ; } while(0)
 #define SWAP32(x) do { ; } while(0)
 #else
-#define cpu_to_le16(x) swab16(x)
-#define cpu_to_le32(x) swab32(x)
 #define SWAP16(x) do { x = swab16(x); } while(0)
 #define SWAP32(x) do { x = swab32(x); } while(0)
 #endif
@@ -86,7 +72,7 @@ static unsigned short nextEUN(unsigned short curEUN)
 	return UCItable[curEUN][0].a.ReplUnitNum;
 }
 
-static unsigned int find_media_headers()
+static unsigned int find_media_headers(void)
 {
 	int i;
 	static unsigned long ofs = 0;
@@ -134,12 +120,12 @@ static unsigned int find_media_headers()
 	return NumMedHeads;
 }
 
-static void dump_erase_units()
+static void dump_erase_units(void)
 {
 	int i, j;
 	unsigned long ofs;
 
-	for (i = MedHead[0].FirstPhysicalEUN; i < MedHead[0].FirstPhysicalEUN + 
+	for (i = MedHead[0].FirstPhysicalEUN; i < MedHead[0].FirstPhysicalEUN +
 		     MedHead[0].NumEraseUnits; i++) {
 		/* For each Erase Unit */
 		ofs = i * meminfo.erasesize;
@@ -192,13 +178,13 @@ static void dump_erase_units()
 		if (UCItable[i][0].a.VirtUnitNum == 0xffff)
 			printf("Unit %d is free\n", i);
 		else
-			printf("Unit %d is in chain %d and %s a replacement\n", i, 
+			printf("Unit %d is in chain %d and %s a replacement\n", i,
 			       UCItable[i][0].a.VirtUnitNum & 0x7fff,
 			       UCItable[i][0].a.VirtUnitNum & 0x8000 ? "is" : "is not");
 	}
 }
 
-static void dump_virtual_units()
+static void dump_virtual_units(void)
 {
 	int i, j;
 	char readbuf[512];
@@ -258,7 +244,7 @@ static void dump_virtual_units()
 
 				write(ofd, readbuf, 512);
 			}
-	
+
 		}
 	}
 }

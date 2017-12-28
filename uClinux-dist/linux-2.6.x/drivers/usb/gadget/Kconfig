@@ -214,7 +214,7 @@ config USB_GADGET_M66592
 	   Say "y" to link the driver statically, or "m" to build a
 	   dynamically linked module called "m66592_udc" and force all
 	   gadget drivers to also be dynamically linked.
-
+	   
 config USB_M66592
 	tristate
 	depends on USB_GADGET_M66592
@@ -384,6 +384,22 @@ config USB_DUMMY_HCD
 	default USB_GADGET
 	select USB_GADGET_SELECTED
 
+#config USB_GADGET_STM32F10x
+#	boolean "STM32F10x USB Peripheral Controller"
+#	depends on ARCH_STM3210E_EVAL
+#	default USB_GADGET
+#	select USB_GADGET_SELECTED
+#	help
+#	   stm32f10x is an on chip USB peripheral controller that
+#	   supports full speed USB data transfers.
+#	   
+#	   Say "y" to link the driver statically.
+#	   
+#config USB_STM32F10x
+#	tristate
+#	depends on USB_GADGET_STM32F10x
+#	default USB_G_SERIAL
+	   
 # NOTE:  Please keep dummy_hcd LAST so that "real hardware" appears
 # first and will be selected by default.
 

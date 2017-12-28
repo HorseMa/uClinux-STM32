@@ -991,6 +991,13 @@ config GPIO_TB0219
 	tristate "TANBAC TB0219 GPIO support"
 	depends on TANBAC_TB022X
 	select GPIO_VR41XX
+	
+config GPIO_STM3210E_EVAL
+	bool "STM3210E-EVAL GPIO support"
+	depends on ARCH_STM3210E_EVAL
+#	select HAVE_GPIO_LIB
+	---help---
+		This driver enables access to the STM3210E-EVAL GPIOs.
 
 source "drivers/char/pcmcia/Kconfig"
 

@@ -386,6 +386,12 @@ config RTC_DRV_M48T86
 	  This driver can also be built as a module. If so, the module
 	  will be called rtc-m48t86.
 
+config RTC_STM3210E_EVAL
+	bool "STM32 on chip RTC"
+	help
+	  If you say Y here you will get support for the
+	  STM32 RTC.
+
 config RTC_DRV_M48T59
 	tristate "ST M48T59"
 	help

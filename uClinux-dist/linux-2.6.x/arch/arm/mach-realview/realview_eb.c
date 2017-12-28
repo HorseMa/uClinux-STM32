@@ -30,6 +30,7 @@
 #include <asm/leds.h>
 #include <asm/mach-types.h>
 #include <asm/hardware/gic.h>
+#include <asm/hardware/nvic.h>
 #include <asm/hardware/icst307.h>
 #include <asm/hardware/cache-l2x0.h>
 
@@ -44,6 +45,11 @@
 #include "core.h"
 #include "clock.h"
 
+#if defined(CONFIG_CPU_V7M) && (PAGE_OFFSET != PHYS_OFFSET)
+#error "PAGE_OFFSET != PHYS_OFFSET"
+#endif
+
+#ifndef CONFIG_CPU_V7M
 static struct map_desc realview_eb_io_desc[] __initdata = {
 	{
 		.virtual	= IO_ADDRESS(REALVIEW_SYS_BASE),
@@ -104,6 +110,7 @@ static struct map_desc realview_eb11mp_io_desc[] __initdata = {
 		.type		= MT_DEVICE,
 	}
 };
+#endif	/* CONFIG_CPU_V7M */
 
 static void __init realview_eb_map_io(void)
 {
@@ -274,6 +281,7 @@ static int eth_device_register(void)
 
 static void __init gic_init_irq(void)
 {
+#ifndef CONFIG_CPU_V7M
 	if (core_tile_eb11mp()) {
 		unsigned int pldctrl;
 
@@ -301,6 +309,9 @@ static void __init gic_init_irq(void)
 		gic_dist_init(0, __io_address(REALVIEW_EB_GIC_DIST_BASE), 29);
 		gic_cpu_init(0, gic_cpu_base_addr);
 	}
+#else	/* !CONFIG_CPU_V7M */
+	nvic_init();
+#endif
 }
 
 /*
@@ -392,7 +403,7 @@ MACHINE_START(REALVIEW_EB, "ARM-RealView EB")
 	/* Maintainer: ARM Ltd/Deep Blue Solutions Ltd */
 	.phys_io	= REALVIEW_EB_UART0_BASE,
 	.io_pg_offst	= (IO_ADDRESS(REALVIEW_EB_UART0_BASE) >> 18) & 0xfffc,
-	.boot_params	= 0x00000100,
+	.boot_params	= PHYS_OFFSET + 0x100,
 	.map_io		= realview_eb_map_io,
 	.init_irq	= gic_init_irq,
 	.timer		= &realview_eb_timer,

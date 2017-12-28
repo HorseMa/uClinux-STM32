@@ -52,7 +52,11 @@ struct timezone sys_tz;
 EXPORT_SYMBOL(sys_tz);
 
 #ifndef __ARCH_WANT_SYS_TIME
+#ifdef CONFIG_ARCH_STM3210E_EVAL
+#warning ICSA specification requires the logging of time changes.  This architecture will not log changes.
+#else
 #error ICSA specification requires the logging of time changes.  This architecture will not log changes.
+#endif
 #endif
 
 static void print_time_change(const char *msg, struct timeval new_tv)

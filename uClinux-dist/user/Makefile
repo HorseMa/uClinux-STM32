@@ -432,6 +432,11 @@ dir_$(CONFIG_USER_ZEBRA_BGPD_BGPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_OSPFD_OSPFD)        += zebra
 dir_$(CONFIG_USER_ZEBRA_RIPD_RIPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
+dir_$(CONFIG_USER_LED_SHOW)			+= Led_Show
+dir_$(CONFIG_USER_TOGGLE_GPIO)			+= GPIO_DRV_test
+dir_$(CONFIG_USER_SHOWLOGO)			+= ShowLogo
+dir_$(CONFIG_USER_HELLO)			+= hello_world
+
 
 dir_y += games
 

@@ -10,6 +10,10 @@ struct cramfs_sb_info {
 			unsigned long blocks;
 			unsigned long files;
 			unsigned long flags;
+#ifdef CONFIG_CRAMFS_LINEAR
+			unsigned long linear_phys_addr;
+			char *        linear_virt_addr;
+#endif /* CONFIG_CRAMFS_LINEAR */
 };
 
 static inline struct cramfs_sb_info *CRAMFS_SB(struct super_block *sb)

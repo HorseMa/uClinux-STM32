@@ -114,6 +114,8 @@ obj-$(CONFIG_MCFWATCHDOG)	+= mcfwatchdog.o
 obj-$(CONFIG_SNAPDOG)		+= snapdog.o
 obj-$(CONFIG_FAST_TIMER)	+= fast_timer.o
 
+obj-$(CONFIG_GPIO_STM3210E_EVAL)+= gpio_drv.o
+
 obj-$(CONFIG_MWAVE)		+= mwave/
 obj-$(CONFIG_AGP)		+= agp/
 obj-$(CONFIG_DRM)		+= drm/

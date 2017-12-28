@@ -10,6 +10,8 @@
  * 27/03/03 Ian Molton Clean up CONFIG_CPU
  *
  */
+#include <asm/unified.h>
+
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 		.text
@@ -28,15 +30,20 @@ ENTRY(__backtrace)
 
 ENTRY(c_backtrace)
 
-#if !defined(CONFIG_FRAME_POINTER) || !defined(CONFIG_PRINTK)
+#if defined(CONFIG_THUMB2_KERNEL) || !defined(CONFIG_FRAME_POINTER) || !defined(CONFIG_PRINTK)
 		mov	pc, lr
+ENDPROC(__backtrace)
+ENDPROC(c_backtrace)
 #else
 		stmfd	sp!, {r4 - r8, lr}	@ Save an extra register so we have a location...
 		movs	frame, r0		@ if frame pointer is zero
 		beq	no_frame		@ we have no stack frames
 
 		tst	r1, #0x10		@ 26 or 32-bit mode?
-		moveq	mask, #0xfc000003	@ mask for 26-bit
+		itte	eq
+ ARM(		moveq	mask, #0xfc000003	)
+ THUMB(		moveq	mask, #0xfc000000	)
+ THUMB(		orreq	mask, #0x03		)
 		movne	mask, #0		@ mask for 32-bit
 
 1:		stmfd	sp!, {pc}		@ calculate offset of PC stored
@@ -71,6 +78,7 @@ for_each_frame:	tst	frame, mask		@ Check for address exceptions
 1003:		ldr	r2, [sv_pc, #-4]	@ if stmfd sp!, {args} exists,
 		ldr	r3, .Ldsi+4		@ adjust saved 'pc' back one
 		teq	r3, r2, lsr #10		@ instruction
+		ite	ne
 		subne	r0, sv_pc, #4		@ allow for mov
 		subeq	r0, sv_pc, #8		@ allow for mov + stmia
 
@@ -82,6 +90,7 @@ for_each_frame:	tst	frame, mask		@ Check for address exceptions
 		ldr	r1, [sv_pc, #-4]	@ if stmfd sp!, {args} exists,
 		ldr	r3, .Ldsi+4
 		teq	r3, r1, lsr #10
+		ittt	eq
 		ldreq	r0, [frame, #-8]	@ get sp
 		subeq	r0, r0, #4		@ point at the last arg
 		bleq	.Ldumpstm		@ dump saved registers
@@ -89,6 +98,7 @@ for_each_frame:	tst	frame, mask		@ Check for address exceptions
 1004:		ldr	r1, [sv_pc, #0]		@ if stmfd sp!, {..., fp, ip, lr, pc}
 		ldr	r3, .Ldsi		@ instruction exists,
 		teq	r3, r1, lsr #10
+		itt	eq
 		subeq	r0, frame, #16
 		bleq	.Ldumpstm		@ dump saved registers
 
@@ -103,6 +113,8 @@ for_each_frame:	tst	frame, mask		@ Check for address exceptions
 		mov	r1, frame
 		bl	printk
 no_frame:	ldmfd	sp!, {r4 - r8, pc}
+ENDPROC(__backtrace)
+ENDPROC(c_backtrace)
 		
 		.section __ex_table,"a"
 		.align	3
@@ -122,10 +134,13 @@ no_frame:	ldmfd	sp!, {r4 - r8, pc}
 		mov	reg, #10
 		mov	r7, #0
 1:		mov	r3, #1
-		tst	instr, r3, lsl reg
+ ARM(		tst	instr, r3, lsl reg	)
+ THUMB(		lsl	r3, reg			)
+ THUMB(		tst	instr, r3		)
 		beq	2f
 		add	r7, r7, #1
 		teq	r7, #6
+		itte	eq
 		moveq	r7, #1
 		moveq	r1, #'\n'
 		movne	r1, #' '
@@ -136,6 +151,7 @@ no_frame:	ldmfd	sp!, {r4 - r8, pc}
 2:		subs	reg, reg, #1
 		bpl	1b
 		teq	r7, #0
+		itt	ne
 		adrne	r0, .Lcr
 		blne	printk
 		ldmfd	sp!, {instr, reg, stack, r7, pc}

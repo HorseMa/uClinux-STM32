@@ -20,10 +20,12 @@
 #ifndef __ASM_ARCH_MEMORY_H
 #define __ASM_ARCH_MEMORY_H
 
+#ifndef CONFIG_CPU_V7M
 /*
  * Physical DRAM offset.
  */
 #define PHYS_OFFSET		UL(0x00000000)
+#endif
 
 /*
  * Virtual view <-> DMA view memory address translations

@@ -29,6 +29,7 @@
 #include <linux/tick.h>
 #include <linux/utsname.h>
 
+#include <asm/unified.h>
 #include <asm/leds.h>
 #include <asm/processor.h>
 #include <asm/system.h>
@@ -232,13 +233,22 @@ void __show_regs(struct pt_regs *regs)
 	buf[2] = flags & PSR_C_BIT ? 'C' : 'c';
 	buf[3] = flags & PSR_V_BIT ? 'V' : 'v';
 	buf[4] = '\0';
-
+	
+#ifdef CONFIG_CPU_V7M
+	printk("Flags: %s  IRQs o%s  Mode %s  ISA %s  Segment %s\n",
+		buf, interrupts_enabled(regs) ? "n" : "ff",
+		processor_modes[processor_mode(regs)],
+		isa_modes[isa_mode(regs)],
+		get_fs() == get_ds() ? "kernel" : "user");
+#else
 	printk("Flags: %s  IRQs o%s  FIQs o%s  Mode %s  ISA %s  Segment %s\n",
 		buf, interrupts_enabled(regs) ? "n" : "ff",
 		fast_interrupts_enabled(regs) ? "n" : "ff",
 		processor_modes[processor_mode(regs)],
 		isa_modes[isa_mode(regs)],
 		get_fs() == get_ds() ? "kernel" : "user");
+#endif
+
 #ifdef CONFIG_CPU_CP15
 	{
 		unsigned int ctrl;
@@ -395,7 +405,11 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 	regs.ARM_r2 = (unsigned long)fn;
 	regs.ARM_r3 = (unsigned long)do_exit;
 	regs.ARM_pc = (unsigned long)kernel_thread_helper;
-	regs.ARM_cpsr = SVC_MODE;
+	regs.ARM_cpsr = SVC_MODE | PSR_ISETSTATE;
+#ifdef CONFIG_CPU_V7M
+	/* Return to Handler mode */
+	regs.ARM_EXC_lr = 0xfffffff1L;
+#endif
 
 	return do_fork(flags|CLONE_VM|CLONE_UNTRACED, 0, &regs, 0, NULL, NULL);
 }

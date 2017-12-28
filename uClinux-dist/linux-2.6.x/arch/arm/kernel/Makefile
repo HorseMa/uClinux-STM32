@@ -6,9 +6,15 @@ AFLAGS_head.o := -DTEXT_OFFSET=$(TEXT_OFFSET)
 
 # Object file lists.
 
-obj-y		:= compat.o entry-armv.o entry-common.o irq.o \
+obj-y		:= compat.o entry-common.o irq.o \
 		   process.o ptrace.o setup.o signal.o \
 		   sys_arm.o stacktrace.o time.o traps.o
+
+ifeq ($(CONFIG_CPU_V7M),y)
+obj-y		+= entry-v7m.o
+else
+obj-y		+= entry-armv.o
+endif
 
 obj-$(CONFIG_ISA_DMA_API)	+= dma.o
 obj-$(CONFIG_ARCH_ACORN)	+= ecard.o 

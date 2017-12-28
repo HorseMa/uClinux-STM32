@@ -1,0 +1,10 @@
+#!/bin/sh
+echo Mounting proc fs
+mount -t proc proc /proc
+echo Mounting sysfs
+mount -t sysfs sysfs /sys
+clear
+cat /etc/motd
+Splash&
+Led_Show&
+exec /bin/sh

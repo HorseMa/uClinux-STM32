@@ -854,6 +854,14 @@ enomem:
 /*
  * handle mapping creation for uClinux
  */
+ 
+ //#define DEBUG_DOMMAP	printk
+ #define DEBUG_DOMMAP(fmt,...)
+ #ifdef DEBUG_DOMMAP
+ #define STAMP()	DEBUG_DOMMAP("I am here: %s %d\n",__FUNCTION__,__LINE__)
+ #else
+ #define STAMP()
+ #endif
 unsigned long do_mmap_pgoff(struct file *file,
 			    unsigned long addr,
 			    unsigned long len,
@@ -902,13 +910,14 @@ unsigned long do_mmap_pgoff(struct file *file,
 		unsigned long vmpglen;
 
 		/* suppress VMA sharing for shared regions */
+		DEBUG_DOMMAP("%s vm_flags: 0x%x capabilities: 0x%x COND1:0x%x && COND2:0x%x \n",__FUNCTION__,(int)vm_flags,(int)capabilities,(int)(vm_flags & VM_SHARED),(int)(capabilities & BDI_CAP_MAP_DIRECT));
 		if (vm_flags & VM_SHARED &&
 		    capabilities & BDI_CAP_MAP_DIRECT)
 			goto dont_share_VMAs;
-
+		STAMP();
 		for (rb = rb_first(&nommu_vma_tree); rb; rb = rb_next(rb)) {
 			vma = rb_entry(rb, struct vm_area_struct, vm_rb);
-
+			STAMP();
 			if (!(vma->vm_flags & VM_MAYSHARE))
 				continue;
 
@@ -949,6 +958,7 @@ unsigned long do_mmap_pgoff(struct file *file,
 		if (file && file->f_op->get_unmapped_area) {
 			addr = file->f_op->get_unmapped_area(file, addr, len,
 							     pgoff, flags);
+			STAMP();
 			if (IS_ERR((void *) addr)) {
 				ret = addr;
 				if (ret != (unsigned long) -ENOSYS)
@@ -976,6 +986,7 @@ unsigned long do_mmap_pgoff(struct file *file,
 	if (file) {
 		get_file(file);
 		if (vm_flags & VM_EXECUTABLE) {
+			STAMP();
 			added_exe_file_vma(current->mm);
 			vma->vm_mm = current->mm;
 		}
@@ -992,7 +1003,10 @@ unsigned long do_mmap_pgoff(struct file *file,
 	if (file && vma->vm_flags & VM_SHARED)
 		ret = do_mmap_shared_file(vma, len);
 	else
+	{
+		STAMP();
 		ret = do_mmap_private(vma, len);
+	}
 	if (ret < 0)
 		goto error;
 
@@ -1037,7 +1051,6 @@ unsigned long do_mmap_pgoff(struct file *file,
 	printk("do_mmap:\n");
 	show_process_blocks();
 #endif
-
 	return (unsigned long) result;
 
  error:

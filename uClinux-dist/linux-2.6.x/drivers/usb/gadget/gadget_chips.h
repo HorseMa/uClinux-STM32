@@ -146,6 +146,11 @@
 #else
 #define	gadget_is_m66592(g)	0
 #endif
+#ifdef CONFIG_USB_GADGET_STM32F10x
+#define gadget_is_stm32f10x(g)	!strcmp("stm32f10x_udc", (g)->name)
+#else
+#define gadget_is_stm32f10x(g)	0
+#endif
 
 
 // CONFIG_USB_GADGET_SX2
@@ -212,5 +217,7 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x20;
 	else if (gadget_is_m66592(gadget))
 		return 0x21;
+	else if (gadget_is_stm32f10x(gadget))
+		return 0x22;
 	return -ENOENT;
 }

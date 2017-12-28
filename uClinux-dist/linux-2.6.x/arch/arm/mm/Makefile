@@ -24,6 +24,7 @@ obj-$(CONFIG_CPU_ABRT_EV5T)	+= abort-ev5t.o
 obj-$(CONFIG_CPU_ABRT_EV5TJ)	+= abort-ev5tj.o
 obj-$(CONFIG_CPU_ABRT_EV6)	+= abort-ev6.o
 obj-$(CONFIG_CPU_ABRT_EV7)	+= abort-ev7.o
+obj-$(CONFIG_CPU_ABRT_EV7M)	+= abort-ev7m.o
 
 obj-$(CONFIG_CPU_CACHE_V3)	+= cache-v3.o
 obj-$(CONFIG_CPU_CACHE_V4)	+= cache-v4.o
@@ -73,5 +74,6 @@ obj-$(CONFIG_CPU_XSC3)		+= proc-xsc3.o
 obj-$(CONFIG_CPU_FEROCEON)	+= proc-feroceon.o
 obj-$(CONFIG_CPU_V6)		+= proc-v6.o
 obj-$(CONFIG_CPU_V7)		+= proc-v7.o
+obj-$(CONFIG_CPU_V7M)		+= proc-v7m.o
 
 obj-$(CONFIG_CACHE_L2X0)	+= cache-l2x0.o

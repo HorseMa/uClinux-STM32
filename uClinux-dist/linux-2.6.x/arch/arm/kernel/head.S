@@ -11,6 +11,8 @@
  *
  *  Kernel startup code for all 32-bit CPUs
  */
+#include <asm/unified.h>
+
 #include <linux/linkage.h>
 #include <linux/init.h>
 
@@ -75,9 +77,10 @@
  * circumstances, zImage) is for.
  */
 	.section ".text.head", "ax"
-	.type	stext, %function
 ENTRY(stext)
-	msr	cpsr_c, #PSR_F_BIT | PSR_I_BIT | SVC_MODE @ ensure svc mode
+ ARM(	msr	cpsr_c, #PSR_F_BIT | PSR_I_BIT | SVC_MODE ) @ ensure svc mode
+ THUMB(	mov	r9, #PSR_F_BIT | PSR_I_BIT | SVC_MODE )
+ THUMB(	msr	cpsr_c, r9 )			@ ensure svc mode
 						@ and irqs disabled
 	mrc	p15, 0, r9, c0, c0		@ get processor id
 	bl	__lookup_processor_type		@ r5=procinfo r9=cpuid
@@ -98,11 +101,13 @@ ENTRY(stext)
 	 */
 	ldr	r13, __switch_data		@ address to jump to after
 						@ mmu has been enabled
-	adr	lr, __enable_mmu		@ return (PIC) address
-	add	pc, r10, #PROCINFO_INITFUNC
+	badr	lr, __enable_mmu		@ return (PIC) address
+ ARM(	add	pc, r10, #PROCINFO_INITFUNC	)
+ THUMB(	add	r12, r10, #PROCINFO_INITFUNC	)
+ THUMB(	mov	pc, r12				)
+ENDPROC(stext)
 
 #if defined(CONFIG_SMP)
-	.type   secondary_startup, #function
 ENTRY(secondary_startup)
 	/*
 	 * Common entry point for secondary CPUs.
@@ -125,9 +130,12 @@ ENTRY(secondary_startup)
 	ldmia	r4, {r5, r7, r13}		@ address to jump to after
 	sub	r4, r4, r5			@ mmu has been enabled
 	ldr	r4, [r7, r4]			@ get secondary_data.pgdir
-	adr	lr, __enable_mmu		@ return address
-	add	pc, r10, #PROCINFO_INITFUNC	@ initialise processor
-						@ (return control reg)
+	badr	lr, __enable_mmu		@ return address
+ ARM(	add	pc, r10, #PROCINFO_INITFUNC	) @ initialise processor
+						  @ (return control reg)
+ THUMB(	add	r12, r10, #PROCINFO_INITFUNC	)
+ THUMB(	mov	pc, r12				)
+ENDPROC(secondary_startup)
 
 	/*
 	 * r6  = &secondary_data
@@ -136,6 +144,7 @@ ENTRY(__secondary_switched)
 	ldr	sp, [r7, #4]			@ get secondary_data.stack
 	mov	fp, #0
 	b	secondary_start_kernel
+ENDPROC(__secondary_switched)
 
 	.type	__secondary_data, %object
 __secondary_data:
@@ -151,7 +160,6 @@ __secondary_data:
  * this is just loading the page table pointer and domain access
  * registers.
  */
-	.type	__enable_mmu, %function
 __enable_mmu:
 #ifdef CONFIG_ALIGNMENT_TRAP
 	orr	r0, r0, #CR_A
@@ -174,6 +182,7 @@ __enable_mmu:
 	mcr	p15, 0, r5, c3, c0, 0		@ load domain access register
 	mcr	p15, 0, r4, c2, c0, 0		@ load page table pointer
 	b	__turn_mmu_on
+ENDPROC(__enable_mmu)
 
 /*
  * Enable the MMU.  This completely changes the structure of the visible
@@ -187,7 +196,6 @@ __enable_mmu:
  * other registers depend on the function called upon completion
  */
 	.align	5
-	.type	__turn_mmu_on, %function
 __turn_mmu_on:
 	mov	r0, r0
 	mcr	p15, 0, r0, c1, c0, 0		@ write control reg
@@ -195,7 +203,7 @@ __turn_mmu_on:
 	mov	r3, r3
 	mov	r3, r3
 	mov	pc, r13
-
+ENDPROC(__turn_mmu_on)
 
 
 /*
@@ -211,7 +219,6 @@ __turn_mmu_on:
  *  r0, r3, r6, r7 corrupted
  *  r4 = physical page table address
  */
-	.type	__create_page_tables, %function
 __create_page_tables:
 	pgtbl	r4				@ page table address
 
@@ -251,6 +258,7 @@ __create_page_tables:
 	add	r6, r4, r6, lsr #18
 1:	cmp	r0, r6
 	add	r3, r3, #1 << 20
+	it	ls
 	strls	r3, [r0], #4
 	bls	1b
 
@@ -294,6 +302,7 @@ __create_page_tables:
 	add	r0, r4, r3
 	rsb	r3, r3, #0x4000			@ PTRS_PER_PGD*sizeof(long)
 	cmp	r3, #0x0800			@ limit to 512MB
+	it	hi
 	movhi	r3, #0x0800
 	add	r6, r0, r3
 	ldr	r3, [r8, #MACHINFO_PHYSIO]
@@ -325,6 +334,7 @@ __create_page_tables:
 #endif
 #endif
 	mov	pc, lr
+ENDPROC(__create_page_tables)
 	.ltorg
 
 #include "head-common.S"

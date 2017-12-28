@@ -85,7 +85,7 @@
 #define REALVIEW_SYS_TEST_OSC3_OFFSET        0xCC
 #define REALVIEW_SYS_TEST_OSC4_OFFSET        0xD0
 
-#define REALVIEW_SYS_BASE                    0x10000000
+#define REALVIEW_SYS_BASE                    0x40000000
 #define REALVIEW_SYS_ID                      (REALVIEW_SYS_BASE + REALVIEW_SYS_ID_OFFSET)
 #define REALVIEW_SYS_SW                      (REALVIEW_SYS_BASE + REALVIEW_SYS_SW_OFFSET)
 #define REALVIEW_SYS_LED                     (REALVIEW_SYS_BASE + REALVIEW_SYS_LED_OFFSET)
@@ -174,18 +174,18 @@
 /*
  * RealView common peripheral addresses
  */
-#define REALVIEW_SCTL_BASE            0x10001000	/* System controller */
-#define REALVIEW_I2C_BASE             0x10002000	/* I2C control */
-#define REALVIEW_AACI_BASE            0x10004000	/* Audio */
-#define REALVIEW_MMCI0_BASE           0x10005000	/* MMC interface */
-#define REALVIEW_KMI0_BASE            0x10006000	/* KMI interface */
-#define REALVIEW_KMI1_BASE            0x10007000	/* KMI 2nd interface */
-#define REALVIEW_CHAR_LCD_BASE        0x10008000	/* Character LCD */
-#define REALVIEW_SCI_BASE             0x1000E000	/* Smart card controller */
-#define REALVIEW_GPIO1_BASE           0x10014000	/* GPIO port 1 */
-#define REALVIEW_GPIO2_BASE           0x10015000	/* GPIO port 2 */
-#define REALVIEW_DMC_BASE             0x10018000	/* DMC configuration */
-#define REALVIEW_DMAC_BASE            0x10030000	/* DMA controller */
+#define REALVIEW_SCTL_BASE            0x40001000	/* System controller */
+#define REALVIEW_I2C_BASE             0x40002000	/* I2C control */
+#define REALVIEW_AACI_BASE            0x40004000	/* Audio */
+#define REALVIEW_MMCI0_BASE           0x40005000	/* MMC interface */
+#define REALVIEW_KMI0_BASE            0x40006000	/* KMI interface */
+#define REALVIEW_KMI1_BASE            0x40007000	/* KMI 2nd interface */
+#define REALVIEW_CHAR_LCD_BASE        0x40008000	/* Character LCD */
+#define REALVIEW_SCI_BASE             0x4000E000	/* Smart card controller */
+#define REALVIEW_GPIO1_BASE           0x40014000	/* GPIO port 1 */
+#define REALVIEW_GPIO2_BASE           0x40015000	/* GPIO port 2 */
+#define REALVIEW_DMC_BASE             0x40018000	/* DMC configuration */
+#define REALVIEW_DMAC_BASE            0x40030000	/* DMA controller */
 
 /* PCI space */
 #define REALVIEW_PCI_BASE             0x41000000	/* PCI Interface */

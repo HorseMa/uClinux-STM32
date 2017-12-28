@@ -577,6 +577,12 @@ config MTD_M520x
 	depends on MTD_PARTITIONS
 	help
 	  Map for M5208EVB & M5207EVB Flash Partition.
+	  
+config MTD_M29W128F
+	bool "ST M29W128F Flash filesystem support"
+	depends on MTD_PARTITIONS
+	help
+	  Map for ST M29W128F Flash Partition.
 
 config MTD_CPU16B
 	tristate "RAM/ROM filesystem support for Sarasvati from Sneha Technologies S.L."

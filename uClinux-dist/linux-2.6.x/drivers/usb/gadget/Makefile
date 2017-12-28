@@ -18,6 +18,7 @@ obj-$(CONFIG_USB_AT91)		+= at91_udc.o
 obj-$(CONFIG_USB_ATMEL_USBA)	+= atmel_usba_udc.o
 obj-$(CONFIG_USB_FSL_USB2)	+= fsl_usb2_udc.o
 obj-$(CONFIG_USB_M66592)	+= m66592-udc.o
+obj-$(CONFIG_USB_STM32F10x)	+= stm3210e_eval_udc.o stm32_usblib/
 
 #
 # USB gadget drivers

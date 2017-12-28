@@ -75,6 +75,9 @@
 
 #else /* CONFIG_MMU */
 
+#ifdef CONFIG_CPU_V7M
+#define XIP_VIRT_ADDR(physaddr) 	(physaddr)
+#endif
 /*
  * The limitation of user task size can grow up to the end of free ram region.
  * It is difficult to define and perhaps will never meet the original meaning

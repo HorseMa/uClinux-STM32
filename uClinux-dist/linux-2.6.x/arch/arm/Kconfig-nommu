@@ -3,12 +3,13 @@
 # Hyok S. Choi <hyok.choi@samsung.com>
 # 
 
+if !ARCH_STM3210E_EVAL
 config SET_MEM_PARAM
-	bool "Set flash/sdram size and base addr"
+	bool 'Set flash/sdram size and base addr' if (!ARCH_STM3210E_EVAL)
 	help
 	 Say Y to manually set the base addresses and sizes.
 	 otherwise, the default values are assigned.
-
+ 
 config DRAM_BASE
 	hex '(S)DRAM Base Address' if SET_MEM_PARAM
 	default 0x00800000
@@ -25,10 +26,45 @@ config FLASH_SIZE
 	hex 'FLASH Size' if SET_MEM_PARAM
 	default 0x00400000
 
+endif
+
+if ARCH_STM3210E_EVAL
+config SET_MEM_PARAM
+	bool 'Set flash/sram size and base addr'
+	help
+	 Say Y to manually set the base addresses and sizes.
+	 otherwise, the default values are assigned.
+
+config DRAM_BASE
+	hex 'Internal SRAM Base Address' if SET_MEM_PARAM
+	default 0x20000000
+
+config DRAM_SIZE
+	hex 'Internal SRAM SIZE' if SET_MEM_PARAM
+	default 0x00010000
+
+config EXTERNAL_RAM_BASE
+	hex 'External SRAM Base Address' if SET_MEM_PARAM
+	default 0x68000000
+
+config EXTERNAL_RAM_SIZE
+	hex 'External SRAM SIZE' if SET_MEM_PARAM
+	default 0x00100000
+
+config FLASH_MEM_BASE
+	hex 'External FLASH Base Address' if SET_MEM_PARAM
+	default 0x64000000
+
+config FLASH_SIZE
+	hex 'External FLASH Size' if SET_MEM_PARAM
+	default 0x01000000
+
+endif
+
 config PROCESSOR_ID
 	hex 'Hard wire the processor ID'
 	default 0x00007700
-	depends on !CPU_CP15
+	depends on !(CPU_CP15 || CPU_V7M)
 	help
 	  If processor has no CP15 register, this processor ID is
 	  used instead of the auto-probing which utilizes the register.

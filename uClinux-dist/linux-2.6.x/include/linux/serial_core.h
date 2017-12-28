@@ -173,6 +173,9 @@
 /* Alter Nios II UART */
 #define PORT_JTAG_UART	87
 
+/* STM32 USART port */
+#define PORT_STMUSART	88
+
 #ifdef __KERNEL__
 
 #include <linux/compiler.h>

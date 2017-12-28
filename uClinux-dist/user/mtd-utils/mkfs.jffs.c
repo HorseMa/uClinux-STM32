@@ -3,59 +3,23 @@
  *
  * By default, builds an image that is of the same endianness as the
  * host.
- * The -a option can be used when building for a target system which 
+ * The -a option can be used when building for a target system which
  * has a different endianness than the host.
  */
 
-/* $Id: mkfs.jffs.c,v 1.11 2001/03/11 11:44:42 dwmw2 Exp $  */
+/* $Id: mkfs.jffs.c,v 1.15 2005/11/07 11:15:13 gleixner Exp $  */
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <linux/types.h>
-#include <endian.h>
+#include <stdint.h>
+#include <mtd_swab.h>
 #include <ctype.h>
-
-/* some byte swabbing stuff from include/linux/byteorder/ */
-#define swab16(x) \
-	((unsigned short)( \
-		(((unsigned short)(x) & (unsigned short)0x00ffU) << 8) | \
-		(((unsigned short)(x) & (unsigned short)0xff00U) >> 8) ))
-#define swab32(x) \
-	((unsigned long)( \
-		(((unsigned long)(x) & (unsigned long)0x000000ffUL) << 24) | \
-		(((unsigned long)(x) & (unsigned long)0x0000ff00UL) <<  8) | \
-		(((unsigned long)(x) & (unsigned long)0x00ff0000UL) >>  8) | \
-		(((unsigned long)(x) & (unsigned long)0xff000000UL) >> 24) ))
-
-#if __BYTE_ORDER == __BIG_ENDIAN
-
-#define mtd_cpu_to_be16(x) (x)
-#define mtd_cpu_to_be32(x) (x)
-#define mtd_be16_to_cpu(x) (x)
-#define mtd_be32_to_cpu(x) (x)
-#define mtd_cpu_to_le16(x) swab16(x)
-#define mtd_cpu_to_le32(x) swab32(x)
-#define mtd_le16_to_cpu(x) swab16(x)
-#define mtd_le32_to_cpu(x) swab32(x)
-
-#else
-
-#define mtd_cpu_to_be16(x) swab16(x)
-#define mtd_cpu_to_be32(x) swab32(x)
-#define mtd_be16_to_cpu(x) swab16(x)
-#define mtd_be32_to_cpu(x) swab32(x)
-#define mtd_cpu_to_le16(x) (x)
-#define mtd_cpu_to_le32(x) (x)
-#define mtd_le16_to_cpu(x) (x)
-#define mtd_le32_to_cpu(x) (x)
-
-#endif
 
 
 #define BLOCK_SIZE 1024
@@ -69,34 +33,34 @@ static int MAX_CHUNK_SIZE = 32768;
 /* How many padding bytes should be inserted between two chunks of data
    on the flash?  */
 #define JFFS_GET_PAD_BYTES(size) ((JFFS_ALIGN_SIZE                     \
-				  - ((__u32)(size) % JFFS_ALIGN_SIZE)) \
+				  - ((uint32_t)(size) % JFFS_ALIGN_SIZE)) \
 				  % JFFS_ALIGN_SIZE)
 
 
 struct jffs_raw_inode
 {
-  __u32 magic;    /* A constant magic number.  */
-  __u32 ino;      /* Inode number.  */
-  __u32 pino;     /* Parent's inode number.  */
-  __u32 version;  /* Version number.  */
-  __u32 mode;     /* file_type, mode  */
-  __u16 uid;
-  __u16 gid;
-  __u32 atime;
-  __u32 mtime;
-  __u32 ctime;
-  __u32 offset;     /* Where to begin to write.  */
-  __u32 dsize;      /* Size of the file data.  */
-  __u32 rsize;      /* How much are going to be replaced?  */
-  __u8 nsize;       /* Name length.  */
-  __u8 nlink;       /* Number of links.  */
-  __u8 spare : 6;   /* For future use.  */
-  __u8 rename : 1;  /* Is this a special rename?  */
-  __u8 deleted : 1; /* Has this file been deleted?  */
-  __u8 accurate;    /* The inode is obsolete if accurate == 0.  */
-  __u32 dchksum;    /* Checksum for the data.  */
-  __u16 nchksum;    /* Checksum for the name.  */
-  __u16 chksum;     /* Checksum for the raw_inode.  */
+  uint32_t magic;    /* A constant magic number.  */
+  uint32_t ino;      /* Inode number.  */
+  uint32_t pino;     /* Parent's inode number.  */
+  uint32_t version;  /* Version number.  */
+  uint32_t mode;     /* file_type, mode  */
+  uint16_t uid;
+  uint16_t gid;
+  uint32_t atime;
+  uint32_t mtime;
+  uint32_t ctime;
+  uint32_t offset;     /* Where to begin to write.  */
+  uint32_t dsize;      /* Size of the file data.  */
+  uint32_t rsize;      /* How much are going to be replaced?  */
+  uint8_t nsize;       /* Name length.  */
+  uint8_t nlink;       /* Number of links.  */
+  uint8_t spare : 6;   /* For future use.  */
+  uint8_t rename : 1;  /* Is this a special rename?  */
+  uint8_t deleted : 1; /* Has this file been deleted?  */
+  uint8_t accurate;    /* The inode is obsolete if accurate == 0.  */
+  uint32_t dchksum;    /* Checksum for the data.  */
+  uint16_t nchksum;    /* Checksum for the name.  */
+  uint16_t chksum;     /* Checksum for the raw_inode.  */
 };
 
 
@@ -111,14 +75,13 @@ struct jffs_file
 char *root_directory_name = NULL;
 int fs_pos = 0;
 int verbose = 0;
-int squash = 0;
 
 #define ENDIAN_HOST   0
 #define ENDIAN_BIG    1
 #define ENDIAN_LITTLE 2
 int endian = ENDIAN_HOST;
 
-static __u32 jffs_checksum(void *data, int size);
+static uint32_t jffs_checksum(void *data, int size);
 void jffs_print_trace(const char *path, int depth);
 int make_root_dir(FILE *fs, int first_ino, const char *root_dir_path,
 		  int depth);
@@ -127,11 +90,11 @@ void read_data(struct jffs_file *f, const char *path, int offset);
 int mkfs(FILE *fs, const char *path, int ino, int parent, int depth);
 
 
-static __u32
+static uint32_t
 jffs_checksum(void *data, int size)
 {
-  __u32 sum = 0;
-  __u8 *ptr = (__u8 *)data;
+  uint32_t sum = 0;
+  uint8_t *ptr = (uint8_t *)data;
 
   while (size-- > 0)
   {
@@ -216,67 +179,49 @@ jffs_print_raw_inode(struct jffs_raw_inode *raw_inode)
 	fprintf(stderr, "}\n");
 }
 
-static void write_val32(__u32 *adr, __u32 val) 
+static void write_val32(uint32_t *adr, uint32_t val)
 {
   switch(endian) {
   case ENDIAN_HOST:
     *adr = val;
     break;
   case ENDIAN_LITTLE:
-    *adr = mtd_cpu_to_le32(val);
+    *adr = cpu_to_le32(val);
     break;
   case ENDIAN_BIG:
-    *adr = mtd_cpu_to_be32(val);
+    *adr = cpu_to_be32(val);
     break;
   }
 }
 
-static void write_val16(__u16 *adr, __u16 val) 
+static void write_val16(uint16_t *adr, uint16_t val)
 {
   switch(endian) {
   case ENDIAN_HOST:
     *adr = val;
     break;
   case ENDIAN_LITTLE:
-    *adr = mtd_cpu_to_le16(val);
+    *adr = cpu_to_le16(val);
     break;
   case ENDIAN_BIG:
-    *adr = mtd_cpu_to_be16(val);
+    *adr = cpu_to_be16(val);
     break;
   }
 }
 
-static __u32 read_val32(__u32 *adr) 
+static uint32_t read_val32(uint32_t *adr)
 {
-  __u32 val = 0;
+  uint32_t val = 0;
 
   switch(endian) {
   case ENDIAN_HOST:
     val = *adr;
     break;
   case ENDIAN_LITTLE:
-    val = mtd_le32_to_cpu(*adr);
+    val = le32_to_cpu(*adr);
     break;
   case ENDIAN_BIG:
-    val = mtd_be32_to_cpu(*adr);
-    break;
-  }
-  return val;
-}
-
-static __u16 read_val16(__u16 *adr) 
-{
-  __u16 val = 0;
-
-  switch(endian) {
-  case ENDIAN_HOST:
-    val = *adr;
-    break;
-  case ENDIAN_LITTLE:
-    val = mtd_le16_to_cpu(*adr);
-    break;
-  case ENDIAN_BIG:
-    val = mtd_be16_to_cpu(*adr);
+    val = be32_to_cpu(*adr);
     break;
   }
   return val;
@@ -372,17 +317,17 @@ write_file(struct jffs_file *f, FILE *fs, struct stat st)
   {
     if (S_ISBLK(st.st_mode) || S_ISCHR(st.st_mode))
     {
-      __u16 tmp;
+      uint16_t tmp;
 
       switch(endian) {
         case ENDIAN_HOST:
           tmp = st.st_rdev;
           break;
         case ENDIAN_LITTLE:
-          tmp = mtd_cpu_to_le16(st.st_rdev);
+          tmp = cpu_to_le16(st.st_rdev);
           break;
         case ENDIAN_BIG:
-          tmp = mtd_cpu_to_be16(st.st_rdev);
+          tmp = cpu_to_be16(st.st_rdev);
           break;
       }
       fwrite((char *)&tmp, sizeof(st.st_rdev) / 4, 1, fs);
@@ -527,42 +472,6 @@ mkfs(FILE *fs, const char *path, int ino, int parent, int depth)
               filename, new_ino, parent);
     }
 
-    if (S_ISREG(st.st_mode) && st.st_size == 0)
-    {
-      char devname[32];
-      char type;
-      int major;
-      int minor;
-
-      if (sscanf(dir_entry->d_name, "@%31[-a-zA-Z0-9_+],%c,%d,%d",
-          devname, &type, &major, &minor) == 4)
-      {
-        strcpy(dir_entry->d_name, devname);
-        st.st_rdev = makedev(major, minor);
-        st.st_mode &= ~S_IFMT;
-        switch (type) {
-        case 'c':
-        case 'u':
-          st.st_mode |= S_IFCHR;
-          break;
-        case 'b':
-          st.st_mode |= S_IFBLK;
-          break;
-        case 'p':
-          st.st_mode |= S_IFIFO;
-          break;
-        default:
-          fprintf(stderr, "mkfs(): invalid special device type '%c' for file %s\n", type, filename);
-		  exit(1);
-        }
-      }
-    }
-
-    if (squash) {
-      st.st_uid = 0;
-      st.st_gid = 0;
-    }
-
     write_val32(&f.inode.magic, JFFS_MAGIC);
     write_val32(&f.inode.ino, new_ino);
     write_val32(&f.inode.pino, parent);
@@ -615,7 +524,7 @@ mkfs(FILE *fs, const char *path, int ino, int parent, int depth)
     else if (S_ISLNK(st.st_mode))
     {
       int linklen;
-      unsigned char *linkdata = (unsigned char *)malloc(1000);
+      char *linkdata = malloc(1000);
       if (!linkdata)
       {
         fprintf(stderr, "mkfs(): malloc() failed! (linkdata)\n");
@@ -630,7 +539,7 @@ mkfs(FILE *fs, const char *path, int ino, int parent, int depth)
       }
 
       write_val32(&f.inode.dsize, linklen);
-      f.data = linkdata;
+      f.data = (unsigned char *)linkdata;
       f.data[linklen] = '\0';
     }
     else if (S_ISBLK(st.st_mode) || S_ISCHR(st.st_mode))
@@ -710,7 +619,7 @@ mkfs(FILE *fs, const char *path, int ino, int parent, int depth)
 void
 usage(void)
 {
-  fprintf(stderr, "Usage: mkfs.jffs -d root_directory [-a little|big] [-e erase_size] [-o output_file] [-v[0-9]] [-q]\n");
+  fprintf(stderr, "Usage: mkfs.jffs -d root_directory [-a little|big] [-e erase_size] [-o output_file] [-v[0-9]]\n");
   fprintf(stderr, "       By default, the file system is built using the same endianness as the\n");
   fprintf(stderr, "       host.  If building for a different target, use the -a option.\n");
 }
@@ -728,7 +637,7 @@ main(int argc, char **argv)
 
   fs = stdout; /* Send constructed file system to stdout by default */
 
-  while ((ch = getopt(argc, argv, "qa:d:e:v::o:h?")) != -1) {
+  while ((ch = getopt(argc, argv, "a:d:e:v::o:h?")) != -1) {
     switch((char)ch) {
     case 'd':
       len = strlen(optarg);
@@ -774,9 +683,6 @@ main(int argc, char **argv)
       break;
     case 'e':
       MAX_CHUNK_SIZE = strtol(optarg, NULL, 0) / 2;
-      break;
-    case 'q':
-      squash = 1;
       break;
     case 'h':
     case '?':

@@ -11,6 +11,8 @@
  *  Common kernel startup code (non-paged MM)
  *
  */
+#include <asm/unified.h>
+
 #include <linux/linkage.h>
 #include <linux/init.h>
 
@@ -20,7 +22,9 @@
 #include <asm/asm-offsets.h>
 #include <asm/thread_info.h>
 #include <asm/system.h>
-#include <asm/arch/hardware.h>
+
+#define ATAG_CORE	0x54410001
+#define ATAG_CORE_SIZE	((2*4 + 3*4) >> 2)
 
 /*
  * Kernel startup entry point.
@@ -35,35 +39,47 @@
  *
  */
 	.section ".text.head", "ax"
-	.type	stext, %function
 ENTRY(stext)
-	ldr	r1, =machine_arch_type		@ find the machine type
-	msr	cpsr_c, #PSR_F_BIT | PSR_I_BIT | SVC_MODE @ ensure svc mode
-						@ and irqs disabled
-#ifndef CONFIG_CPU_CP15
-	ldr	r9, =CONFIG_PROCESSOR_ID
+#ifndef CONFIG_CPU_V7M
+ ARM(	msr	cpsr_c, #PSR_F_BIT | PSR_I_BIT | SVC_MODE ) @ ensure svc mode
+ THUMB(	mov	r9, #PSR_F_BIT | PSR_I_BIT | SVC_MODE )
+ THUMB(	msr	cpsr_c, r9 )			@ ensure svc mode
 #else
+	cpsid	i				@ disable interrupts
+#endif
+#if defined(CONFIG_CPU_CP15)
 	mrc	p15, 0, r9, c0, c0		@ get processor id
+#elif defined(CONFIG_CPU_V7M)
+	ldr	r9, =0xe000ed00			@ CPUID register address
+	ldr	r9, [r9]
+#else
+	ldr	r9, =CONFIG_PROCESSOR_ID
 #endif
 	bl	__lookup_processor_type		@ r5=procinfo r9=cpuid
 	movs	r10, r5				@ invalid processor (r5=0)?
-	beq	__error_p			@ yes, error 'p'
+	beq	__error_p				@ yes, error 'p'
 	bl	__lookup_machine_type		@ r5=machinfo
 	movs	r8, r5				@ invalid machine (r5=0)?
 	beq	__error_a			@ yes, error 'a'
-
+#if !defined(CONFIG_CPU_V7M)
 	ldr	r13, __switch_data		@ address to jump to after
 						@ the initialization is done
-	adr	lr, __after_proc_init		@ return (PIC) address
-	add	pc, r10, #PROCINFO_INITFUNC
+#endif
+	badr	lr, __after_proc_init		@ return (PIC) address
+ ARM(	add	pc, r10, #PROCINFO_INITFUNC	)
+ THUMB(	add	r12, r10, #PROCINFO_INITFUNC	)
+ THUMB(	mov	pc, r12				)
+ENDPROC(stext)
 
 /*
  * Set the Control Register and Read the process ID.
  */
-	.type	__after_proc_init, %function
 __after_proc_init:
 #ifdef CONFIG_CPU_CP15
-	mrc	p15, 0, r0, c1, c0, 0		@ read control reg
+	/*
+	 * CP15 system control register value returned in r0 from
+	 * the CPU init function.
+	 */
 #ifdef CONFIG_ALIGNMENT_TRAP
 	orr	r0, r0, #CR_A
 #else
@@ -85,9 +101,18 @@ __after_proc_init:
 #endif
 	mcr	p15, 0, r0, c1, c0, 0		@ write control reg
 #endif /* CONFIG_CPU_CP15 */
+										
+#if defined(CONFIG_CPU_V7M)
+
+	ldr	pc,__switch_data
+	
+#else	
 
 	mov	pc, r13				@ clear the BSS and jump
 						@ to start_kernel
+#endif
+
+ENDPROC(__after_proc_init)
 	.ltorg
 
 #include "head-common.S"

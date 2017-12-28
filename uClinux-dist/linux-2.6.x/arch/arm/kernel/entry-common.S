@@ -8,6 +8,8 @@
  * published by the Free Software Foundation.
  */
 
+#include <asm/unified.h>
+
 #include <asm/unistd.h>
 #include <asm/arch/entry-macro.S>
 
@@ -30,19 +32,37 @@ ret_fast_syscall:
 	arch_ret_to_user r1, lr
 
 	@ fast_restore_user_regs
+#ifdef CONFIG_CPU_V7M
+	enable_irq
+	add	sp, #S_OFF
+	v7m_exception_slow_exit ret_r0=1
+#else
+ THUMB(	mov	r2, sp			     )
+ THUMB(	load_user_sp_lr r2, r3, S_OFF + S_SP )	@ calling sp, lr
 	ldr	r1, [sp, #S_OFF + S_PSR]	@ get calling cpsr
-	ldr	lr, [sp, #S_OFF + S_PC]!	@ get pc
+ ARM(	ldr	lr, [sp, #S_OFF + S_PC]!     )	@ get pc
+ THUMB(	ldr	lr, [sp, #S_OFF + S_PC]	     )	@ get pc
+ THUMB(	add	sp, sp, #S_OFF + S_R1	     )
 	msr	spsr_cxsf, r1			@ save in spsr_svc
-	ldmdb	sp, {r1 - lr}^			@ get calling r1 - lr
+ ARM(	ldmdb	sp, {r1 - lr}^		     )	@ get calling r1 - lr
+ THUMB(	ldmia	sp, {r1 - r12}		     )	@ get calling r1 - r12
 	mov	r0, r0
-	add	sp, sp, #S_FRAME_SIZE - S_PC
+ ARM(	add	sp, sp, #S_FRAME_SIZE - S_PC )
+ THUMB(	add	sp, sp, #S_FRAME_SIZE - S_R1 )
 	movs	pc, lr				@ return & move spsr_svc into cpsr
+#endif
 
 /*
  * Ok, we need to do extra processing, enter the slow path.
  */
 fast_work_pending:
+#ifdef CONFIG_CPU_V7M
+	@ S_R0 not at the beginning of struct pt_regs
+	add	sp, #S_OFF
+	str	r0, [sp, #S_R0]			@ returned r0
+#else
 	str	r0, [sp, #S_R0+S_OFF]!		@ returned r0
+#endif
 work_pending:
 	tst	r1, #_TIF_NEED_RESCHED
 	bne	work_resched
@@ -69,13 +89,23 @@ no_work_pending:
 	arch_ret_to_user r1, lr
 
 	@ slow_restore_user_regs
+#ifdef CONFIG_CPU_V7M
+	v7m_exception_slow_exit ret_r0=0
+#else
+ THUMB(	mov	r2, sp			     )
+ THUMB(	load_user_sp_lr r2, r3, S_SP	     )	@ calling sp, lr
 	ldr	r1, [sp, #S_PSR]		@ get calling cpsr
-	ldr	lr, [sp, #S_PC]!		@ get pc
+ ARM(	ldr	lr, [sp, #S_PC]!	     )	@ get pc
+ THUMB(	ldr	lr, [sp, #S_PC]		     )	@ get pc
 	msr	spsr_cxsf, r1			@ save in spsr_svc
-	ldmdb	sp, {r0 - lr}^			@ get calling r0 - lr
+ ARM(	ldmdb	sp, {r0 - lr}^		     )	@ get calling r0 - lr
+ THUMB(	ldmia	sp, {r0 - r12}		     )	@ get calling r0 - r12
 	mov	r0, r0
-	add	sp, sp, #S_FRAME_SIZE - S_PC
+ ARM(	add	sp, sp, #S_FRAME_SIZE - S_PC )
+ THUMB(	add	sp, sp, #S_FRAME_SIZE	     )
 	movs	pc, lr				@ return & move spsr_svc into cpsr
+#endif
+ENDPROC(ret_to_user)
 
 /*
  * This is how we return from a fork.
@@ -91,7 +121,7 @@ ENTRY(ret_from_fork)
 	mov	r0, #1				@ trace exit [IP = 1]
 	bl	syscall_trace
 	b	ret_slow_syscall
-	
+ENDPROC(ret_from_fork)
 
 	.equ NR_syscalls,0
 #define CALL(x) .equ NR_syscalls,NR_syscalls+1
@@ -120,14 +150,20 @@ ENTRY(ret_from_fork)
 
 	.align	5
 ENTRY(vector_swi)
+#ifdef CONFIG_CPU_V7M
+	v7m_exception_entry
+#else
 	sub	sp, sp, #S_FRAME_SIZE
 	stmia	sp, {r0 - r12}			@ Calling r0 - r12
-	add	r8, sp, #S_PC
-	stmdb	r8, {sp, lr}^			@ Calling sp, lr
+ ARM(	add	r8, sp, #S_PC		)
+ ARM(	stmdb	r8, {sp, lr}^		)	@ Calling sp, lr
+ THUMB(	mov	r8, sp			)
+ THUMB(	store_user_sp_lr r8, r10, S_SP	)	@ calling sp, lr
 	mrs	r8, spsr			@ called from non-FIQ mode, so ok.
 	str	lr, [sp, #S_PC]			@ Save calling PC
 	str	r8, [sp, #S_PSR]		@ Save CPSR
 	str	r0, [sp, #S_OLD_R0]		@ Save OLD_R0
+#endif
 	zero_fp
 
 	/*
@@ -142,6 +178,7 @@ ENTRY(vector_swi)
 	 */
 #ifdef CONFIG_ARM_THUMB
 	tst	r8, #PSR_T_BIT
+	ite	ne
 	movne	r10, #0				@ no thumb OABI emulation
 	ldreq	r10, [lr, #-4]			@ get SWI instruction
 #else
@@ -197,6 +234,7 @@ ENTRY(vector_swi)
 	 * get the old ABI syscall table address.
 	 */
 	bics	r10, r10, #0xff000000
+	itt	ne
 	eorne	scno, r10, #__NR_OABI_SYSCALL_BASE
 	ldrne	tbl, =sys_oabi_call_table
 #elif !defined(CONFIG_AEABI)
@@ -209,7 +247,8 @@ ENTRY(vector_swi)
 	bne	__sys_trace
 
 	cmp	scno, #NR_syscalls		@ check upper syscall limit
-	adr	lr, ret_fast_syscall		@ return address
+	badr	lr, ret_fast_syscall		@ return address
+	it	cc
 	ldrcc	pc, [tbl, scno, lsl #2]		@ call sys_* routine
 
 	add	r1, sp, #S_OFF
@@ -218,6 +257,7 @@ ENTRY(vector_swi)
 	eor	r0, scno, #__NR_SYSCALL_BASE	@ put OS number back
 	bcs	arm_syscall	
 	b	sys_ni_syscall			@ not private func
+ENDPROC(vector_swi)
 
 	/*
 	 * This is the really slow path.  We're going to be doing
@@ -229,16 +269,23 @@ __sys_trace:
 	mov	r0, #0				@ trace entry [IP = 0]
 	bl	syscall_trace
 
-	adr	lr, __sys_trace_return		@ return address
+	badr	lr, __sys_trace_return		@ return address
 	mov	scno, r0			@ syscall number (possibly new)
-	add	r1, sp, #S_R0 + S_OFF		@ pointer to regs
+	add	r1, sp, #S_OFF			@ pointer to regs
 	cmp	scno, #NR_syscalls		@ check upper syscall limit
+	itt	cc
 	ldmccia	r1, {r0 - r3}			@ have to reload r0 - r3
 	ldrcc	pc, [tbl, scno, lsl #2]		@ call sys_* routine
 	b	2b
 
 __sys_trace_return:
+#ifdef CONFIG_CPU_V7M
+	@ S_R0 not at the beginning of struct pt_regs
+	add	sp, #S_OFF
+	str	r0, [sp, #S_R0]			@ save returned r0
+#else
 	str	r0, [sp, #S_R0 + S_OFF]!	@ save returned r0
+#endif
 	mov	r2, scno
 	mov	r1, sp
 	mov	r0, #1				@ trace exit [IP = 1]
@@ -275,65 +322,81 @@ ENTRY(sys_call_table)
  */
 @ r0 = syscall number
 @ r8 = syscall table
-		.type	sys_syscall, #function
 sys_syscall:
 		bic	scno, r0, #__NR_OABI_SYSCALL_BASE
 		cmp	scno, #__NR_syscall - __NR_SYSCALL_BASE
+		it	ne
 		cmpne	scno, #NR_syscalls	@ check range
+		itttt	lo
 		stmloia	sp, {r5, r6}		@ shuffle args
 		movlo	r0, r1
 		movlo	r1, r2
 		movlo	r2, r3
+		itt	lo
 		movlo	r3, r4
 		ldrlo	pc, [tbl, scno, lsl #2]
 		b	sys_ni_syscall
+ENDPROC(sys_syscall)
 
 sys_fork_wrapper:
 		add	r0, sp, #S_OFF
 		b	sys_fork
+ENDPROC(sys_fork_wrapper)
 
 sys_vfork_wrapper:
 		add	r0, sp, #S_OFF
 		b	sys_vfork
+ENDPROC(sys_vfork_wrapper)
 
 sys_execve_wrapper:
 		add	r3, sp, #S_OFF
 		b	sys_execve
+ENDPROC(sys_execve_wrapper)
 
 sys_clone_wrapper:
 		add	ip, sp, #S_OFF
 		str	ip, [sp, #4]
 		b	sys_clone
+ENDPROC(sys_clone_wrapper)
 
 sys_sigsuspend_wrapper:
 		add	r3, sp, #S_OFF
 		b	sys_sigsuspend
+ENDPROC(sys_sigsuspend_wrapper)
 
 sys_rt_sigsuspend_wrapper:
 		add	r2, sp, #S_OFF
 		b	sys_rt_sigsuspend
+ENDPROC(sys_rt_sigsuspend_wrapper)
 
 sys_sigreturn_wrapper:
 		add	r0, sp, #S_OFF
 		b	sys_sigreturn
+ENDPROC(sys_sigreturn_wrapper)
 
 sys_rt_sigreturn_wrapper:
 		add	r0, sp, #S_OFF
 		b	sys_rt_sigreturn
+ENDPROC(sys_rt_sigreturn_wrapper)
 
 sys_sigaltstack_wrapper:
 		ldr	r2, [sp, #S_OFF + S_SP]
 		b	do_sigaltstack
+ENDPROC(sys_sigaltstack_wrapper)
 
 sys_statfs64_wrapper:
 		teq	r1, #88
+		it	eq
 		moveq	r1, #84
 		b	sys_statfs64
+ENDPROC(sys_statfs64_wrapper)
 
 sys_fstatfs64_wrapper:
 		teq	r1, #88
+		it	eq
 		moveq	r1, #84
 		b	sys_fstatfs64
+ENDPROC(sys_fstatfs64_wrapper)
 
 /*
  * Note: off_4k (r5) is always units of 4K.  If we can't do the requested
@@ -342,6 +405,7 @@ sys_fstatfs64_wrapper:
 sys_mmap2:
 #if PAGE_SHIFT > 12
 		tst	r5, #PGOFF_MASK
+		ittt	eq
 		moveq	r5, r5, lsr #PAGE_SHIFT - 12
 		streq	r5, [sp, #4]
 		beq	do_mmap2
@@ -351,11 +415,16 @@ sys_mmap2:
 		str	r5, [sp, #4]
 		b	do_mmap2
 #endif
+ENDPROC(sys_mmap2)
 
 ENTRY(pabort_ifar)
+#ifndef CONFIG_CPU_V7M
 		mrc	p15, 0, r0, cr6, cr0, 2
+#endif
+ENDPROC(pabort_ifar)
 ENTRY(pabort_noifar)
 		mov	pc, lr
+ENDPROC(pabort_noifar)
 
 #ifdef CONFIG_OABI_COMPAT
 
@@ -366,26 +435,31 @@ ENTRY(pabort_noifar)
 sys_oabi_pread64:
 		stmia	sp, {r3, r4}
 		b	sys_pread64
+ENDPROC(sys_oabi_pread64)
 
 sys_oabi_pwrite64:
 		stmia	sp, {r3, r4}
 		b	sys_pwrite64
+ENDPROC(sys_oabi_pwrite64)
 
 sys_oabi_truncate64:
 		mov	r3, r2
 		mov	r2, r1
 		b	sys_truncate64
+ENDPROC(sys_oabi_truncate64)
 
 sys_oabi_ftruncate64:
 		mov	r3, r2
 		mov	r2, r1
 		b	sys_ftruncate64
+ENDPROC(sys_oabi_ftruncate64)
 
 sys_oabi_readahead:
 		str	r3, [sp]
 		mov	r3, r2
 		mov	r2, r1
 		b	sys_readahead
+ENDPROC(sys_oabi_readahead)
 
 /*
  * Let's declare a second syscall table for old ABI binaries

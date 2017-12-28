@@ -9,6 +9,8 @@
  *
  *  This is the "shell" of the ARMv7 processor support.
  */
+#include <asm/unified.h>
+
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/asm-offsets.h>
@@ -25,9 +27,11 @@
 
 ENTRY(cpu_v7_proc_init)
 	mov	pc, lr
+ENDPROC(cpu_v7_proc_init)
 
 ENTRY(cpu_v7_proc_fin)
 	mov	pc, lr
+ENDPROC(cpu_v7_proc_fin)
 
 /*
  *	cpu_v7_reset(loc)
@@ -43,6 +47,7 @@ ENTRY(cpu_v7_proc_fin)
 	.align	5
 ENTRY(cpu_v7_reset)
 	mov	pc, r0
+ENDPROC(cpu_v7_reset)
 
 /*
  *	cpu_v7_do_idle()
@@ -52,8 +57,9 @@ ENTRY(cpu_v7_reset)
  *	IRQs are already disabled.
  */
 ENTRY(cpu_v7_do_idle)
-	.long	0xe320f003			@ ARM V7 WFI instruction
+	wfi
 	mov	pc, lr
+ENDPROC(cpu_v7_do_idle)
 
 ENTRY(cpu_v7_dcache_clean_area)
 #ifndef TLB_CAN_READ_FROM_L1_CACHE
@@ -65,6 +71,7 @@ ENTRY(cpu_v7_dcache_clean_area)
 	dsb
 #endif
 	mov	pc, lr
+ENDPROC(cpu_v7_dcache_clean_area)
 
 /*
  *	cpu_v7_switch_mm(pgd_phys, tsk)
@@ -89,6 +96,7 @@ ENTRY(cpu_v7_switch_mm)
 	isb
 #endif
 	mov	pc, lr
+ENDPROC(cpu_v7_switch_mm)
 
 /*
  *	cpu_v7_set_pte_ext(ptep, pte)
@@ -112,7 +120,9 @@ ENTRY(cpu_v7_switch_mm)
  */
 ENTRY(cpu_v7_set_pte_ext)
 #ifdef CONFIG_MMU
-	str	r1, [r0], #-2048		@ linux version
+ ARM(	str	r1, [r0], #-2048	)	@ linux version
+ THUMB(	str	r1, [r0]		)	@ linux version
+ THUMB(	sub	r0, r0, #2048		)
 
 	bic	r3, r1, #0x000003f0
 	bic	r3, r3, #0x00000003
@@ -120,27 +130,33 @@ ENTRY(cpu_v7_set_pte_ext)
 	orr	r3, r3, #PTE_EXT_AP0 | 2
 
 	tst	r1, #L_PTE_WRITE
+	ite	ne
 	tstne	r1, #L_PTE_DIRTY
 	orreq	r3, r3, #PTE_EXT_APX
 
 	tst	r1, #L_PTE_USER
+	ittt	ne
 	orrne	r3, r3, #PTE_EXT_AP1
 	tstne	r3, #PTE_EXT_APX
 	bicne	r3, r3, #PTE_EXT_APX | PTE_EXT_AP0
 
 	tst	r1, #L_PTE_YOUNG
+	it	eq
 	biceq	r3, r3, #PTE_EXT_APX | PTE_EXT_AP_MASK
 
 	tst	r1, #L_PTE_EXEC
+	it	eq
 	orreq	r3, r3, #PTE_EXT_XN
 
 	tst	r1, #L_PTE_PRESENT
+	it	eq
 	moveq	r3, #0
 
 	str	r3, [r0]
 	mcr	p15, 0, r0, c7, c10, 1		@ flush_pte
 #endif
 	mov	pc, lr
+ENDPROC(cpu_v7_set_pte_ext)
 
 cpu_v7_name:
 	.ascii	"ARMv7 Processor"
@@ -188,16 +204,19 @@ __v7_setup:
 	bic	r0, r0, r5			@ clear bits them
 	orr	r0, r0, r6			@ set them
 	mov	pc, lr				@ return to head.S:__ret
+ENDPROC(__v7_setup)
 
+	.align	2
 	/*
-	 *         V X F   I D LR
-	 * .... ...E PUI. .T.T 4RVI ZFRS BLDP WCAM
+	 *  T      V X F   I D LR
+	 * .E.. ...E PUI. .T.T 4RVI ZFRS BLDP WCAM
 	 * rrrr rrrx xxx0 0101 xxxx xxxx x111 xxxx < forced
 	 *         0 110       0011 1.00 .111 1101 < we want
 	 */
 	.type	v7_crval, #object
 v7_crval:
-	crval	clear=0x0120c302, mmuset=0x00c0387d, ucset=0x00c0187c
+ ARM(	crval	clear=0x0120c302, mmuset=0x00c0387d, ucset=0x00c0187c	)
+ THUMB(	crval	clear=0x0120c302, mmuset=0x40c0387d, ucset=0x40c0187c	)
 
 __v7_setup_stack:
 	.space	4 * 11				@ 11 registers

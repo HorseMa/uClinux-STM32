@@ -10,7 +10,6 @@
  *  This header file describes the interface between the generic DMA handler
  *  (dma.c) and the architecture-specific DMA backends (dma-*.c)
  */
-
 struct dma_struct;
 typedef struct dma_struct dma_t;
 

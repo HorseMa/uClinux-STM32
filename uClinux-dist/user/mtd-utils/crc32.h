@@ -1,16 +1,16 @@
 #ifndef CRC32_H
 #define CRC32_H
 
-/* $Id: crc32.h,v 1.3 2001/02/26 14:44:37 dwmw2 Exp $ */
+/* $Id: crc32.h,v 1.6 2005/11/07 11:15:09 gleixner Exp $ */
 
-#include <linux/types.h>
+#include <stdint.h>
 
-extern const __u32 crc32_table[256];
+extern const uint32_t crc32_table[256];
 
 /* Return a 32-bit CRC of the contents of the buffer. */
 
-static inline __u32 
-crc32(__u32 val, const void *ss, int len)
+static inline uint32_t
+crc32(uint32_t val, const void *ss, int len)
 {
 	const unsigned char *s = ss;
         while (--len >= 0)

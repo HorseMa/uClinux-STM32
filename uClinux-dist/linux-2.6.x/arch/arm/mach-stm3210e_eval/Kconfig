@@ -1,0 +1,10 @@
+menu "STMicroelectronics, boards"
+
+config MACH_STM3210E_EVAL
+	bool "Supports for STM3210E-EVAL eval board."
+	default y
+	select ARM_NVIC
+	help
+	  Include support for the STMicroelectronic STM3210E-EVAL board.
+
+endmenu

@@ -2800,6 +2800,30 @@ endmenu
 
 menu "Miscellaneous Applications"
 
+menu "STM3210E-EVAL Demo(s)"
+
+config USER_HELLO
+	bool "Basic Hello World demo."
+	help
+	  this demo allow to print some text to the screen.
+
+config USER_LED_SHOW
+	bool "Led Show demo."
+	help
+	  this demo allow to controle the 4 leds on the STM3210E-EVAL boared.
+	  
+config USER_TOGGLE_GPIO
+	bool "Toggle gpio demo."
+	help
+	  this demo allow to Toggle one pin one the port F GPIO on the STM3210E-EVAL boared.
+	  
+config USER_SHOWLOGO
+	bool "Show Logo demo."
+	help
+	  this demo display any 16 bits bmp file from the file system to the LCD on the STM3210E-EVAL boared.
+
+endmenu
+
 config USER_P7ZIP_7ZA
 	bool "7za"
 	help
