@@ -39,9 +39,6 @@
 /* os is bsd flavor */
 #undef C_BSD
 
-/* os is cygwin */
-#undef C_CYGWIN
-
 /* os is darwin */
 #undef C_DARWIN
 
@@ -84,6 +81,9 @@
 /* "build unrar code" */
 #undef ENABLE_UNRAR
 
+/* whether _XOPEN_SOURCE needs to be defined for fd passing to work */
+#undef FDPASS_NEED_XOPEN
+
 /* file i/o buffer size */
 #undef FILEBUFF
 
@@ -96,9 +96,6 @@
 /* use "Cache-Control: no-cache" in freshclam */
 #undef FRESHCLAM_NO_CACHE
 
-/* access rights in msghdr */
-#undef HAVE_ACCRIGHTS_IN_MSGHDR
-
 /* attrib aligned */
 #undef HAVE_ATTRIB_ALIGNED
 
@@ -107,6 +104,9 @@
 
 /* have bzip2 */
 #undef HAVE_BZLIB_H
+
+/* Enable 'check' unit tests */
+#undef HAVE_CHECK
 
 /* ancillary data style fd pass */
 #undef HAVE_CONTROL_IN_MSGHDR
@@ -123,6 +123,9 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
+/* have working file descriptor passing support */
+#undef HAVE_FD_PASSING
+
 /* Define to 1 if fseeko (and presumably ftello) exists and is declared. */
 #undef HAVE_FSEEKO
 
@@ -134,9 +137,6 @@
 
 /* gethostbyname_r takes 6 arguments */
 #undef HAVE_GETHOSTBYNAME_R_6
-
-/* Define to 1 if you have the `getpagesize' function. */
-#undef HAVE_GETPAGESIZE
 
 /* Define to 1 if you have the <grp.h> header file. */
 #undef HAVE_GRP_H
@@ -165,8 +165,14 @@
 /* Define to 1 if you have the <libmilter/mfapi.h> header file. */
 #undef HAVE_LIBMILTER_MFAPI_H
 
+/* Define to 1 if you have the `z' library (-lz). */
+#undef HAVE_LIBZ
+
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
+
+/* Define to 1 if -lresolv provides thread safe API's like res_nquery */
+#undef HAVE_LRESOLV_R
 
 /* Define to 1 if you have the <malloc.h> header file. */
 #undef HAVE_MALLOC_H
@@ -180,7 +186,8 @@
 /* Define to 1 if you have the `mkstemp' function. */
 #undef HAVE_MKSTEMP
 
-/* Define to 1 if you have a working `mmap' system call. */
+/* Define to 1 if you have a working `mmap' system call that supports
+   MAP_PRIVATE. */
 #undef HAVE_MMAP
 
 /* Define to 1 if you have the <ndir.h> header file. */
@@ -197,6 +204,9 @@
 
 /* "pragma pack hppa/hp-ux style" */
 #undef HAVE_PRAGMA_PACK_HPPA
+
+/* Define to 1 if you have the `pthread_yield' function. */
+#undef HAVE_PTHREAD_YIELD
 
 /* Define to 1 if you have the <pwd.h> header file. */
 #undef HAVE_PWD_H
@@ -215,6 +225,9 @@
 
 /* Define signed right shift implementation */
 #undef HAVE_SAR
+
+/* Define to 1 if you have the `sched_yield' function. */
+#undef HAVE_SCHED_YIELD
 
 /* Define to 1 if you have the `sendmsg' function. */
 #undef HAVE_SENDMSG
@@ -297,9 +310,6 @@
 /* zlib installed */
 #undef HAVE_ZLIB_H
 
-/* Early Linux doesn't set cmsg fields */
-#undef INCOMPLETE_CMSG
-
 /* bzip funtions do not have bz2 prefix */
 #undef NOBZ2PREFIX
 
@@ -356,6 +366,9 @@
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
+
+/* Use IPv6 aware code */
+#undef SUPPORT_IPv6
 
 /* use syslog */
 #undef USE_SYSLOG

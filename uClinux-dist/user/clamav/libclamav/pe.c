@@ -55,6 +55,7 @@
 #include "upack.h"
 #include "matcher.h"
 #include "matcher-bm.h"
+#include "disasm.h"
 
 #ifndef	O_BINARY
 #define	O_BINARY	0
@@ -74,6 +75,8 @@
 #define UPX_NRV2B "\x11\xdb\x11\xc9\x01\xdb\x75\x07\x8b\x1e\x83\xee\xfc\x11\xdb\x11\xc9\x11\xc9\x75\x20\x41\x01\xdb"
 #define UPX_NRV2D "\x83\xf0\xff\x74\x78\xd1\xf8\x89\xc5\xeb\x0b\x01\xdb\x75\x07\x8b\x1e\x83\xee\xfc\x11\xdb\x11\xc9"
 #define UPX_NRV2E "\xeb\x52\x31\xc9\x83\xe8\x03\x72\x11\xc1\xe0\x08\x8a\x06\x46\x83\xf0\xff\x74\x75\xd1\xf8\x89\xc5"
+#define UPX_LZMA1 "\x56\x83\xc3\x04\x53\x50\xc7\x03\x03\x00\x02\x00\x90\x90\x90\x55\x57\x56\x53\x83"
+#define UPX_LZMA2 "\x56\x83\xc3\x04\x53\x50\xc7\x03\x03\x00\x02\x00\x90\x90\x90\x90\x90\x55\x57\x56"
 
 #define EC32(x) le32_to_host(x) /* Convert little endian to host */
 #define EC16(x) le16_to_host(x)
@@ -99,13 +102,23 @@ if((ndesc = open(tempfile, O_RDWR|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU)) < 0) { \
     return CL_EIO; \
 }
 
-#define CLI_TMPUNLK() if(!cli_leavetemps_flag) unlink(tempfile)
+#define CLI_TMPUNLK() if(!cli_leavetemps_flag) { \
+    if (cli_unlink(tempfile)) { \
+	free(tempfile); \
+	return CL_EIO; \
+    } \
+}
 
 #define FSGCASE(NAME,FREESEC) \
     case 0: /* Unpacked and NOT rebuilt */ \
 	cli_dbgmsg(NAME": Successfully decompressed\n"); \
 	close(ndesc); \
-	unlink(tempfile); \
+	if (cli_unlink(tempfile)) { \
+	    free(exe_sections); \
+	    free(tempfile); \
+	    FREESEC; \
+	    return CL_EIO; \
+	} \
 	free(tempfile); \
 	FREESEC; \
 	found = 0; \
@@ -116,7 +129,11 @@ if((ndesc = open(tempfile, O_RDWR|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU)) < 0) { \
     case 2: \
 	free(spinned); \
 	close(ndesc); \
-	unlink(tempfile); \
+	if (cli_unlink(tempfile)) { \
+	    free(exe_sections); \
+	    free(tempfile); \
+	    return CL_EIO; \
+	} \
 	cli_dbgmsg("PESpin: Size exceeded\n"); \
 	free(tempfile); \
 	break; \
@@ -130,7 +147,6 @@ if((ndesc = open(tempfile, O_RDWR|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU)) < 0) { \
 	    cli_dbgmsg(NAME": Unpacked and rebuilt executable\n"); \
 	cli_multifree FREEME; \
         free(exe_sections); \
-	fsync(ndesc); \
 	lseek(ndesc, 0, SEEK_SET); \
 	cli_dbgmsg("***** Scanning rebuilt PE file *****\n"); \
 	if(cli_magic_scandesc(ndesc, ctx) == CL_VIRUS) { \
@@ -149,7 +165,12 @@ FSGSTUFF; \
     default: \
 	cli_dbgmsg(NAME": Unpacking failed\n"); \
 	close(ndesc); \
-	unlink(tempfile); \
+	if (cli_unlink(tempfile)) { \
+	    free(exe_sections); \
+	    free(tempfile); \
+	    cli_multifree FREEME; \
+	    return CL_EIO; \
+	} \
 	cli_multifree FREEME; \
         free(tempfile); \
     }
@@ -236,7 +257,7 @@ static int cli_ddump(int desc, int offset, int size, const char *file) {
 		cli_dbgmsg("Can't write to file\n");
 		lseek(desc, pos, SEEK_SET);
 		close(ndesc);
-		unlink(file);
+		cli_unlink(file);
 		return -1;
 	    }
 	    break;
@@ -245,7 +266,7 @@ static int cli_ddump(int desc, int offset, int size, const char *file) {
 		cli_dbgmsg("Can't write to file\n");
 		lseek(desc, pos, SEEK_SET);
 		close(ndesc);
-		unlink(file);
+		cli_unlink(file);
 		return -1;
 	    }
 	}
@@ -873,6 +894,18 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 
     lseek(desc, ep, SEEK_SET);
     epsize = cli_readn(desc, epbuff, 4096);
+
+    CLI_UNPTEMP("DISASM",(exe_sections,0));
+    disasmbuf(epbuff, epsize, ndesc);
+    lseek(ndesc, 0, SEEK_SET);
+    ret = cli_scandesc(ndesc, ctx, CL_TYPE_PE_DISASM, 1, NULL, AC_SCAN_VIR);
+    close(ndesc);
+    CLI_TMPUNLK();
+    free(tempfile);
+    if(ret == CL_VIRUS) {
+	free(exe_sections);
+	return ret;
+    }
 
     /* Attempt to detect some popular polymorphic viruses */
 
@@ -1712,6 +1745,16 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	    }
 	}
 
+	if(cli_memstr(UPX_LZMA2, 20, epbuff + 0x2f, 20)) {
+	  uint32_t strictdsize=cli_readint32(epbuff+0x21);
+	  if(strictdsize<=dsize)
+	    upx_success = upx_inflatelzma(src, ssize, dest, &strictdsize, exe_sections[i].rva, exe_sections[i + 1].rva, vep) >=0;
+	} else if (cli_memstr(UPX_LZMA1, 20, epbuff + 0x39, 20)) {
+	  uint32_t strictdsize=cli_readint32(epbuff+0x2b);
+	  if(strictdsize<=dsize)
+	    upx_success = upx_inflatelzma(src, ssize, dest, &strictdsize, exe_sections[i].rva, exe_sections[i + 1].rva, vep) >=0;
+	}
+
 	if(!upx_success) {
 	    cli_dbgmsg("UPX: All decompressors failed\n");
 	    free(src);
@@ -1734,7 +1777,6 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	}
 
 	free(dest);
-	fsync(ndesc);
 	lseek(ndesc, 0, SEEK_SET);
 
 	if(cli_leavetemps_flag)

@@ -95,6 +95,7 @@ static void *work_queue_pop(work_queue_t *work_q)
 		work_q->tail = NULL;
 	}
 	free(work_item);
+	work_q->item_count--;
 	return data;
 }
 
@@ -163,7 +164,12 @@ threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void
 	threadpool->idle_timeout = idle_timeout;
 	threadpool->handler = handler;
 	
-	pthread_mutex_init(&(threadpool->pool_mutex), NULL);
+	if(pthread_mutex_init(&(threadpool->pool_mutex), NULL)) {
+		free(threadpool->queue);
+		free(threadpool);
+		return NULL;
+	}
+
 	if (pthread_cond_init(&(threadpool->pool_cond), NULL) != 0) {
 		pthread_mutex_destroy(&(threadpool->pool_mutex));
 		free(threadpool->queue);
@@ -220,7 +226,6 @@ static void *thrmgr_worker(void *arg)
 	/* loop looking for work */
 	for (;;) {
 		if (pthread_mutex_lock(&(threadpool->pool_mutex)) != 0) {
-			/* Fatal error */
 			logg("!Fatal: mutex lock failed\n");
 			exit(-2);
 		}
@@ -242,9 +247,8 @@ static void *thrmgr_worker(void *arg)
 		if (threadpool->state == POOL_EXIT) {
 			must_exit = TRUE;
 		}
-		
+
 		if (pthread_mutex_unlock(&(threadpool->pool_mutex)) != 0) {
-			/* Fatal error */
 			logg("!Fatal: mutex unlock failed\n");
 			exit(-2);
 		}
@@ -289,7 +293,6 @@ int thrmgr_dispatch(threadpool_t *threadpool, void *user_data)
 	if (threadpool->state != POOL_VALID) {
 		if (pthread_mutex_unlock(&(threadpool->pool_mutex)) != 0) {
 			logg("!Mutex unlock failed\n");
-			return FALSE;
 		}
 		return FALSE;
 	}
@@ -301,7 +304,7 @@ int thrmgr_dispatch(threadpool_t *threadpool, void *user_data)
 		return FALSE;
 	}
 
-	if ((threadpool->thr_idle == 0) &&
+	if ((threadpool->thr_idle < threadpool->queue->item_count) &&
 			(threadpool->thr_alive < threadpool->thr_max)) {
 		/* Start a new thread */
 		if (pthread_create(&thr_id, &(threadpool->pool_attr),

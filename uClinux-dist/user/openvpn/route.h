@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -138,6 +138,10 @@ bool init_route_list (struct route_list *rl,
 		      in_addr_t remote_host,
 		      struct env_set *es);
 
+void route_list_add_default_gateway (struct route_list *rl,
+				     struct env_set *es,
+				     const in_addr_t addr);
+
 void add_routes (struct route_list *rl,
 		 const struct tuntap *tt,
 		 unsigned int flags,
@@ -149,6 +153,10 @@ void delete_routes (struct route_list *rl,
 		    const struct env_set *es);
 
 void setenv_routes (struct env_set *es, const struct route_list *rl);
+
+bool is_special_addr (const char *addr_str);
+
+bool get_default_gateway (in_addr_t *ip, in_addr_t *netmask);
 
 #if AUTO_USERID
 bool get_default_gateway_mac_addr (unsigned char *macaddr);
@@ -182,6 +190,15 @@ netbits_to_netmask (const int netbits)
   if (netbits > 0 && netbits <= addrlen)
     mask = ~0 << (addrlen-netbits);
   return mask;
+}
+
+static inline bool
+route_list_default_gateway_needed (const struct route_list *rl)
+{
+  if (!rl)
+    return false;
+  else
+    return !rl->spec.remote_endpoint_defined;
 }
 
 #endif

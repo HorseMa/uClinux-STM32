@@ -106,6 +106,7 @@
 #include <linux/time.h>
 #include <linux/scatterlist.h>
 #include <linux/highmem.h>
+#include <crypto/aes.h>
 
 #include <asm/processor.h>
 #include <asm/uaccess.h>
@@ -139,28 +140,25 @@ static unsigned int bytesLeft = 0;
 /*
  * Links directly into Kernel AES crypto module.
  */
-extern void rand_aes_encrypt(struct crypto_tfm *tfm, u8 *out, const u8 *in);
-extern int rand_aes_set_key(struct crypto_tfm *tfm, const u8 *in_key,
-		       unsigned int key_len);
+extern void rand_aes_encrypt(const struct crypto_aes_ctx *ctx, u8 *out,
+			  const u8 *in);
+extern int rand_aes_set_key(struct crypto_aes_ctx *ctx, const u8 *in_key,
+			 unsigned int key_len);
 
 /* 
  * Kernel block cipher for AES with 128-bit key for internal KERNEL use only
  * when using get_random_bytes(), until the crypto module has been loaded.
  */
-static struct crypto_tfm *aes_tfm_internal = NULL;
-size_t aes_tfm_internal_size = 0;
+static struct crypto_aes_ctx aes_ctx_internal;
+static int aes_ctx_internal_in_use;
 
 /* Kernel block cipher for AES with 128-bit key */
 static struct crypto_blkcipher *aes_blkcipher = NULL;
 
 /* V from "ANSI X9.31 Appendix A.2.4 Using AES" */
 static u8 seed[SEED_SIZE_BYTES];
-static unsigned char been_seeded = 0;
+static unsigned char been_seeded;
 
-/* ==================== Local function prototypes ==================== */
-static int __init rand_initialize(void);
-
-/* ==================== Exported Input functions ==================== */
 void add_input_randomness(unsigned int type, unsigned int code,
 				 unsigned int value)
 {
@@ -175,14 +173,14 @@ void add_interrupt_randomness(int irq)
 void add_disk_randomness(struct gendisk *disk)
 {
 }
-EXPORT_SYMBOL(add_disk_randomness);
-#endif /* #ifdef CONFIG_BLOCK */
+#endif
 
 /* ==================== Generation of random data ==================== */
 static void get_datetime_vector(u8 buf[SEED_SIZE_BYTES])
 {
 	struct timeval tv;
 	struct timespec ts;
+	int i;
 
 	ts = CURRENT_TIME;
 	buf[0] = (u8) (ts.tv_sec & 0xff);
@@ -195,16 +193,21 @@ static void get_datetime_vector(u8 buf[SEED_SIZE_BYTES])
 	buf[6] = (u8) ((ts.tv_nsec >> 16) & 0xff);
 	buf[7] = (u8) ((ts.tv_nsec >> 24) & 0xff);
 
-	do_gettimeofday(&tv);
-	buf[8] = (u8) (tv.tv_sec & 0xff);
-	buf[9] = (u8) ((tv.tv_sec >> 8) & 0xff);
-	buf[10] = (u8) ((tv.tv_sec >> 16) & 0xff);
-	buf[11] = (u8) ((tv.tv_sec >> 24) & 0xff);
+	if (been_seeded) {
+		do_gettimeofday(&tv);
+		buf[8] = (u8) (tv.tv_sec & 0xff);
+		buf[9] = (u8) ((tv.tv_sec >> 8) & 0xff);
+		buf[10] = (u8) ((tv.tv_sec >> 16) & 0xff);
+		buf[11] = (u8) ((tv.tv_sec >> 24) & 0xff);
 
-	buf[12] = (u8) (tv.tv_usec & 0xff);
-	buf[13] = (u8) ((tv.tv_usec >> 8) & 0xff);
-	buf[14] = (u8) ((tv.tv_usec >> 16) & 0xff);
-	buf[15] = (u8) ((tv.tv_usec >> 24) & 0xff);
+		buf[12] = (u8) (tv.tv_usec & 0xff);
+		buf[13] = (u8) ((tv.tv_usec >> 8) & 0xff);
+		buf[14] = (u8) ((tv.tv_usec >> 16) & 0xff);
+		buf[15] = (u8) ((tv.tv_usec >> 24) & 0xff);
+	} else {
+		for (i=8; i<=15; i++)
+			buf[i] = (u8) (i ^ 0x55);
+	}
 }
 
 /*
@@ -243,7 +246,7 @@ static int rand_encrypt(struct crypto_blkcipher *aes_cipher,
 
 		while (slen)
 		{
-			rand_aes_encrypt(aes_tfm_internal, dst, src);
+			rand_aes_encrypt(&aes_ctx_internal, dst, src);
 			src += AES_BLOCK_SIZE_BYTES;
 			dst += AES_BLOCK_SIZE_BYTES;
 			slen -= AES_BLOCK_SIZE_BYTES;
@@ -417,40 +420,38 @@ static void FIPS_rand_seed(const u8 *buf, size_t nbytes)
 
 static ssize_t FIPS_gen_rand_user(void __user *buf, size_t nbytes)
 {
-	size_t ret = nbytes;
-	ssize_t n;
-	u8 tmp[SEED_SIZE_BYTES];
+	ssize_t ret = 0, i;
+	__u8 tmp[SEED_SIZE_BYTES];
 
 	if (nbytes == 0)
 		return 0;
 
-	while (nbytes > 0)
-	{
+	while (nbytes) {
 		if (need_resched()) {
 			if (signal_pending(current)) {
-				if (nbytes == ret)
+				if (ret == 0)
 					ret = -ERESTARTSYS;
 				break;
 			}
 			schedule();
 		}
 
-		n = min_t(int, nbytes, sizeof(tmp));
-
-		FIPS_gen_rand_cached(tmp, n);
-
-		if (copy_to_user(buf, tmp, n))
-		{
+		i = min_t(int, nbytes, sizeof(tmp));
+		FIPS_gen_rand_cached(tmp, i);
+		if (copy_to_user(buf, tmp, i)) {
+			/* Wipe data just returned from memory */
+			memset(tmp, 0, sizeof(tmp));
 			ret = -EFAULT;
 			break;
 		}
 
-		buf += n;
-		nbytes -= n;
-	}
+		/* Wipe data just returned from memory */
+		memset(tmp, 0, sizeof(tmp));
 
-	/* Wipe random data from memory */
-	memset(tmp, 0, sizeof(tmp));
+		nbytes -= i;
+		buf += i;
+		ret += i;
+	}
 
 	return ret;
 }
@@ -480,10 +481,10 @@ static void set_initial_seed(void)
 	memset(tmp, 0, sizeof(tmp));
 }
 
-/* =============== Exported Kernel Output functions ===============
- *
+/*
  * This function is the exported kernel interface.  It returns some
- * number of very good random numbers.
+ * number of good random numbers, suitable for seeding TCP sequence
+ * numbers, etc.
  */
 void get_random_bytes(void *buf, int nbytes)
 {
@@ -499,53 +500,34 @@ void get_random_bytes(void *buf, int nbytes)
 			rand_lock_configured = 1;
 		}
 		/* Use our own tfm, as crypto module has NOT been loaded yet */
-		if (aes_tfm_internal == NULL)
+		if (!aes_ctx_internal_in_use)
 		{
 			u8 key[KEY_SIZE_BYTES];
 
 			spin_lock_irqsave(&rand_lock, flags);
-
-			/* Create our own tfm */
-			aes_tfm_internal_size = sizeof(*aes_tfm_internal) +
-					/* from crypto_ctxsize() in crypto/api.c,
-					 * 3 is the cra_alignmask from crypto/aes.c
-					 */
-					(3 & ~(crypto_tfm_ctx_alignment() - 1)) + 
-					/* size of struct aes_ctx in crypto/aes.c */
-					sizeof(int) + sizeof(u32) * 120;
-			aes_tfm_internal = (struct crypto_tfm *)kzalloc(
-										aes_tfm_internal_size,
-										GFP_KERNEL);
-
-			if (aes_tfm_internal == NULL)
-			{
-				ret = -ENOMEM;
-				goto error;
-			}
 
 			/* Set the seed */
 			set_initial_seed();
 
 			/* Set the key */
 			get_aes_key(key);
-			ret = rand_aes_set_key(aes_tfm_internal, key, sizeof(key));
+			ret = rand_aes_set_key(&aes_ctx_internal, key, sizeof(key));
 
-error:
 			spin_unlock_irqrestore(&rand_lock, flags);
 			if (ret)
 			{
 				panic("Failed to initialize RNG: %d", -ret);
 			}
+
+			aes_ctx_internal_in_use = 1;
 		}
 	}
 
 	FIPS_gen_rand_cached(buf, nbytes);
 }
-
 EXPORT_SYMBOL(get_random_bytes);
 
-/* ==================== Module initialization ==================== */
-static int __init rand_initialize(void)
+static int rand_initialize(void)
 {
 	int ret = 0;
 	u8 key[KEY_SIZE_BYTES];
@@ -588,11 +570,10 @@ static int __init rand_initialize(void)
 	}
 
 	/* No longer need internal AES crypto */
-	if (aes_tfm_internal)
+	if (aes_ctx_internal_in_use)
 	{
-		memset(aes_tfm_internal, 0, aes_tfm_internal_size);
-		kfree(aes_tfm_internal);
-		aes_tfm_internal = NULL;
+		memset(&aes_ctx_internal, 0, sizeof(aes_ctx_internal));
+		aes_ctx_internal_in_use = 0;
 	}
 
 	/* Reset cache to be empty, as we are changing RNG generator */
@@ -610,21 +591,16 @@ module_init(rand_initialize);
 
 void rand_initialize_irq(int irq)
 {
-	/* No internal state needed for external entropy sources */
-	return;
 }
 
 #ifdef CONFIG_BLOCK
 void rand_initialize_disk(struct gendisk *disk)
 {
-	/* No internal state needed for external entropy sources */
-	return;
 }
-#endif /* #ifdef CONFIG_BLOCK */
+#endif
 
-/* ==================== IOCTL functions ==================== */
-static ssize_t random_read(struct file * file, char __user * buf,
-					size_t nbytes, loff_t *ppos)
+static ssize_t
+random_read(struct file *file, char __user *buf, size_t nbytes, loff_t *ppos)
 {
 	ssize_t n;
 
@@ -639,8 +615,8 @@ static ssize_t random_read(struct file * file, char __user * buf,
 	return n;
 }
 
-static ssize_t urandom_read(struct file * file, char __user * buf,
-		      size_t nbytes, loff_t *ppos)
+static ssize_t
+urandom_read(struct file *file, char __user *buf, size_t nbytes, loff_t *ppos)
 {
 	return FIPS_gen_rand_user(buf, nbytes);
 }
@@ -651,21 +627,19 @@ static unsigned int random_poll(struct file *file, poll_table * wait)
 	return POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM;
 }
 
-static ssize_t random_write(struct file * file, const char __user * buffer,
-	     size_t count, loff_t *ppos)
+static int
+write_pool(const char __user *buffer, size_t count)
 {
-	int ret = 0;
 	size_t bytes;
 	u8 buf[SEED_SIZE_BYTES];
 	const char __user *p = buffer;
-	size_t c = count;
 
-	while (c > 0) {
-		bytes = min(c, sizeof(buf));
-
+	while (count > 0) {
+		bytes = min(count, sizeof(buf));
 		if (copy_from_user(&buf, p, bytes))
 			return -EFAULT;
-		c -= bytes;
+
+		count -= bytes;
 		p += bytes;
 
 		FIPS_rand_seed(buf, bytes);
@@ -678,7 +652,6 @@ static ssize_t random_write(struct file * file, const char __user * buffer,
 	memset(buf, 0, sizeof(buf));
 
 	if (! been_seeded) {
-		int i;
 		u32 ent32;
 
 		been_seeded = 1;
@@ -688,6 +661,22 @@ static ssize_t random_write(struct file * file, const char __user * buffer,
 		get_random_bytes(&ent32, sizeof(ent32));
 		srandom32(ent32);
 	}
+
+	return 0;
+}
+
+static ssize_t random_write(struct file *file, const char __user *buffer,
+			    size_t count, loff_t *ppos)
+{
+	size_t ret;
+	struct inode *inode = file->f_path.dentry->d_inode;
+
+	ret = write_pool(buffer, count);
+	if (ret)
+		return ret;
+
+	inode->i_mtime = current_fs_time(inode->i_sb);
+	mark_inode_dirty(inode);
 	return (ssize_t)count;
 }
 
@@ -761,8 +750,7 @@ static ssize_t FIPS_monte_carlo_test(unsigned char __user *arg)
 	return FIPS_test(arg, 10000);
 }
 
-static int random_ioctl(struct inode * inode, struct file * file,
-	     unsigned int cmd, unsigned long arg)
+static long random_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 {
 	int size, ent_count;
 	int __user *p = (int __user *)arg;
@@ -789,8 +777,7 @@ static int random_ioctl(struct inode * inode, struct file * file,
 			return -EINVAL;
 		if (get_user(size, p++))
 			return -EFAULT;
-		retval = random_write(file, (const char __user *) p,
-				      size, &file->f_pos);
+		retval = write_pool((const char __user *)p, size);
 		if (retval < 0)
 			return retval;
 		return 0;
@@ -823,13 +810,13 @@ const struct file_operations random_fops = {
 	.read  = random_read,
 	.write = random_write,
 	.poll  = random_poll,
-	.ioctl = random_ioctl,
+	.unlocked_ioctl = random_ioctl,
 };
 
 const struct file_operations urandom_fops = {
 	.read  = urandom_read,
 	.write = random_write,
-	.ioctl = random_ioctl,
+	.unlocked_ioctl = random_ioctl,
 };
 
 /***************************************************************
@@ -850,7 +837,6 @@ void generate_random_uuid(unsigned char uuid_out[16])
 	/* Set the UUID variant to DCE */
 	uuid_out[8] = (uuid_out[8] & 0x3F) | 0x80;
 }
-
 EXPORT_SYMBOL(generate_random_uuid);
 
 /********************************************************************
@@ -954,7 +940,7 @@ ctl_table random_table[] = {
 
 /********************************************************************
  *
- * Random functions for networking
+ * Random funtions for networking
  *
  ********************************************************************/
 
@@ -990,7 +976,7 @@ ctl_table random_table[] = {
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 
-static __u32 twothirdsMD4Transform (__u32 const buf[4], __u32 const in[12])
+static __u32 twothirdsMD4Transform(__u32 const buf[4], __u32 const in[12])
 {
 	__u32 a = buf[0], b = buf[1], c = buf[2], d = buf[3];
 
@@ -1129,7 +1115,6 @@ late_initcall(seqgen_init);
 __u32 secure_tcpv6_sequence_number(__be32 *saddr, __be32 *daddr,
 				   __be16 sport, __be16 dport)
 {
-	struct timeval tv;
 	__u32 seq;
 	__u32 hash[12];
 	struct keydata *keyptr = get_keyptr();
@@ -1139,14 +1124,13 @@ __u32 secure_tcpv6_sequence_number(__be32 *saddr, __be32 *daddr,
 	 */
 
 	memcpy(hash, saddr, 16);
-	hash[4]=((__force u16)sport << 16) + (__force u16)dport;
-	memcpy(&hash[5],keyptr->secret,sizeof(__u32) * 7);
+	hash[4] = ((__force u16)sport << 16) + (__force u16)dport;
+	memcpy(&hash[5], keyptr->secret, sizeof(__u32) * 7);
 
 	seq = twothirdsMD4Transform((const __u32 *)daddr, hash) & HASH_MASK;
 	seq += keyptr->count;
 
-	do_gettimeofday(&tv);
-	seq += tv.tv_usec + tv.tv_sec * 1000000;
+	seq += ktime_to_ns(ktime_get_real());
 
 	return seq;
 }
@@ -1181,7 +1165,6 @@ __u32 secure_ip_id(__be32 daddr)
 __u32 secure_tcp_sequence_number(__be32 saddr, __be32 daddr,
 				 __be16 sport, __be16 dport)
 {
-	struct timeval tv;
 	__u32 seq;
 	__u32 hash[4];
 	struct keydata *keyptr = get_keyptr();
@@ -1192,10 +1175,10 @@ __u32 secure_tcp_sequence_number(__be32 saddr, __be32 daddr,
 	 *  Note that the words are placed into the starting vector, which is
 	 *  then mixed with a partial MD4 over random data.
 	 */
-	hash[0]=(__force u32)saddr;
-	hash[1]=(__force u32)daddr;
-	hash[2]=((__force u16)sport << 16) + (__force u16)dport;
-	hash[3]=keyptr->secret[11];
+	hash[0] = (__force u32)saddr;
+	hash[1] = (__force u32)daddr;
+	hash[2] = ((__force u16)sport << 16) + (__force u16)dport;
+	hash[3] = keyptr->secret[11];
 
 	seq = half_md4_transform(hash, keyptr->secret) & HASH_MASK;
 	seq += keyptr->count;
@@ -1204,19 +1187,15 @@ __u32 secure_tcp_sequence_number(__be32 saddr, __be32 daddr,
 	 *	suggests using a 250 kHz clock.
 	 *	Further reading shows this assumes 2 Mb/s networks.
 	 *	For 10 Mb/s Ethernet, a 1 MHz clock is appropriate.
-	 *	That's funny, Linux has one built in!  Use it!
-	 *	(Networks are faster now - should this be increased?)
+	 *	For 10 Gb/s Ethernet, a 1 GHz clock should be ok, but
+	 *	we also need to limit the resolution so that the u32 seq
+	 *	overlaps less than one time per MSL (2 minutes).
+	 *	Choosing a clock of 64 ns period is OK. (period of 274 s)
 	 */
-	do_gettimeofday(&tv);
-	seq += tv.tv_usec + tv.tv_sec * 1000000;
-#if 0
-	printk(KERN_DEBUG "init_seq(%lx, %lx, %d, %d) = %d\n",
-	       saddr, daddr, sport, dport, seq);
-#endif
+	seq += ktime_to_ns(ktime_get_real()) >> 6;
+
 	return seq;
 }
-
-EXPORT_SYMBOL(secure_tcp_sequence_number);
 
 /* Generate secure starting point for ephemeral IPV4 transport port search */
 u32 secure_ipv4_port_ephemeral(__be32 saddr, __be32 daddr, __be16 dport)
@@ -1238,14 +1217,14 @@ u32 secure_ipv4_port_ephemeral(__be32 saddr, __be32 daddr, __be16 dport)
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 u32 secure_ipv6_port_ephemeral(const __be32 *saddr, const __be32 *daddr,
-		__be16 dport)
+			       __be16 dport)
 {
 	struct keydata *keyptr = get_keyptr();
 	u32 hash[12];
 
 	memcpy(hash, saddr, 16);
 	hash[4] = (__force u32)dport;
-	memcpy(&hash[5],keyptr->secret,sizeof(__u32) * 7);
+	memcpy(&hash[5], keyptr->secret, sizeof(__u32) * 7);
 
 	return twothirdsMD4Transform((const __u32 *)daddr, hash);
 }
@@ -1259,7 +1238,6 @@ u32 secure_ipv6_port_ephemeral(const __be32 *saddr, const __be32 *daddr,
 u64 secure_dccp_sequence_number(__be32 saddr, __be32 daddr,
 				__be16 sport, __be16 dport)
 {
-	struct timeval tv;
 	u64 seq;
 	__u32 hash[4];
 	struct keydata *keyptr = get_keyptr();
@@ -1272,16 +1250,11 @@ u64 secure_dccp_sequence_number(__be32 saddr, __be32 daddr,
 	seq = half_md4_transform(hash, keyptr->secret);
 	seq |= ((u64)keyptr->count) << (32 - HASH_BITS);
 
-	do_gettimeofday(&tv);
-	seq += tv.tv_usec + tv.tv_sec * 1000000;
+	seq += ktime_to_ns(ktime_get_real());
 	seq &= (1ull << 48) - 1;
-#if 0
-	printk(KERN_DEBUG "dccp init_seq(%lx, %lx, %d, %d) = %d\n",
-	       saddr, daddr, sport, dport, seq);
-#endif
+
 	return seq;
 }
-
 EXPORT_SYMBOL(secure_dccp_sequence_number);
 #endif
 
@@ -1323,4 +1296,3 @@ randomize_range(unsigned long start, unsigned long end, unsigned long len)
 		return 0;
 	return PAGE_ALIGN(get_random_int() % range + start);
 }
-

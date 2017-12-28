@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -329,8 +329,11 @@ void crypto_adjust_frame_parameters(struct frame *frame,
 				    bool packet_id,
 				    bool packet_id_long_form);
 
-void prng_init (void);
+#define NONCE_SECRET_LEN_MIN 16
+#define NONCE_SECRET_LEN_MAX 64
+void prng_init (const char *md_name, const int nonce_secret_len_parm);
 void prng_bytes (uint8_t *output, int len);
+void prng_uninit ();
 
 void test_crypto (const struct crypto_options *co, struct frame* f);
 

@@ -11,7 +11,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: crypto.c,v 1.36.2.1 2005-09-27 04:28:09 paul Exp $
+ * RCSID $Id: crypto.c,v 1.41 2005/10/06 19:41:27 mcr Exp $
  */
 
 #include <stdio.h>
@@ -21,7 +21,7 @@
 
 #include <openswan.h>
 #define HEADER_DES_LOCL_H   /* stupid trick to force prototype decl in <des.h> */
-#include <crypto/des.h>
+#include <klips-crypto/des.h>
 
 #include <errno.h>
 
@@ -34,6 +34,17 @@
 #include "crypto.h" /* requires sha1.h and md5.h */
 #include "alg_info.h"
 #include "ike_alg.h"
+
+#include "tpm/tpm.h"
+
+#include "oswcrypto.h"
+
+
+#ifdef HAVE_LIBNSS
+#include <pk11pub.h>
+#include <prmem.h>
+#include <prerror.h>
+#endif
 
 
 /* moduli and generator. */
@@ -61,8 +72,10 @@ static void do_des(u_int8_t *buf, size_t buf_len, u_int8_t *key, size_t key_size
 static struct encrypt_desc crypto_encrypter_des =
 {
     common: {name: "oakley_des_cbc",
+	     officname:         "1des",
              algo_type:         IKE_ALG_ENCRYPT,
              algo_id:           OAKLEY_DES_CBC,
+	     algo_v2id:         IKEv2_ENCR_DES,
              algo_next:         NULL, },
     enc_ctxsize:        sizeof(des_key_schedule),
     enc_blocksize:      DES_CBC_BLOCK_SIZE,
@@ -78,8 +91,10 @@ static void do_3des(u_int8_t *buf, size_t buf_len, u_int8_t *key, size_t key_siz
 static struct encrypt_desc crypto_encrypter_3des =
 { 	
     common: {name: "oakley_3des_cbc",
+	     officname:         "3des",
 	     algo_type: 	IKE_ALG_ENCRYPT,
-	     algo_id:   	OAKLEY_3DES_CBC, 
+	     algo_id:   	OAKLEY_3DES_CBC,
+	     algo_v2id:         IKEv2_ENCR_3DES,
 	     algo_next: 	NULL, },
     enc_ctxsize: 	sizeof(des_key_schedule) * 3,
     enc_blocksize: 	DES_CBC_BLOCK_SIZE, 
@@ -93,22 +108,61 @@ static struct encrypt_desc crypto_encrypter_3des =
 static struct hash_desc crypto_hasher_md5 =
 { 	
     common: {name: "oakley_md5",
+	     officname: "md5",
 	     algo_type: IKE_ALG_HASH,
 	     algo_id:   OAKLEY_MD5,
+	     algo_v2id: IKEv2_PRF_HMAC_MD5,
 	     algo_next: NULL, },
     hash_ctx_size: sizeof(MD5_CTX),
+    hash_key_size:   MD5_DIGEST_SIZE,
     hash_digest_len: MD5_DIGEST_SIZE,
     hash_init: (void (*)(void *)) osMD5Init,
     hash_update: (void (*)(void *, const u_int8_t *, size_t)) osMD5Update,
     hash_final: (void (*)(u_char *, void *)) osMD5Final,
 };
+
+static struct hash_desc crypto_integ_md5 =
+{ 	
+    common: {name: "oakley_md5",
+	     officname: "md5",
+	     algo_type: IKE_ALG_INTEG,
+	     algo_id:   OAKLEY_MD5,
+	     algo_v2id: IKEv2_AUTH_HMAC_MD5_96,
+	     algo_next: NULL, },
+    hash_ctx_size: sizeof(MD5_CTX),
+    hash_key_size:   MD5_DIGEST_SIZE,
+    hash_digest_len: MD5_DIGEST_SIZE,
+    hash_init: (void (*)(void *)) osMD5Init,
+    hash_update: (void (*)(void *, const u_int8_t *, size_t)) osMD5Update,
+    hash_final: (void (*)(u_char *, void *)) osMD5Final,
+};
+
 static struct hash_desc crypto_hasher_sha1 =
 { 	
     common: {name: "oakley_sha",
+	     officname: "sha1",
 	     algo_type: IKE_ALG_HASH,
 	     algo_id:   OAKLEY_SHA,
+	     algo_v2id: IKEv2_PRF_HMAC_SHA1,
 	     algo_next: NULL, },
     hash_ctx_size: sizeof(SHA1_CTX),
+    hash_key_size:   SHA1_DIGEST_SIZE,
+    hash_digest_len: SHA1_DIGEST_SIZE,
+    hash_init: (void (*)(void *)) SHA1Init,
+    hash_update: (void (*)(void *, const u_int8_t *, size_t)) SHA1Update,
+    hash_final: (void (*)(u_char *, void *)) SHA1Final,
+};
+
+static struct hash_desc crypto_integ_sha1 =
+{ 	
+    common: {name: "oakley_sha",
+	     officname: "sha1",
+	     algo_type: IKE_ALG_INTEG,
+	     algo_id:   OAKLEY_SHA,
+	     algo_v2id: IKEv2_AUTH_HMAC_SHA1_96,
+	     algo_next: NULL, },
+    hash_ctx_size: sizeof(SHA1_CTX),
+    hash_key_size:   SHA1_DIGEST_SIZE,
     hash_digest_len: SHA1_DIGEST_SIZE,
     hash_init: (void (*)(void *)) SHA1Init,
     hash_update: (void (*)(void *, const u_int8_t *, size_t)) SHA1Update,
@@ -181,7 +235,9 @@ init_crypto(void)
 #endif
 	    
 	    ike_alg_add((struct ike_alg *) &crypto_hasher_sha1);
+	    ike_alg_add((struct ike_alg *) &crypto_integ_sha1);
 	    ike_alg_add((struct ike_alg *) &crypto_hasher_md5);
+	    ike_alg_add((struct ike_alg *) &crypto_integ_md5);
 	}
 #endif
 }
@@ -234,14 +290,13 @@ do_des(u_int8_t *buf, size_t buf_len, u_int8_t *key, size_t key_size, u_int8_t *
 {
     des_key_schedule ks;
 
-    (void) des_set_key((des_cblock *)key, ks);
+    oswcrypto.des_set_key((des_cblock *)key, ks);
 
     passert(key_size >= DES_CBC_BLOCK_SIZE);
     key_size = DES_CBC_BLOCK_SIZE;     /* truncate */
 
-    des_ncbc_encrypt((des_cblock *)buf, (des_cblock *)buf, buf_len,
-	ks,
-	(des_cblock *)iv, enc);
+    oswcrypto.des_ncbc_encrypt((des_cblock *)buf, (des_cblock *)buf, buf_len,
+			 ks, (des_cblock *)iv, enc);
 }
 #endif
 
@@ -252,17 +307,95 @@ static void
 do_3des(u_int8_t *buf, size_t buf_len
 	, u_int8_t *key, size_t key_size, u_int8_t *iv, bool enc)
 {
-    des_key_schedule ks[3];
-
     passert(key != NULL);
     passert(key_size==(DES_CBC_BLOCK_SIZE * 3));
-    (void) des_set_key((des_cblock *)key + 0, ks[0]);
-    (void) des_set_key((des_cblock *)key + 1, ks[1]);
-    (void) des_set_key((des_cblock *)key + 2, ks[2]);
 
-    des_ede3_cbc_encrypt((des_cblock *)buf, (des_cblock *)buf, buf_len,
-			 ks[0], ks[1], ks[2],
-			 (des_cblock *)iv, enc);
+#ifdef HAVE_LIBNSS
+    u_int8_t *tmp_buf;
+    u_int8_t *new_iv;	
+
+    CK_MECHANISM_TYPE  cipherMech;
+    PK11SlotInfo*      slot = NULL;
+    SECItem            keyItem, ivItem;
+    SECItem*           SecParam = NULL;
+    PK11SymKey*        SymKey = NULL;
+    PK11Context*       EncContext = NULL;
+    SECStatus          rv;
+    int                tmp_outlen;
+
+    cipherMech = CKM_DES3_CBC; /*openswan provides padding*/
+    slot = PK11_GetBestSlot(cipherMech, NULL);
+
+    if (slot == NULL) {
+    loglog(RC_LOG_SERIOUS, "do_3des:Unable to find security device (err %d)\n", PR_GetError());
+    goto out;
+    }
+
+    keyItem.type = siBuffer;
+    keyItem.data = key;
+    keyItem.len = key_size;    
+
+    SymKey = PK11_ImportSymKey(slot, cipherMech, PK11_OriginUnwrap, enc ? CKA_ENCRYPT: CKA_DECRYPT,&keyItem, NULL);
+
+    if (SymKey == NULL){
+    loglog(RC_LOG_SERIOUS, "do_3des: Failure to import key into NSS (err %d)\n", PR_GetError());
+    goto out;
+    }
+
+    ivItem.type = siBuffer;
+    ivItem.data = iv;
+    ivItem.len = DES_CBC_BLOCK_SIZE;
+
+    SecParam = PK11_ParamFromIV(cipherMech, &ivItem);
+    if (SecParam == NULL){
+    loglog(RC_LOG_SERIOUS, "do_aes: Failure to set up PKCS11 param (err %d)\n",PR_GetError());
+    goto out;
+    }
+
+    tmp_outlen = 0;
+    tmp_buf= PR_Malloc((PRUint32)buf_len);
+    new_iv=(u_int8_t*)PR_Malloc((PRUint32)DES_CBC_BLOCK_SIZE);
+
+    if (!enc){
+    memcpy(new_iv, (char*) buf + buf_len-DES_CBC_BLOCK_SIZE, DES_CBC_BLOCK_SIZE);
+    }
+
+    EncContext = PK11_CreateContextBySymKey(cipherMech, enc? CKA_ENCRYPT: CKA_DECRYPT, SymKey, SecParam);
+    rv = PK11_CipherOp(EncContext, tmp_buf, &tmp_outlen, buf_len, buf, buf_len);
+    passert(rv==SECSuccess);
+    
+    if(enc){    
+    memcpy(new_iv, (char*) tmp_buf + buf_len-DES_CBC_BLOCK_SIZE, DES_CBC_BLOCK_SIZE);
+    }
+
+    memcpy(buf,tmp_buf,buf_len);
+    memcpy(iv,new_iv,DES_CBC_BLOCK_SIZE);
+    PK11_DestroyContext(EncContext, PR_TRUE);
+    PR_Free(tmp_buf);
+    PR_Free(new_iv);
+
+out:
+
+    if (SymKey)
+    PK11_FreeSymKey(SymKey);
+
+    if (SecParam)
+    SECITEM_FreeItem(SecParam, PR_TRUE);
+
+#else
+
+    des_key_schedule ks[3];
+
+    (void) oswcrypto.des_set_key((des_cblock *)key + 0, ks[0]);
+    (void) oswcrypto.des_set_key((des_cblock *)key + 1, ks[1]);
+    (void) oswcrypto.des_set_key((des_cblock *)key + 2, ks[2]);
+
+    oswcrypto.des_ede3_cbc_encrypt((des_cblock *)buf, (des_cblock *)buf, buf_len,
+                         ks[0], ks[1], ks[2],
+                         (des_cblock *)iv, enc);
+    
+#endif
+
 }
 
 /* hash and prf routines */
@@ -297,79 +430,12 @@ crypto_cbc_encrypt(const struct encrypt_desc *e, bool enc
 
     e->do_crypt(buf, size, st->st_enc_key.ptr
 		, st->st_enc_key.len, st->st_new_iv, enc);
+
     /*
       e->set_key(&ctx, st->st_enc_key.ptr, st->st_enc_key.len);
       e->cbc_crypt(&ctx, buf, size, st->st_new_iv, enc);
     */
 }
-
-/* HMAC package
- * rfc2104.txt specifies how HMAC works.
- */
-
-void
-hmac_init(struct hmac_ctx *ctx,
-    const struct hash_desc *h,
-    const u_char *key, size_t key_len)
-{
-    int k;
-
-    ctx->h = h;
-    ctx->hmac_digest_len = h->hash_digest_len;
-
-    /* Prepare the two pads for the HMAC */
-
-    memset(ctx->buf1, '\0', HMAC_BUFSIZE);
-
-    if (key_len <= HMAC_BUFSIZE)
-    {
-	memcpy(ctx->buf1, key, key_len);
-    }
-    else
-    {
-	h->hash_init(&ctx->hash_ctx);
-	h->hash_update(&ctx->hash_ctx, key, key_len);
-	h->hash_final(ctx->buf1, &ctx->hash_ctx);
-    }
-
-    memcpy(ctx->buf2, ctx->buf1, HMAC_BUFSIZE);
-
-    for (k = 0; k < HMAC_BUFSIZE; k++)
-    {
-	ctx->buf1[k] ^= HMAC_IPAD;
-	ctx->buf2[k] ^= HMAC_OPAD;
-    }
-
-    hmac_reinit(ctx);
-}
-
-void
-hmac_reinit(struct hmac_ctx *ctx)
-{
-    ctx->h->hash_init(&ctx->hash_ctx);
-    ctx->h->hash_update(&ctx->hash_ctx, ctx->buf1, HMAC_BUFSIZE);
-}
-
-void
-hmac_update(struct hmac_ctx *ctx,
-    const u_char *data, size_t data_len)
-{
-    ctx->h->hash_update(&ctx->hash_ctx, data, data_len);
-}
-
-void
-hmac_final(u_char *output, struct hmac_ctx *ctx)
-{
-    const struct hash_desc *h = ctx->h;
-
-    h->hash_final(output, &ctx->hash_ctx);
-
-    h->hash_init(&ctx->hash_ctx);
-    h->hash_update(&ctx->hash_ctx, ctx->buf2, HMAC_BUFSIZE);
-    h->hash_update(&ctx->hash_ctx, output, h->hash_digest_len);
-    h->hash_final(output, &ctx->hash_ctx);
-}
-
 
 /*
  * Local Variables:

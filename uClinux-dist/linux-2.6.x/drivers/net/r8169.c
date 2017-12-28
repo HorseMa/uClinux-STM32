@@ -1621,6 +1621,7 @@ rtl8169_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	SET_NETDEV_DEV(dev, &pdev->dev);
 	tp = netdev_priv(dev);
 	tp->dev = dev;
+	tp->pci_dev = pdev;
 	tp->msg_enable = netif_msg_init(debug.msg_enable, R8169_MSG_DEFAULT);
 
 	/* enable device (incl. PCI PM wakeup and hotplug setup) */
@@ -1709,18 +1710,18 @@ rtl8169_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	rtl8169_print_mac_version(tp);
 
-	for (i = ARRAY_SIZE(rtl_chip_info) - 1; i >= 0; i--) {
+	for (i = 0; i < ARRAY_SIZE(rtl_chip_info); i++) {
 		if (tp->mac_version == rtl_chip_info[i].mac_version)
 			break;
 	}
-	if (i < 0) {
+	if (i == ARRAY_SIZE(rtl_chip_info)) {
 		/* Unknown chip: assume array element #0, original RTL-8169 */
 		if (netif_msg_probe(tp)) {
 			dev_printk(KERN_DEBUG, &pdev->dev,
 				"unknown chip version, assuming %s\n",
 				rtl_chip_info[0].name);
 		}
-		i++;
+		i = 0;
 	}
 	tp->chipset = i;
 
@@ -1781,7 +1782,6 @@ rtl8169_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 #endif
 
 	tp->intr_mask = 0xffff;
-	tp->pci_dev = pdev;
 	tp->mmio_addr = ioaddr;
 	tp->align = cfg->align;
 	tp->hw_start = cfg->hw_start;
@@ -2896,10 +2896,14 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 	int boguscnt = max_interrupt_work;
 	void __iomem *ioaddr = tp->mmio_addr;
 	int status;
+	int entry_status;
+	int reg_intrmask;
 	int handled = 0;
 
 	do {
 		status = RTL_R16(IntrStatus);
+		entry_status = status;
+		reg_intrmask = RTL_R16(IntrMask);
 
 		/* hotplug/major error/no more work/shared irq */
 		if ((status == 0xFFFF) || !status)
@@ -2913,11 +2917,31 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 		}
 
 		status &= tp->intr_mask;
-		RTL_W16(IntrStatus,
-			(status & RxFIFOOver) ? (status | RxOverflow) : status);
+		RTL_W16(IntrStatus, (status & RxFIFOOver) ? (status | RxOverflow) : status);
 
-		if (!(status & tp->intr_event))
+#ifdef CONFIG_R8169_NAPI
+		/* if there is some masking going on, and there was an interrupt on that was
+		 * masked out but will trigger an interrupt (ie. IntrMask reg has it enabled),
+		 * the device could get into a locked up state. clear that interrupt flag. */
+		if (tp->intr_mask != 0xffff && (entry_status & ~tp->intr_mask & reg_intrmask))
+		{
+			RTL_W16(IntrStatus, (entry_status & ~tp->intr_mask & reg_intrmask));
+			printk(KERN_WARNING "%s: potential lockup detected, IntrStatus=%04x\n",
+				dev->name, (entry_status & ~tp->intr_mask & reg_intrmask));
+			dprintk("%s: entry_status=%04x, status=%04x, intr_mask=%04x, reg_intrmask=%04x\n",
+				 dev->name, entry_status, status, tp->intr_mask, reg_intrmask);
+
+			/* occasionally, just clearing the interrupt status flag doesn't appease
+			 * the device (it keeps triggering the interrupt for it): so, throw caution
+			 * to the wind and disable that interrupt completely. (It'll be turned back
+			 * on by the NAPI stuff later on, so it's not a *huge* deal.) */
+			RTL_W16(IntrMask, reg_intrmask & ~(entry_status & ~tp->intr_mask & reg_intrmask));	
+		}
+#endif
+		/* if there's not any interrupts that we can deal with, just bail */
+		if (!(status & tp->intr_event)) {
 			break;
+		}
 
                 /* Work around for rx fifo overflow */
                 if (unlikely(status & RxFIFOOver) &&
@@ -2940,12 +2964,12 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 			RTL_W16(IntrMask, tp->intr_event & ~tp->napi_event);
 			tp->intr_mask = ~tp->napi_event;
 
-		if (likely(netif_rx_schedule_prep(dev, &tp->napi)))
-			__netif_rx_schedule(dev, &tp->napi);
+			if (likely(netif_rx_schedule_prep(dev, &tp->napi)))
+				__netif_rx_schedule(dev, &tp->napi);
 			else if (netif_msg_intr(tp)) {
 				printk(KERN_INFO "%s: interrupt %04x in poll\n",
-				       dev->name, status);
-			}
+					       dev->name, status);
+				}
 		}
 		break;
 #else
@@ -2980,12 +3004,15 @@ static int rtl8169_poll(struct napi_struct *napi, int budget)
 	struct net_device *dev = tp->dev;
 	void __iomem *ioaddr = tp->mmio_addr;
 	int work_done;
+	unsigned long flags;
 
 	work_done = rtl8169_rx_interrupt(dev, tp, ioaddr, (u32) budget);
 	rtl8169_tx_interrupt(dev, tp, ioaddr);
 
 	if (work_done < budget) {
 		netif_rx_complete(dev, napi);
+		
+		spin_lock_irqsave(&tp->lock, flags);
 		tp->intr_mask = 0xffff;
 		/*
 		 * 20040426: the barrier is not strictly required but the
@@ -2995,6 +3022,7 @@ static int rtl8169_poll(struct napi_struct *napi, int budget)
 		 */
 		smp_wmb();
 		RTL_W16(IntrMask, tp->intr_event);
+		spin_unlock_irqrestore(&tp->lock, flags);
 	}
 
 	return work_done;

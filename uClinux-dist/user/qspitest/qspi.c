@@ -51,8 +51,7 @@
 #include <getopt.h>
 
 #include <asm/coldfire.h>
-#include <asm/mcfqspi.h>
-#include <asm/mcfsim.h>
+#include <asm/mcf_qspi.h>
 
 #define _DECLARE_
 #include "qspi.h"

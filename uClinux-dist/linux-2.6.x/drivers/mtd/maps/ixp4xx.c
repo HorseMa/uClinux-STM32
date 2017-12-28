@@ -1,5 +1,5 @@
 /*
- * $Id: ixp4xx.c,v 1.9 2006-11-30 02:03:18 gerg Exp $
+ * $Id: ixp4xx.c,v 1.10 2008-07-24 01:58:44 gerg Exp $
  *
  * drivers/mtd/maps/ixp4xx.c
  *
@@ -275,6 +275,7 @@ static struct platform_driver ixp4xx_flash_driver = {
 	.remove		= ixp4xx_flash_remove,
 	.driver		= {
 		.name	= "IXP4XX-Flash",
+		.owner	= THIS_MODULE,
 	},
 };
 
@@ -295,3 +296,4 @@ module_exit(ixp4xx_flash_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("MTD map driver for Intel IXP4xx systems");
 MODULE_AUTHOR("Deepak Saxena");
+MODULE_ALIAS("platform:IXP4XX-Flash");

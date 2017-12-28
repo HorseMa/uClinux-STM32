@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -26,17 +26,16 @@
  * Win32-specific OpenVPN code, targetted at the mingw
  * development environment.
  */
+#include "syshead.h"
 
 #ifdef WIN32
 
-#include "config-win32.h"
-
-#include "syshead.h"
 #include "buffer.h"
 #include "error.h"
 #include "mtu.h"
 #include "sig.h"
 #include "win32.h"
+#include "misc.h"
 
 #include "memdbg.h"
 
@@ -71,6 +70,56 @@ struct window_title window_title; /* GLOBAL*/
 
 struct semaphore netcmd_semaphore; /* GLOBAL */
 
+/*
+ * Windows system pathname such as c:\windows
+ */
+static char *win_sys_path = NULL; /* GLOBAL */
+
+/*
+ * Configure PATH.  On Windows, sometimes PATH is not set correctly
+ * by default.
+ */
+static void
+configure_win_path (void)
+{
+  static bool done = false; /* GLOBAL */
+  if (!done)
+    {
+      FILE *fp;
+      fp = fopen ("c:\\windows\\system32\\route.exe", "rb");
+      if (fp)
+	{
+	  const int bufsiz = 4096;
+	  struct gc_arena gc = gc_new ();
+	  struct buffer oldpath = alloc_buf_gc (bufsiz, &gc);
+	  struct buffer newpath = alloc_buf_gc (bufsiz, &gc);
+	  const char* delim = ";";
+	  DWORD status;
+	  fclose (fp);
+	  status = GetEnvironmentVariable ("PATH", BPTR(&oldpath), (DWORD)BCAP(&oldpath));
+#if 0
+	  status = 0;
+#endif
+	  if (!status)
+	    {
+	      *BPTR(&oldpath) = '\0';
+	      delim = "";
+	    }
+	  buf_printf (&newpath, "C:\\WINDOWS\\System32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem%s%s",
+		      delim,
+		      BSTR(&oldpath));
+	  SetEnvironmentVariable ("PATH", BSTR(&newpath));
+#if 0
+	  status = GetEnvironmentVariable ("PATH", BPTR(&oldpath), (DWORD)BCAP(&oldpath));
+	  if (status > 0)
+	    printf ("PATH: %s\n", BSTR(&oldpath));
+#endif
+	  gc_free (&gc);
+	  done = true;
+	}
+    }
+}
+
 void
 init_win32 (void)
 {
@@ -102,6 +151,7 @@ uninit_win32 (void)
   window_title_restore (&window_title);
   win32_signal_close (&win32_signal);
   WSACleanup ();
+  free (win_sys_path);
 }
 
 void
@@ -753,6 +803,250 @@ getpass (const char *prompt)
     return line;
   else
     return NULL;
+}
+
+/*
+ * Return true if filename is safe to be used on Windows,
+ * by avoiding the following reserved names:
+ *
+ * CON, PRN, AUX, NUL, COM1, COM2, COM3, COM4, COM5, COM6, COM7, COM8, COM9,
+ * LPT1, LPT2, LPT3, LPT4, LPT5, LPT6, LPT7, LPT8, LPT9, and CLOCK$
+ *
+ * See: http://msdn.microsoft.com/en-us/library/aa365247.aspx
+ *  and http://msdn.microsoft.com/en-us/library/86k9f82k(VS.80).aspx
+ */
+
+static bool
+cmp_prefix (const char *str, const bool n, const char *pre)
+{
+  size_t i = 0;
+
+  if (!str)
+    return false;
+
+  while (true)
+    {
+      const int c1 = pre[i];
+      int c2 = str[i];
+      ++i;
+      if (c1 == '\0')
+	{
+	  if (n)
+	    {
+	      if (isdigit (c2))
+		c2 = str[i];
+	      else
+		return false;
+	    }
+	  return c2 == '\0' || c2 == '.';
+	}
+      else if (c2 == '\0')
+	return false;
+      if (c1 != tolower(c2))
+	return false;
+    }
+}
+
+bool
+win_safe_filename (const char *fn)
+{
+  if (cmp_prefix (fn, false, "con"))
+    return false;
+  if (cmp_prefix (fn, false, "prn"))
+    return false;
+  if (cmp_prefix (fn, false, "aux"))
+    return false;
+  if (cmp_prefix (fn, false, "nul"))
+    return false;
+  if (cmp_prefix (fn, true, "com"))
+    return false;
+  if (cmp_prefix (fn, true, "lpt"))
+    return false;
+  if (cmp_prefix (fn, false, "clock$"))
+    return false;
+  return true;
+}
+
+/*
+ * Service functions for openvpn_execve
+ */
+
+static char *
+env_block (const struct env_set *es)
+{
+  if (es)
+    {
+      struct env_item *e;
+      char *ret;
+      char *p;
+      size_t nchars = 1;
+      
+      for (e = es->list; e != NULL; e = e->next)
+	nchars += strlen (e->string) + 1;
+
+      ret = (char *) malloc (nchars);
+      check_malloc_return (ret);
+
+      p = ret;
+      for (e = es->list; e != NULL; e = e->next)
+	{
+	  if (env_allowed (e->string))
+	    {
+	      strcpy (p, e->string);
+	      p += strlen (e->string) + 1;
+	    }
+	}
+      *p = '\0';
+      return ret;
+    }
+  else
+    return NULL;
+}
+
+static char *
+cmd_line (const struct argv *a)
+{
+  size_t nchars = 1;
+  size_t maxlen = 0;
+  size_t i;
+  struct buffer buf;
+  char *work = NULL;
+
+  if (!a)
+    return NULL;
+
+  for (i = 0; i < a->argc; ++i)
+    {
+      const char *arg = a->argv[i];
+      const size_t len = strlen (arg);
+      nchars += len + 3;
+      if (len > maxlen)
+	maxlen = len;
+    }
+
+  work = (char *) malloc (maxlen + 1);
+  check_malloc_return (work);
+  buf = alloc_buf (nchars);
+
+  for (i = 0; i < a->argc; ++i)
+    {
+      const char *arg = a->argv[i];
+      strcpy (work, arg);
+      string_mod (work, CC_PRINT, CC_DOUBLE_QUOTE|CC_CRLF, '_');
+      if (i)
+	buf_printf (&buf, " ");
+      if (string_class (work, CC_ANY, CC_SPACE))
+	buf_printf (&buf, "%s", work);
+      else
+	buf_printf (&buf, "\"%s\"", work);
+    }
+
+  free (work);
+  return BSTR(&buf);
+}
+
+/*
+ * Attempt to simulate fork/execve on Windows
+ */
+int
+openvpn_execve (const struct argv *a, const struct env_set *es, const unsigned int flags)
+{
+  int ret = -1;
+  if (a && a->argv[0])
+    {
+      if (openvpn_execve_allowed (flags))
+	{
+	  if (script_method == SM_EXECVE)
+	    {
+	      STARTUPINFO start_info;
+	      PROCESS_INFORMATION proc_info;
+
+	      char *env = env_block (es);
+	      char *cl = cmd_line (a);
+	      char *cmd = a->argv[0];
+
+	      CLEAR (start_info);
+	      CLEAR (proc_info);
+
+	      /* fill in STARTUPINFO struct */
+	      GetStartupInfo(&start_info);
+	      start_info.cb = sizeof(start_info);
+	      start_info.dwFlags = STARTF_USESTDHANDLES|STARTF_USESHOWWINDOW;
+	      start_info.wShowWindow = SW_HIDE;
+	      start_info.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+	      start_info.hStdOutput = start_info.hStdError = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	      if (CreateProcess (cmd, cl, NULL, NULL, FALSE, 0, env, NULL, &start_info, &proc_info))
+		{
+		  DWORD exit_status = 0;
+		  CloseHandle (proc_info.hThread);
+		  WaitForSingleObject (proc_info.hProcess, INFINITE);
+		  if (GetExitCodeProcess (proc_info.hProcess, &exit_status))
+		    ret = (int)exit_status;
+		  else
+		    msg (M_WARN|M_ERRNO, "openvpn_execve: GetExitCodeProcess %s failed", cmd);
+		  CloseHandle (proc_info.hProcess);
+		}
+	      else
+		{
+		  msg (M_WARN|M_ERRNO, "openvpn_execve: CreateProcess %s failed", cmd);
+		}
+	      free (cl);
+	      free (env);
+	    }
+	  else if (script_method == SM_SYSTEM)
+	    {
+	      configure_win_path ();
+	      ret = openvpn_system (argv_system_str (a), es, flags);
+	    }
+	  else
+	    {
+	      ASSERT (0);
+	    }
+	}
+      else
+	{
+	  msg (M_WARN, SCRIPT_SECURITY_WARNING);
+	}
+    }
+  else
+    {
+      msg (M_WARN, "openvpn_execve: called with empty argv");
+    }
+  return ret;
+}
+
+char *
+get_win_sys_path (void)
+{
+  ASSERT (win_sys_path);
+  return win_sys_path;
+}
+
+void
+set_win_sys_path (const char *newpath, struct env_set *es)
+{
+  free (win_sys_path);
+  win_sys_path = string_alloc (newpath, NULL);
+  setenv_str (es, SYS_PATH_ENV_VAR_NAME, win_sys_path); /* route.exe needs this */
+}
+
+void
+set_win_sys_path_via_env (struct env_set *es)
+{
+  char buf[256];
+  DWORD status = GetEnvironmentVariable (SYS_PATH_ENV_VAR_NAME, buf, sizeof(buf));
+  if (!status)
+    msg (M_ERR, "Cannot find environmental variable %s", SYS_PATH_ENV_VAR_NAME);
+  if (status > sizeof (buf) - 1)
+    msg (M_FATAL, "String overflow attempting to read environmental variable %s", SYS_PATH_ENV_VAR_NAME);
+  set_win_sys_path (buf, es);
+}
+
+void
+env_set_add_win32 (struct env_set *es)
+{
+  set_win_sys_path (DEFAULT_WIN_SYS_PATH, es);
 }
 
 #endif

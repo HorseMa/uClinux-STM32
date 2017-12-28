@@ -1,5 +1,6 @@
+#include "socket.h"
 #include "ipsec_hack.h"
-#include "os_select.h"
+#include "osw_select.h"
 
 int listen_s;
 int send_s;
@@ -381,7 +382,7 @@ void user_signal_handler(int signum)
 
 int main(int argc, char *argv[]) {
 	option_data options = {0};
-	os_fd_set rfds;
+	osw_fd_set rfds;
 	struct timeval tv;
 	int dmac_set = 0;
 	int len;
@@ -447,7 +448,7 @@ int main(int argc, char *argv[]) {
 
 	
 	/* Open socket for sending and listening */
-	listen_s = socket(AF_INET, SOCK_PACKET, htons (ETH_P_ALL));
+	listen_s = safe_socket(AF_INET, SOCK_PACKET, htons (ETH_P_ALL));
 	if (listen_s < 0) {
 		perror ("socket");
 		exit(1);
@@ -474,7 +475,7 @@ int main(int argc, char *argv[]) {
 		(ifr.ifr_hwaddr.sa_family == ARPHRD_ETHER) ? " (ethernet)" : "");
 	
 	/* Now the send if */
-	send_s = socket(AF_INET, SOCK_PACKET, htons (ETH_P_ALL));
+	send_s = safe_socket(AF_INET, SOCK_PACKET, htons (ETH_P_ALL));
 	if (send_s < 0) {
 		perror ("socket");
 		exit(1);
@@ -523,21 +524,21 @@ int main(int argc, char *argv[]) {
 	/*  */
 	options.state = init;
 	
-	OS_FD_ZERO(&rfds);
-	OS_FD_SET(listen_s,&rfds);
+	OSW_FD_ZERO(&rfds);
+	OSW_FD_SET(listen_s,&rfds);
 
 	options.start_time = time(NULL);
 	
 	options.spi_last_seen = time(NULL);
 	while(1) {
-		OS_FD_ZERO(&rfds);
-		OS_FD_SET(listen_s,&rfds);
+		OSW_FD_ZERO(&rfds);
+		OSW_FD_SET(listen_s,&rfds);
 		tv.tv_sec = 0;
 		tv.tv_usec = 500000;
 		len = sizeof(listen_sockaddr);		
 		res = 0;
 		
-		res = os_select((listen_s + 1), &rfds, NULL, NULL, &tv);
+		res = osw_select((listen_s + 1), &rfds, NULL, NULL, &tv);
 		if (res) { 
 			res = recvfrom(listen_s, buffer, BUFSIZE, 0, &listen_sockaddr, &len);
 			if (res < 0) {

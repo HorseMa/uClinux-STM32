@@ -22,6 +22,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
+#include <unistd.h>
 
 #define	LISTSIZE	256
 
@@ -31,7 +32,7 @@
  
 /* Prototypes */
 int             main            __P((int, char **));
-static void     lsfile          __P((char *, struct stat *, int));
+static void     lsfile          __P((char *, char *, struct stat *, int));
 int             namesort        __P((__const void *, __const void *));
 char *          buildname       __P((char *, char *));
 
@@ -137,8 +138,9 @@ main(argc, argv)
 		}
 
 		if ((flags & LSF_DIR) || (!S_ISDIR(statbuf.st_mode))) {
-			lsfile(name, &statbuf, flags);
-			fputc('\n', stdout);
+			lsfile(NULL, name, &statbuf, flags);
+			if (~flags & LSF_LONG) 
+				fputc('\n', stdout);
 			free(name);
 			continue;
 		}
@@ -202,7 +204,7 @@ main(argc, argv)
 		 */
 		if (~flags & LSF_LONG) {
 			for (maxlen = i = 0; i < listused; i++) {
-				if (cp = strrchr(list[i], '/'))
+				if ((cp = strrchr(list[i], '/')))
 					cp++;
 				else
 					cp = list[i];
@@ -234,7 +236,7 @@ main(argc, argv)
 				cp = name;
 
 			if (flags & LSF_ALL || *cp != '.') {
-				lsfile(cp, &statbuf, flags);
+				lsfile(name, cp, &statbuf, flags);
 				num++;
 			}
 
@@ -255,7 +257,8 @@ main(argc, argv)
  * Do an LS of a particular file name according to the flags.
  */
 static void
-lsfile(name, statbuf, flags)
+lsfile(fullname, name, statbuf, flags)
+	char	*fullname;
 	char	*name;
 	struct	stat	*statbuf;
 {
@@ -276,7 +279,7 @@ lsfile(name, statbuf, flags)
 	*cp = '\0';
 
 	if (flags & LSF_INODE) {
-		sprintf(cp, "%5d ", statbuf->st_ino);
+		sprintf(cp, "%5ld ", statbuf->st_ino);
 		cp += strlen(cp);
 	}
 
@@ -314,8 +317,8 @@ lsfile(name, statbuf, flags)
 		cp += strlen(cp);
 
 		if (S_ISBLK(statbuf->st_mode) || S_ISCHR(statbuf->st_mode))
-			sprintf(cp, "%3d, %3d ", statbuf->st_rdev >> 8,
-				statbuf->st_rdev & 0xff);
+			sprintf(cp, "%3d, %3d ", (int)statbuf->st_rdev >> 8,
+				(int)statbuf->st_rdev & 0xff);
 		else
 			sprintf(cp, "%8ld ", statbuf->st_size);
 		cp += strlen(cp);
@@ -343,7 +346,10 @@ lsfile(name, statbuf, flags)
 
 #ifdef	S_ISLNK
 	if ((flags & LSF_LONG) && S_ISLNK(statbuf->st_mode)) {
-		len = readlink(name, buf, PATHLEN - 1);
+		if(fullname)
+			len = readlink(fullname, buf, PATHLEN - 1);
+		else
+			len = readlink(name, buf, PATHLEN - 1);
 		if (len >= 0) {
 			buf[len] = '\0';
 			printf(" -> %s", buf);
@@ -365,10 +371,6 @@ struct	chunk	{
 	CHUNK	*next;
 	char	data[CHUNKINITSIZE];	/* actually of varying length */
 };
-
-
-static	CHUNK *	chunklist;
-
 
 /*
  * Return the standard ls-like mode string from a file mode.

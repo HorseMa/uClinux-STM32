@@ -118,6 +118,9 @@ image.bsslinuz:
 image.arm.zimage:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
 
+image.mips.zimage:
+	gzip -c -9 < $(ROOTDIR)/$(LINUXDIR)/arch/mips/boot/vmlinux.bin >$(ZIMAGE)
+
 image.i386.zimage:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/i386/boot/bzImage $(ZIMAGE)
 
@@ -176,7 +179,7 @@ image.configs:
 	cp $(ROOTDIR)/.config configs/config.device
 	cp $(ROOTDIR)/config/.config configs/config.vendor-$(patsubst linux-%,%,$(CONFIG_LINUXDIR)) 
 	cp $(ROOTDIR)/$(CONFIG_LINUXDIR)/.config configs/config.$(CONFIG_LINUXDIR)
-	cp $(ROOTDIR)/$(CONFIG_LIBCDIR)/.config configs/config.$(CONFIG_LIBCDIR)
+	-cp $(ROOTDIR)/$(CONFIG_LIBCDIR)/.config configs/config.$(CONFIG_LIBCDIR)
 	tar czf $(IMAGEDIR)/configs.tar.gz configs
 	@rm -rf configs
 	
@@ -199,6 +202,9 @@ romfs.default:
 	$(ROMFSINST) $(VENDOR_ROMFS_DIR)/romfs /
 	chmod 755 $(ROMFSDIR)/etc/default/dhcpcd-change
 	chmod 755 $(ROMFSDIR)/etc/default/ip-*
+ifeq ($(CONFIG_LIBCDIR),glibc)
+	$(ROMFSINST) $(VENDOR_ROMFS_DIR)/nsswitch.conf /etc/nsswitch.conf
+endif
 
 romfs.recover:
 	$(ROMFSINST) $(VENDOR_ROMFS_DIR)/romfs.recover /

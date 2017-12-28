@@ -51,7 +51,7 @@
 #include <getopt.h>
 
 #include <asm/coldfire.h>
-#include <asm/mcfqspi.h>
+#include <asm/mcf_qspi.h>
 #include <asm/mcfsim.h>
 
 #define DEBUG 1
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 		exit(-EINVAL);
 	}
 	baud_divider =
-	    (int)(((double)MCF_CLK / (2.0 * (double)opt_baud)) + 0.5);
+	    (int)(((double)MCF_BUSCLK / (2.0 * (double)opt_baud)) + 0.5);
 	if (ioctl(serialPort, QSPIIOCS_BAUD, baud_divider)) {
 		perror("QSPIIOCS_BAUD");
 		exit(-EINVAL);

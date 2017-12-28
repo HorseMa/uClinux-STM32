@@ -23,7 +23,7 @@
 #include <linux/buffer_head.h>
 #include <linux/vfs.h>
 #include <linux/mutex.h>
-#include <asm/semaphore.h>
+
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 

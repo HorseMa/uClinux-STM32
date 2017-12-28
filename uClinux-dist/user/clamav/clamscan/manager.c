@@ -34,11 +34,10 @@
 #include <sys/wait.h>
 #include <utime.h>
 #endif
-#ifdef HAVE_GRP_H
-#include <grp.h>
-#endif
-#ifdef HAVE_PWD_H
-#include <pwd.h>
+#ifndef C_WINDOWS
+#include <dirent.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #endif
 #include <fcntl.h>
 #ifdef	HAVE_UNISTD_H
@@ -50,7 +49,6 @@
 
 #include "manager.h"
 #include "others.h"
-#include "treewalk.h"
 #include "global.h"
 
 #include "shared/options.h"
@@ -61,6 +59,7 @@
 #include "libclamav/others.h"
 #include "libclamav/matcher-ac.h"
 #include "libclamav/str.h"
+#include "libclamav/readdb.h"
 
 #ifdef C_LINUX
 dev_t procdev;
@@ -75,9 +74,204 @@ dev_t procdev;
 #define	O_BINARY    0
 #endif
 
-static int scandirs(const char *dirname, struct cl_engine *engine, const struct passwd *user, const struct optstruct *opt, const struct cl_limits *limits, int options)
+static void move_infected(const char *filename, const struct optstruct *opt);
+
+static int scanfile(const char *filename, struct cl_engine *engine, const struct optstruct *opt, const struct cl_limits *limits, unsigned int options)
 {
-    return treewalk(dirname, engine, user, opt, limits, options, 1);
+	int ret = 0, fd, included, printclean = 1;
+	const struct optnode *optnode;
+	char *argument;
+	const char *virname;
+#ifdef C_LINUX
+	struct stat sb;
+
+    /* argh, don't scan /proc files */
+    if(procdev)
+	if(stat(filename, &sb) != -1)
+	    if(sb.st_dev == procdev) {
+		if(!printinfected)
+		    logg("~%s: Excluded (/proc)\n", filename);
+		return 0;
+	    }
+#endif    
+
+    if(opt_check(opt, "exclude")) {
+	argument = opt_firstarg(opt, "exclude", &optnode);
+	while(argument) {
+	    if(match_regex(filename, argument) == 1) {
+		if(!printinfected)
+		    logg("~%s: Excluded\n", filename);
+		return 0;
+	    }
+	    argument = opt_nextarg(&optnode, "exclude");
+	}
+    }
+
+   if(opt_check(opt, "include")) {
+	included = 0;
+	argument = opt_firstarg(opt, "include", &optnode);
+	while(argument && !included) {
+	    if(match_regex(filename, argument) == 1) {
+		included = 1;
+		break;
+	    }
+	    argument = opt_nextarg(&optnode, "include");
+	}
+
+	if(!included) {
+	    if(!printinfected)
+		logg("~%s: Excluded\n", filename);
+	    return 0;
+	}
+    }
+
+    if(fileinfo(filename, 1) == 0) {
+	if(!printinfected)
+	    logg("~%s: Empty file\n", filename);
+	return 0;
+    }
+
+#ifndef C_WINDOWS
+    if(geteuid())
+	if(checkaccess(filename, NULL, R_OK) != 1) {
+	    if(!printinfected)
+		logg("~%s: Access denied\n", filename);
+	    return 0;
+	}
+#endif
+
+    logg("*Scanning %s\n", filename);
+
+    if((fd = open(filename, O_RDONLY|O_BINARY)) == -1) {
+	logg("^Can't open file %s\n", filename);
+	return 54;
+    }
+
+    info.files++;
+
+    if((ret = cl_scandesc(fd, &virname, &info.blocks, engine, limits, options)) == CL_VIRUS) {
+	logg("~%s: %s FOUND\n", filename, virname);
+	info.ifiles++;
+
+	if(bell)
+	    fprintf(stderr, "\007");
+
+    } else if(ret == CL_CLEAN) {
+	if(!printinfected && printclean)
+	    mprintf("~%s: OK\n", filename);
+    } else
+	if(!printinfected)
+	    logg("~%s: %s\n", filename, cl_strerror(ret));
+
+    close(fd);
+
+    if(ret == CL_VIRUS) {
+	if(opt_check(opt, "remove")) {
+	    if(unlink(filename)) {
+		logg("^%s: Can't remove\n", filename);
+		info.notremoved++;
+	    } else {
+		logg("~%s: Removed\n", filename);
+	    }
+	} else if(opt_check(opt, "move") || opt_check(opt, "copy"))
+            move_infected(filename, opt);
+    }
+
+    return ret;
+}
+
+static int scandirs(const char *dirname, struct cl_engine *engine, const struct optstruct *opt, const struct cl_limits *limits, unsigned int options, unsigned int depth)
+{
+	DIR *dd;
+	struct dirent *dent;
+	struct stat statbuf;
+	char *fname;
+	int scanret = 0, included;
+	unsigned int maxdepth;
+	const struct optnode *optnode;
+	char *argument;
+
+
+    if(opt_check(opt, "exclude-dir")) {
+	argument = opt_firstarg(opt, "exclude-dir", &optnode);
+	while(argument) {
+	    if(match_regex(dirname, argument) == 1) {
+		if(!printinfected)
+		    logg("~%s: Excluded\n", dirname);
+		return 0;
+	    }
+	    argument = opt_nextarg(&optnode, "exclude-dir");
+	}
+    }
+
+   if(opt_check(opt, "include-dir")) {
+	included = 0;
+	argument = opt_firstarg(opt, "include-dir", &optnode);
+	while(argument && !included) {
+	    if(match_regex(dirname, argument) == 1) {
+		included = 1;
+		break;
+	    }
+	    argument = opt_nextarg(&optnode, "include-dir");
+	}
+
+	if(!included) {
+	    if(!printinfected)
+		logg("~%s: Excluded\n", dirname);
+	    return 0;
+	}
+    }
+
+    if(opt_check(opt, "max-dir-recursion"))
+        maxdepth = atoi(opt_arg(opt, "max-dir-recursion"));
+    else
+        maxdepth = 15;
+
+    if(depth > maxdepth)
+	return 0;
+
+    info.dirs++;
+    depth++;
+
+    if((dd = opendir(dirname)) != NULL) {
+	while((dent = readdir(dd))) {
+#if !defined(C_INTERIX) && !defined(C_WINDOWS)
+	    if(dent->d_ino)
+#endif
+	    {
+		if(strcmp(dent->d_name, ".") && strcmp(dent->d_name, "..")) {
+		    /* build the full name */
+		    fname = malloc(strlen(dirname) + strlen(dent->d_name) + 2);
+		    sprintf(fname, "%s/%s", dirname, dent->d_name);
+
+		    /* stat the file */
+		    if(lstat(fname, &statbuf) != -1) {
+			if(S_ISDIR(statbuf.st_mode) && !S_ISLNK(statbuf.st_mode) && recursion) {
+			    if(scandirs(fname, engine, opt, limits, options, depth) == 1)
+				scanret++;
+			} else {
+			    if(S_ISREG(statbuf.st_mode))
+				scanret += scanfile(fname, engine, opt, limits, options);
+			}
+		    }
+		    free(fname);
+		}
+
+	    }
+	}
+    } else {
+	if(!printinfected)
+	    logg("~%s: Can't open directory.\n", dirname);
+	return 53;
+    }
+
+    closedir(dd);
+
+    if(scanret)
+	return 1;
+    else
+	return 0;
+
 }
 
 static int scanstdin(const struct cl_engine *engine, const struct cl_limits *limits, int options)
@@ -85,6 +279,7 @@ static int scanstdin(const struct cl_engine *engine, const struct cl_limits *lim
 	int ret;
 	const char *virname, *tmpdir;
 	char *file, buff[FILEBUFF];
+	size_t bread;
 	FILE *fs;
 
 
@@ -111,8 +306,8 @@ static int scanstdin(const struct cl_engine *engine, const struct cl_limits *lim
 	return 63;
     }
 
-    while((ret = fread(buff, 1, FILEBUFF, stdin)))
-	if(fwrite(buff, 1, ret, fs) < ret) {
+    while((bread = fread(buff, 1, FILEBUFF, stdin)))
+	if(fwrite(buff, 1, bread, fs) < bread) {
 	    logg("!Can't write to %s\n", file);
 	    free(file);
 	    return 58;
@@ -145,29 +340,17 @@ static int scanstdin(const struct cl_engine *engine, const struct cl_limits *lim
 int scanmanager(const struct optstruct *opt)
 {
 	mode_t fmode;
-	int ret = 0, extunpacker = 0, fmodeint, i, x;
+	int ret = 0, fmodeint, i, x;
 	unsigned int options = 0, dboptions = 0;
 	struct cl_engine *engine = NULL;
 	struct cl_limits limits;
-	struct passwd *user = NULL;
 	struct stat sb;
-	char *fullpath = NULL, cwd[1024];
-
-
-    if(opt_check(opt, "unzip") || opt_check(opt, "unrar") || opt_check(opt, "arj") ||
-       opt_check(opt, "unzoo") || opt_check(opt, "jar") || opt_check(opt, "lha") ||
-       opt_check(opt, "tar") || opt_check(opt, "tgz") || opt_check(opt, "deb"))
-	    extunpacker = 1;
-
-/* njh@bandsman.co.uk: BeOS */
-#if !defined(C_CYGWIN) && !defined(C_OS2) && !defined(C_BEOS) && !defined(C_WINDOWS)
-    if(extunpacker && !geteuid()) {
-	if((user = getpwnam(CLAMAVUSER)) == NULL) {
-	    logg("!Can't get information about user "CLAMAVUSER" (required to run external unpackers)\n");
-	    exit(60); /* this is critical problem, so we just exit here */
-	}
-    }
+	char *file, cwd[1024], *pua_cats = NULL, *argument;
+	const struct optnode *optnode;
+#ifndef C_WINDOWS
+	struct rlimit rlim;
 #endif
+
 
     if(!opt_check(opt, "no-phishing-sigs"))
 	dboptions |= CL_DB_PHISHING;
@@ -180,6 +363,9 @@ int scanmanager(const struct optstruct *opt)
     if(opt_check(opt,"phishing-cloak")) {
 	options |= CL_SCAN_PHISHING_BLOCKCLOAK;
     }
+    if(opt_check(opt,"heuristic-scan-precedence")) {
+	options |= CL_SCAN_HEURISTIC_PRECEDENCE;
+    }
 
     if(opt_check(opt, "dev-ac-only"))
 	dboptions |= CL_DB_ACONLY;
@@ -187,8 +373,60 @@ int scanmanager(const struct optstruct *opt)
     if(opt_check(opt, "dev-ac-depth"))
 	cli_ac_setdepth(AC_DEFAULT_MIN_DEPTH, atoi(opt_arg(opt, "dev-ac-depth")));
 
-    if(opt_check(opt, "detect-pua"))
+    if(opt_check(opt, "detect-pua")) {
 	dboptions |= CL_DB_PUA;
+
+	if(opt_check(opt, "exclude-pua")) {
+	    dboptions |= CL_DB_PUA_EXCLUDE;
+	    argument = opt_firstarg(opt, "exclude-pua", &optnode);
+	    i = 0;
+	    while(argument) {
+		if(!(pua_cats = realloc(pua_cats, i + strlen(argument) + 3))) {
+		    logg("!Can't allocate memory for pua_cats\n");
+		    return 70;
+		}
+		sprintf(pua_cats + i, ".%s", argument);
+		i += strlen(argument) + 1;
+		pua_cats[i] = 0;
+		argument = opt_nextarg(&optnode, "exclude-pua");
+	    }
+	    pua_cats[i] = '.';
+	    pua_cats[i + 1] = 0;
+	}
+
+	if(opt_check(opt, "include-pua")) {
+	    if(pua_cats) {
+		logg("!--exclude-pua and --include-pua cannot be used at the same time\n");
+		free(pua_cats);
+		return 40;
+	    }
+	    dboptions |= CL_DB_PUA_INCLUDE;
+	    argument = opt_firstarg(opt, "include-pua", &optnode);
+	    i = 0;
+	    while(argument) {
+		if(!(pua_cats = realloc(pua_cats, i + strlen(argument) + 3))) {
+		    logg("!Can't allocate memory for pua_cats\n");
+		    return 70;
+		}
+		sprintf(pua_cats + i, ".%s", argument);
+		i += strlen(argument) + 1;
+		pua_cats[i] = 0;
+		argument = opt_nextarg(&optnode, "include-pua");
+	    }
+	    pua_cats[i] = '.';
+	    pua_cats[i + 1] = 0;
+	}
+
+	if(pua_cats) {
+	    /* FIXME with the new API */
+	    if((ret = cli_initengine(&engine, dboptions))) {
+		logg("!cli_initengine() failed: %s\n", cl_strerror(ret));
+		free(pua_cats);
+		return 50;
+	    }
+	    engine->pua_cats = pua_cats;
+	}
+    }
 
     if(opt_check(opt, "database")) {
 	if((ret = cl_load(opt_arg(opt, "database"), &engine, &info.sigs, dboptions))) {
@@ -226,6 +464,7 @@ int scanmanager(const struct optstruct *opt)
 	if(tolower(ptr[strlen(ptr) - 1]) == 'm') {
 	    cpy = calloc(strlen(ptr), 1);
 	    strncpy(cpy, ptr, strlen(ptr) - 1);
+	    cpy[strlen(ptr)-1]='\0';
 	    limits.maxscansize = atoi(cpy) * 1024 * 1024;
 	    free(cpy);
 	} else
@@ -239,12 +478,22 @@ int scanmanager(const struct optstruct *opt)
 	if(tolower(ptr[strlen(ptr) - 1]) == 'm') {
 	    cpy = calloc(strlen(ptr), 1);
 	    strncpy(cpy, ptr, strlen(ptr) - 1);
+	    cpy[strlen(ptr)-1]='\0';
 	    limits.maxfilesize = atoi(cpy) * 1024 * 1024;
 	    free(cpy);
 	} else
 	    limits.maxfilesize = atoi(ptr) * 1024;
     } else
 	limits.maxfilesize = 26214400;
+
+#ifndef C_WINDOWS
+    if(getrlimit(RLIMIT_FSIZE, &rlim) == 0) {
+	if((rlim.rlim_max < limits.maxfilesize) || (rlim.rlim_max < limits.maxscansize))
+	    logg("^System limit for file size is lower than maxfilesize or maxscansize\n");
+    } else {
+	logg("^Cannot obtain resource limits for file size\n");
+    }
+#endif
 
     if(opt_check(opt, "max-files"))
 	limits.maxfiles = atoi(opt_arg(opt, "max-files"));
@@ -308,6 +557,42 @@ int scanmanager(const struct optstruct *opt)
     else
 	options |= CL_SCAN_ALGORITHMIC;
 
+    if(opt_check(opt, "detect-structured")) {
+	options |= CL_SCAN_STRUCTURED;
+
+	if(opt_check(opt, "structured-ssn-format")) {
+	    switch(atoi(opt_arg(opt, "structured-ssn-format"))) {
+		case 0:
+		    options |= CL_SCAN_STRUCTURED_SSN_NORMAL;
+		    break;
+		case 1:
+		    options |= CL_SCAN_STRUCTURED_SSN_STRIPPED;
+		    break;
+		case 2:
+		    options |= (CL_SCAN_STRUCTURED_SSN_NORMAL | CL_SCAN_STRUCTURED_SSN_STRIPPED);
+		    break;
+		default:
+		    logg("!Invalid argument for --structured-ssn-format\n");
+		    return 40;
+	    }
+	} else {
+	    options |= CL_SCAN_STRUCTURED_SSN_NORMAL;
+	}
+
+	if(opt_check(opt, "structured-ssn-count"))
+	    limits.min_ssn_count = atoi(opt_arg(opt, "structured-ssn-count"));
+	else
+	    limits.min_ssn_count = 3;
+
+	if(opt_check(opt, "structured-cc-count"))
+	    limits.min_cc_count = atoi(opt_arg(opt, "structured-cc-count"));
+	else
+	    limits.min_cc_count = 3;
+
+    } else
+	options &= ~CL_SCAN_STRUCTURED;
+
+
 #ifdef C_LINUX
     procdev = (dev_t) 0;
     if(stat("/proc", &sb) != -1 && !sb.st_size)
@@ -322,66 +607,43 @@ int scanmanager(const struct optstruct *opt)
 	    logg("!Can't get absolute pathname of current working directory\n");
 	    ret = 57;
 	} else
-	    ret = scandirs(cwd, engine, user, opt, &limits, options);
+	    ret = scandirs(cwd, engine, opt, &limits, options, 1);
 
     } else if(!strcmp(opt->filename, "-")) { /* read data from stdin */
 	ret = scanstdin(engine, &limits, options);
 
     } else {
-	char *thefilename;
-	for (x = 0; (thefilename = cli_strtok(opt->filename, x, "\t")) != NULL; x++) {
-	    if((fmodeint = fileinfo(thefilename, 2)) == -1) {
-		logg("^Can't access file %s\n", thefilename);
-		perror(thefilename);
+	for (x = 0; (file = cli_strtok(opt->filename, x, "\t")) != NULL; x++) {
+	    if((fmodeint = fileinfo(file, 2)) == -1) {
+		logg("^Can't access file %s\n", file);
+		perror(file);
 		ret = 56;
 	    } else {
 		int slash = 1;
-		for(i = strlen(thefilename) - 1; i > 0 && slash; i--) {
-		    if(thefilename[i] == '/')
-			thefilename[i] = 0;
+		for(i = strlen(file) - 1; i > 0 && slash; i--) {
+		    if(file[i] == '/')
+			file[i] = 0;
 		    else
 			slash = 0;
 		}
 
 		fmode = (mode_t) fmodeint;
 
-		if(extunpacker && (thefilename[0] != '/' && thefilename[0] != '\\' && thefilename[1] != ':')) {
-		    /* we need to complete the path */
-		    if(!getcwd(cwd, sizeof(cwd))) {
-			logg("!Can't get absolute pathname of current working directory\n");
-			return 57;
-		    } else {
-			fullpath = malloc(512);
-#ifdef NO_SNPRINTF
-			sprintf(fullpath, "%s/%s", cwd, thefilename);
-#else
-			snprintf(fullpath, 512, "%s/%s", cwd, thefilename);
-#endif
-			logg("*Full path: %s\n", fullpath);
-		    }
-		} else
-		    fullpath = thefilename;
-
 		switch(fmode & S_IFMT) {
 		    case S_IFREG:
-			ret = scanfile(fullpath, engine, user, opt, &limits, options);
+			ret = scanfile(file, engine, opt, &limits, options);
 			break;
 
 		    case S_IFDIR:
-			ret = scandirs(fullpath, engine, user, opt, &limits, options);
+			ret = scandirs(file, engine, opt, &limits, options, 1);
 			break;
 
 		    default:
-			logg("!Not supported file type (%s)\n", thefilename);
+			logg("!Not supported file type (%s)\n", file);
 			ret = 52;
 		}
-
-		if(extunpacker && (thefilename[0] != '/' && thefilename[0] != '\\' && thefilename[1] != ':')) {
-		    free(fullpath);
-		    fullpath = NULL;
-		}
 	    }
-	    free(thefilename);
+	    free(file);
 	}
     }
 
@@ -396,132 +658,6 @@ int scanmanager(const struct optstruct *opt)
 
     return ret;
 }
-
-/*
- * -1 -> can't fork
- * -2 -> can't execute
- * -3 -> external signal
- * 0 -> OK
- */
-
-#ifdef C_WINDOWS
-static int clamav_unpack(const char *prog, const char **args, const char *tmpdir, const struct passwd *user, const struct optstruct *opt)
-{
-    /* TODO: use spamvp(P_WAIT, prog, args); */
-    cli_errmsg("clamav_unpack is not supported under Windows yet\n");
-    return -1;
-}
-#else
-static int clamav_unpack(const char *prog, const char **args, const char *tmpdir, const struct passwd *user, const struct optstruct *opt)
-{
-	pid_t pid;
-	int status, wret, fdevnull;
-	unsigned int maxfiles, maxscansize;
-	struct s_du n;
-
-
-    if(opt_check(opt, "max-files"))
-	maxfiles = atoi(opt_arg(opt, "max-files"));
-    else
-	maxfiles = 10000;
-
-    if(opt_check(opt, "max-scansize")) {
-	    char *cpy, *ptr;
-	ptr = opt_arg(opt, "max-scansize");
-	if(tolower(ptr[strlen(ptr) - 1]) == 'm') { /* megabytes */
-	    cpy = calloc(strlen(ptr), 1);
-	    strncpy(cpy, ptr, strlen(ptr) - 1);
-	    maxscansize = atoi(cpy) * 1024;
-	    free(cpy);
-	} else /* default - kilobytes */
-	    maxscansize = atoi(ptr);
-    } else
-	maxscansize = 104857600;
-
-    switch(pid = fork()) {
-	case -1:
-	    return -1;
-	case 0:
-#ifndef C_CYGWIN
-	    if(!geteuid() && user) {
-
-#ifdef HAVE_SETGROUPS
-		if(setgroups(1, &user->pw_gid)) {
-		    fprintf(stderr, "ERROR: setgroups() failed\n");
-		    exit(1);
-		}
-#endif
-
-		if(setgid(user->pw_gid)) {
-		    fprintf(stderr, "ERROR: setgid(%d) failed\n", (int) user->pw_gid);
-		    exit(1);
-		}
-
-		if(setuid(user->pw_uid)) {
-		    fprintf(stderr, "ERROR: setuid(%d) failed\n", (int) user->pw_uid);
-		    exit(1);
-		}
-	    }
-#endif
-	    if(chdir(tmpdir) == -1) {
-		fprintf(stderr, "ERROR: chdir(%s) failed\n", tmpdir);
-		exit(1);
-	    }
-
-	    if(printinfected) {
-  	        fdevnull = open("/dev/null", O_WRONLY);
-		if(fdevnull == -1) {
-		    logg("Non fatal error: cannot open /dev/null. Continuing with full output\n");
-		    printinfected = 0;
-		} else {
-		    dup2(fdevnull,1);
-		    dup2(fdevnull,2);
-		}
-	    }
-
-	    if(strchr(prog, '/')) /* we have full path */
-		execv(prog, args);
-	    else
-		execvp(prog, args);
-	    perror("execv(p)");
-	    abort();
-	    break;
-	default:
-
-	    if(maxscansize || maxfiles) {
-		while(!(wret = waitpid(pid, &status, WNOHANG))) {
-		    memset(&n, 0, sizeof(struct s_du));
-
-		    if(!du(tmpdir, &n))
-			if((maxfiles && n.files > maxfiles) || (maxscansize && n.space > maxscansize)) {
-			    logg("*n.files: %u, n.space: %lu\n", n.files, n.space);
-			    kill(pid, 9); /* stop it immediately */
-			}
-		}
-	    } else
-		waitpid(pid, &status, 0);
-
-
-	    if(WIFSIGNALED(status)) {
-		switch(WTERMSIG(status)) {
-
-		    case 9:
-			logg("\nUnpacker process %d stopped due to exceeded limits\n", pid);
-			return 0;
-		    case 6: /* abort */
-			logg("^Can't run %s\n", prog);
-			return -2;
-		    default:
-			logg("^\nUnpacker stopped with external signal %d\n", WTERMSIG(status));
-			return -3;
-		}
-	    } else if(WIFEXITED(status))
-		return 0;
-    }
-
-    return 0;
-}
-#endif
 
 static void move_infected(const char *filename, const struct optstruct *opt)
 {
@@ -610,7 +746,9 @@ static void move_infected(const char *filename, const struct optstruct *opt)
 
 	chmod(movefilename, ofstat.st_mode);
 #ifndef C_OS2
-	chown(movefilename, ofstat.st_uid, ofstat.st_gid);
+	if(chown(movefilename, ofstat.st_uid, ofstat.st_gid) == -1) {
+		logg("!Can't chown '%s': %s\n", movefilename, strerror(errno));
+	}
 #endif
 
 	ubuf.actime = ofstat.st_atime;
@@ -630,475 +768,3 @@ static void move_infected(const char *filename, const struct optstruct *opt)
     free(movefilename);
 }
 
-static int checkfile(const char *filename, const struct cl_engine *engine, const struct cl_limits *limits, int options, short printclean)
-{
-	int fd, ret;
-	const char *virname;
-
-
-    logg("*Scanning %s\n", filename);
-
-    if((fd = open(filename, O_RDONLY|O_BINARY)) == -1) {
-	logg("^Can't open file %s\n", filename);
-	return 54;
-    }
-
-    if((ret = cl_scandesc(fd, &virname, &info.blocks, engine, limits, options)) == CL_VIRUS) {
-	logg("~%s: %s FOUND\n", filename, virname);
-	info.ifiles++;
-
-	if(bell)
-	    fprintf(stderr, "\007");
-
-    } else if(ret == CL_CLEAN) {
-	if(!printinfected && printclean)
-	    mprintf("~%s: OK\n", filename);
-    } else
-	if(!printinfected)
-	    logg("~%s: %s\n", filename, cl_strerror(ret));
-
-    close(fd);
-    return ret;
-}
-
-static int scancompressed(const char *filename, struct cl_engine *engine, const struct passwd *user, const struct optstruct *opt, const struct cl_limits *limits, int options)
-{
-	int ret = 0;
-	char *gendir, *userprg;
-	const char *tmpdir;
-	struct stat statbuf;
-
-
-    stat(filename, &statbuf);
-
-    if(!S_ISREG(statbuf.st_mode)) {
-	logg("^Suspect archive %s (not a regular file)\n", filename);
-	return 0; /* hmm ? */
-    }
-
-    /* check write access */
-
-    tmpdir = getenv("TMPDIR");
-
-    if(tmpdir == NULL)
-#ifdef P_tmpdir
-	tmpdir = P_tmpdir;
-#else
-	tmpdir = "/tmp";
-#endif
-
-    if(checkaccess(tmpdir, CLAMAVUSER, W_OK) != 1) {
-	logg("!Can't write to the temporary directory\n");
-	exit(64);
-    }
-
-    /* generate the temporary directory */
-
-    gendir = cli_gentemp(tmpdir);
-    if(mkdir(gendir, 0700)) {
-	logg("!Can't create the temporary directory %s\n", gendir);
-	exit(63); /* critical */
-    }
-
-#if !defined(C_OS2) && !defined(C_WINDOWS)
-    /* FIXME: do the correct native windows way */
-    if(user)
-	chown(gendir, user->pw_uid, user->pw_gid);
-#endif
-
-    /* unpack file  - as unprivileged user */
-    if(cli_strbcasestr(filename, ".zip")) {
-	const char *args[] = { "unzip", "-P", "clam", "-o", NULL, NULL };
-	/* Sun's SUNWspro C compiler doesn't allow direct initialisation
-	 * with a variable
-	 */
-	args[4] = filename;
-
-	if((userprg = opt_arg(opt, "unzip")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("unzip", args, gendir, user, opt);
-
-    } else if(cli_strbcasestr(filename, ".rar")) { 
-	const char *args[] = { "unrar", "x", "-p-", "-y", NULL, NULL };
-	args[4] = filename;
-	if((userprg = opt_arg(opt, "unrar")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("unrar", args, gendir, user, opt);
-
-    } else if(cli_strbcasestr(filename, ".arj")) { 
-        const char *args[] = { "arj", "x","-y", NULL, NULL };
-	args[3] = filename;
-        if((userprg = opt_arg(opt, "arj")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("arj", args, gendir, user, opt);
-
-    } else if(cli_strbcasestr(filename, ".zoo")) { 
-	const char *args[] = { "unzoo", "-x","-j","./", NULL, NULL };
-	args[4] = filename;
-	if((userprg = opt_arg(opt, "unzoo")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("unzoo", args, gendir, user, opt);
-
-    } else if(cli_strbcasestr(filename, ".jar")) { 
-	const char *args[] = { "unzip", "-P", "clam", "-o", NULL, NULL };
-	args[4] = filename;
-	if((userprg = opt_arg(opt, "jar")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("unzip", args, gendir, user, opt);
-
-    } else if(cli_strbcasestr(filename, ".lzh")) { 
-	const char *args[] = { "lha", "xf", NULL, NULL };
-	args[2] = filename;
-	if((userprg = opt_arg(opt, "lha")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("lha", args, gendir, user, opt);
-
-    } else if(cli_strbcasestr(filename, ".tar")) { 
-	const char *args[] = { "tar", "-xpvf", NULL, NULL };
-	args[2] = filename;
-	if((userprg = opt_arg(opt, "tar")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("tar", args, gendir, user, opt);
-
-    } else if(cli_strbcasestr(filename, ".deb")) { 
-	const char *args[] = { "ar", "x", NULL, NULL };
-	args[2] = filename;
-	if((userprg = opt_arg(opt, "deb")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("ar", args, gendir, user, opt);
-
-    } else if((cli_strbcasestr(filename, ".tar.gz") || cli_strbcasestr(filename, ".tgz"))) {
-	const char *args[] = { "tar", "-zxpvf", NULL, NULL };
-	args[2] = filename;
-	if((userprg = opt_arg(opt, "tgz")))
-	    ret = clamav_unpack(userprg, args, gendir, user, opt);
-	else
-	    ret = clamav_unpack("tar", args, gendir, user, opt);
-    }
-
-    /* fix permissions of extracted files */
-    fixperms(gendir);
-
-    if(!ret) { /* execute successful */
-	    short oldrec = recursion;
-
-	recursion = 1;
-	ret = treewalk(gendir, engine, user, opt, limits, options, 1);
-	recursion = oldrec;
-    }
-
-    /* remove the directory  - as clamav */
-    if(!opt_check(opt, "leave-temps"))
-	clamav_rmdirs(gendir);
-
-    /* free gendir - it's not necessary now */
-    free(gendir);
-
-    switch(ret) {
-	case -1:
-	    logg("!Can't fork()\n");
-	    exit(61); /* this is critical problem, so we just exit here */
-	case -2:
-	    logg("^Can't execute some unpacker. Check paths and permissions on the temporary directory\n");
-	    /* This is no longer a critical error (since 0.24). We scan
-	     * raw archive.
-	     */
-	    if((ret = checkfile(filename, engine, limits, 0, 0)) == CL_VIRUS) {
-		if(opt_check(opt, "remove")) {
-		    if(unlink(filename)) {
-			logg("^%s: Can't remove\n", filename);
-			info.notremoved++;
-		    } else {
-			logg("~%s: Removed\n", filename);
-		    }
-		} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
-		    move_infected(filename, opt);
-	    }
-	    return ret;
-	case -3:
-	    return 0;
-	case 0:
-	    /* no viruses found in archive, we scan just in case a raw file
-	     */
-	    if((ret = checkfile(filename, engine, limits, 0, 1)) == CL_VIRUS) {
-		if(opt_check(opt, "remove")) {
-		    if(unlink(filename)) {
-			logg("^%s: Can't remove\n", filename);
-			info.notremoved++;
-		    } else {
-			logg("~%s: Removed\n", filename);
-		    }
-		} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
-		    move_infected(filename, opt);
-	    }
-	    return ret;
-	case 1:
-	    logg("~%s: Infected.Archive FOUND\n", filename);
-
-	    if(bell)
-		fprintf(stderr, "\007");
-
-	    if(opt_check(opt, "remove")) {
-		if(unlink(filename)) {
-		    logg("^%s: Can't remove\n", filename);
-		    info.notremoved++;
-		} else {
-		    logg("~%s: Removed\n", filename);
-		}
-	    } else if (opt_check(opt, "move") || opt_check(opt, "copy"))
-		move_infected(filename, opt);
-
-	    return 1;
-	default:
-	    logg("^Strange value (%d) returned in scancompressed()\n", ret);
-	    return 0;
-    }
-}
-
-static int scandenied(const char *filename, struct cl_engine *engine, const struct passwd *user, const struct optstruct *opt, const struct cl_limits *limits, int options)
-{
-	char *gendir, *tmp_file;
-	const char *tmpdir, *pt;
-	struct stat statbuf;
-	int ret;
-
-    stat(filename, &statbuf);
-    if(!S_ISREG(statbuf.st_mode)) {
-	logg("^Suspect archive %s (not a regular file)\n", filename);
-	return 0;
-    }
-
-    /* check write access */
-
-    tmpdir = getenv("TMPDIR");
-
-    if(tmpdir == NULL)
-#ifdef P_tmpdir
-	tmpdir = P_tmpdir;
-#else
-	tmpdir = "/tmp";
-#endif
-
-
-    if(checkaccess(tmpdir, CLAMAVUSER, W_OK) != 1) {
-	logg("!Can't write to the temporary directory %s\n", tmpdir);
-	exit(64);
-    }
-
-    /* generate the temporary directory */
-    gendir = cli_gentemp(tmpdir);
-    if(mkdir(gendir, 0700)) {
-	logg("^Can't create the temporary directory %s\n", gendir);
-	exit(63); /* critical */
-    }
-
-    tmp_file = (char *) malloc(strlen(gendir) + strlen(filename) + 10);
-    pt = strrchr(filename, '/');
-    if(!pt)
-	pt = filename;
-    else
-	pt += 1;
-
-    sprintf(tmp_file, "%s/%s", gendir, pt);
-
-    if(filecopy(filename, tmp_file) == -1) {
-	logg("!I/O error\n");
-	perror("copyfile()");
-	exit(58);
-    }
-
-    fixperms(gendir);
-
-#if !defined(C_OS2) && !defined(C_WINDOWS)
-    if(user) {
-	chown(gendir, user->pw_uid, user->pw_gid);
-	chown(tmp_file, user->pw_uid, user->pw_gid);
-    }
-#endif
-
-    if((ret = treewalk(gendir, engine, user, opt, limits, options, 1)) == 1) {
-	logg("(Real infected archive: %s)\n", filename);
-
-	if(opt_check(opt, "remove")) {
-	    if(unlink(filename)) {
-		logg("^%s: Can't remove\n", filename);
-		info.notremoved++;
-	    } else {
-	        logg("~%s: Removed\n", filename);
-	    }
-	} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
-	    move_infected(filename, opt);
-    }
-
-    /* remove the directory  - as clamav */
-    clamav_rmdirs(gendir);
-
-    free(gendir);
-    free(tmp_file);
-
-    return ret;
-}
-
-int scanfile(const char *filename, struct cl_engine *engine, const struct passwd *user, const struct optstruct *opt, const struct cl_limits *limits, unsigned int options)
-{
-	int ret, included, printclean = 1;
-	const struct optnode *optnode;
-	char *argument;
-#ifdef C_LINUX
-	struct stat sb;
-
-    /* argh, don't scan /proc files */
-    if(procdev)
-	if(stat(filename, &sb) != -1)
-	    if(sb.st_dev == procdev) {
-		if(!printinfected)
-		    logg("~%s: Excluded (/proc)\n", filename);
-		return 0;
-	    }
-#endif    
-
-    if(opt_check(opt, "exclude")) {
-	argument = opt_firstarg(opt, "exclude", &optnode);
-	while(argument) {
-	    if(match_regex(filename, argument) == 1) {
-		if(!printinfected)
-		    logg("~%s: Excluded\n", filename);
-		return 0;
-	    }
-	    argument = opt_nextarg(&optnode, "exclude");
-	}
-    }
-
-   if(opt_check(opt, "include")) {
-	included = 0;
-	argument = opt_firstarg(opt, "include", &optnode);
-	while(argument && !included) {
-	    if(match_regex(filename, argument) == 1) {
-		included = 1;
-		break;
-	    }
-	    argument = opt_nextarg(&optnode, "include");
-	}
-
-	if(!included) {
-	    if(!printinfected)
-		logg("~%s: Excluded\n", filename);
-	    return 0;
-	}
-    }
-
-    if(fileinfo(filename, 1) == 0) {
-	if(!printinfected)
-	    logg("~%s: Empty file\n", filename);
-	return 0;
-    }
-
-#ifndef C_WINDOWS
-    if(geteuid())
-	if(checkaccess(filename, NULL, R_OK) != 1) {
-	    if(!printinfected)
-		logg("~%s: Access denied\n", filename);
-	    return 0;
-	}
-#endif
-
-    info.files++;
-
-    /* 
-     * check the extension  - this is a special case, normally we don't need to
-     * do this (libclamav detects archive by its magic string), but here we
-     * want to know the exit code from internal unpacker and try to use
-     * external (if provided) when internal cannot extract data.
-     */
-
-    if((cli_strbcasestr(filename, ".zip") || cli_strbcasestr(filename, ".rar")) && (options & CL_SCAN_ARCHIVE)) {
-
-#ifndef ENABLE_UNRAR
-      if(cli_strbcasestr(filename, ".zip"))
-#endif
-	/* try to use internal archivers */
-	if((ret = checkfile(filename, engine, limits, options, 1)) == CL_VIRUS) {
-	    if(opt_check(opt, "remove")) {
-		if(unlink(filename)) {
-		    logg("^%s: Can't remove\n", filename);
-		    info.notremoved++;
-		} else {
-		    logg("~%s: Removed\n", filename);
-		}
-	    } else if (opt_check(opt, "move") || opt_check(opt, "copy"))
-		move_infected(filename, opt);
-
-	    return 1;
-
-	} else if(ret == CL_CLEAN) {
-	    return 0;
-	} else if(ret == 54) {
-	    return ret;
-	}
-
-	/* in other case try to continue with external archivers */
-	options &= ~CL_SCAN_ARCHIVE; /* and disable decompression for the checkfile() below */
-	printclean = 0;
-    }
-
-    if((cli_strbcasestr(filename, ".zip") && opt_check(opt, "unzip"))
-    || (cli_strbcasestr(filename, ".rar") && opt_check(opt, "unrar"))
-    || (cli_strbcasestr(filename, ".arj") && opt_check(opt, "arj"))
-    || (cli_strbcasestr(filename, ".zoo") && opt_check(opt, "unzoo"))
-    || (cli_strbcasestr(filename, ".jar") && opt_check(opt, "jar"))
-    || (cli_strbcasestr(filename, ".lzh") && opt_check(opt, "lha"))
-    || (cli_strbcasestr(filename, ".tar") && opt_check(opt, "tar"))
-    || (cli_strbcasestr(filename, ".deb") && opt_check(opt, "deb"))
-    || ((cli_strbcasestr(filename, ".tar.gz") || cli_strbcasestr(filename, ".tgz")) 
-	 && (opt_check(opt, "tgz") || opt_check(opt, "deb"))) ) {
-
-	/* check permissions */
-	switch(checkaccess(filename, CLAMAVUSER, R_OK)) {
-	    case -1:
-		logg("^Can't get information about user "CLAMAVUSER"\n");
-		exit(60); /* this is a critical problem so we just exit here */
-	    case -2:
-		logg("^Can't fork\n");
-		exit(61);
-	    case 0: /* read access denied */
-		if(geteuid()) {
-		    if(!printinfected)
-			logg("^%s: Access denied to archive\n", filename);
-		} else {
-
-		    if(limits && limits->maxfilesize)
-			if((unsigned int) fileinfo(filename, 1) / 1024 > limits->maxfilesize) {
-			    if(!printinfected)
-				logg("^%s: Archive too big\n", filename);
-			    return 0;
-			}
-
-		    return(scandenied(filename, engine, user, opt, limits, options));
-		}
-		return 0;
-	    case 1:
-		return(scancompressed(filename, engine, user, opt, limits, options));
-	}
-    }
-
-    if((ret = checkfile(filename, engine, limits, options, printclean)) == CL_VIRUS) {
-	if(opt_check(opt, "remove")) {
-	    if(unlink(filename)) {
-		logg("^%s: Can't remove\n", filename);
-		info.notremoved++;
-	    } else {
-		logg("~%s: Removed\n", filename);
-	    }
-	} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
-            move_infected(filename, opt);
-    }
-    return ret;
-}

@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Mon Jul 28 18:44:53 2008
+# Fri Jul 11 15:08:47 2008
 #
 CONFIG_DISTVERSION="4.0"
 

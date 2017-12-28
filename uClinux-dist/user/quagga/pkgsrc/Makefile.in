@@ -192,6 +192,7 @@ rc_SCRIPTS = bgpd.sh ospf6d.sh ospfd.sh ripd.sh ripngd.sh zebra.sh
 all: all-am
 
 .SUFFIXES:
+ifdef NOTDEF
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -221,6 +222,7 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
+endif
 bgpd.sh: $(top_builddir)/config.status $(srcdir)/bgpd.sh.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 ospf6d.sh: $(top_builddir)/config.status $(srcdir)/ospf6d.sh.in

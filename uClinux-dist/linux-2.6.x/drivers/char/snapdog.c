@@ -74,7 +74,7 @@
 #if defined(CONFIG_MACH_ESS710) || defined(CONFIG_MACH_IVPN) || \
     defined(CONFIG_MACH_SG560) || defined(CONFIG_MACH_SG580) || \
     defined(CONFIG_MACH_SG640) || defined(CONFIG_MACH_SG720) || \
-    defined(CONFIG_MACH_SG590)
+    defined(CONFIG_MACH_SG590) || defined(CONFIG_MACH_SE5100)
 	#include <asm/io.h>
 
 	static inline void enable_dog(void)
@@ -144,6 +144,29 @@
 		v = inl(0x6410);
 		outl((v | 0x200), 0x6410);
 		outl((v & ~0x200), 0x6410);
+	}
+
+	static inline void the_dog_is_dead(void) {}
+
+	#define HAS_HW_SERVICE 1
+#endif
+
+#ifdef CONFIG_SG590
+	#include <asm/mach-cavium-octeon/gpio.h>
+
+	static int wdt_state;
+
+	static inline void enable_dog(void)
+	{
+		octeon_gpio_config(9, OCTEON_GPIO_OUTPUT);
+	}
+
+	static inline void poke_the_dog(void)
+	{
+		if (wdt_state++ & 1)
+			octeon_gpio_clear(0x1 << 9);
+		else
+			octeon_gpio_set(0x1 << 9);
 	}
 
 	static inline void the_dog_is_dead(void) {}

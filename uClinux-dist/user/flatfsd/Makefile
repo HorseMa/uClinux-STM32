@@ -2,7 +2,7 @@
 
 ######################################################
 
-VERSION = 3.0.1
+VERSION = 3.0.2
 
 ######################################################
 
@@ -15,6 +15,11 @@ CFLAGS += -Wall -Werror -Wmissing-prototypes
 
 # CFLAGS += -DDEBUG
 
+# build start time in seconds
+BUILD_START_STRING ?= $(shell date -R)
+BUILD_START_UNIX   := $(shell date "-d$(BUILD_START_STRING)" +%s)
+CFLAGS += -DBUILD_START_UNIX=$(BUILD_START_UNIX)
+
 ######################################################
 #
 # Erk! settings to change the way flatfsd works
@@ -22,6 +27,7 @@ CFLAGS += -Wall -Werror -Wmissing-prototypes
 # Explicit setting overrides autodetect
 USING_FLASH_FILESYSTEM_$(CONFIG_USER_FLATFSD_USE_FLASH_FS) = y
 USING_DISKLIKE_DEVICE_$(CONFIG_USER_FLATFSD_DISKLIKE) = y
+USING_DISKLIKE_DEVICE_$(CONFIG_USER_FLATFSD_CONFIG_BLOBS) = y
 ifdef CONFIG_USER_FLATFSD_AUTO
 	ifdef CONFIG_NFTL
 		ifndef CONFIG_MTD_CFI_INTELEXT

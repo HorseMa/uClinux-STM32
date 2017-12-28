@@ -143,7 +143,7 @@ PKG_CFLAGS   := -fno-common -ffast-math \
   -Wstrict-prototypes -Wmissing-prototypes
 # Note that some stuff below is conditional on CFLAGS containing
 # an option that starts with "-g". (-g, -g2, -g3, -ggdb, etc.)
-CFLAGS       := -O2 -s
+CFLAGS       := -O2
 CFLAGS       += -DTINY_TCAP
 ALL_CFLAGS   := $(PKG_CFLAGS) $(CFLAGS)
 

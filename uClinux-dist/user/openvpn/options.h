@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -82,10 +82,65 @@ struct options_pre_pull
 
 #endif
 
+struct connection_entry
+{
+  int proto;
+  int local_port;
+  bool local_port_defined;
+  int remote_port;
+  bool port_option_used;
+  const char *local;
+  const char *remote;
+  bool remote_float;
+  bool bind_defined;
+  bool bind_local;
+  int connect_retry_seconds;
+  bool connect_retry_defined;
+  int connect_retry_max;
+  int connect_timeout;
+  bool connect_timeout_defined;
+#ifdef ENABLE_HTTP_PROXY
+  struct http_proxy_options *http_proxy_options;
+#endif  
+#ifdef ENABLE_SOCKS
+  const char *socks_proxy_server;
+  int socks_proxy_port;
+  bool socks_proxy_retry;
+#endif
+};
+
+struct remote_entry
+{
+  const char *remote;
+  int remote_port;
+  int proto;
+};
+
+#ifdef ENABLE_CONNECTION
+
+#define CONNECTION_LIST_SIZE 64
+
+struct connection_list
+{
+  int len;
+  int current;
+  bool no_advance;
+  struct connection_entry *array[CONNECTION_LIST_SIZE];
+};
+
+struct remote_list
+{
+  int len;
+  struct remote_entry *array[CONNECTION_LIST_SIZE];
+};
+
+#endif
+
 /* Command line options */
 struct options
 {
   struct gc_arena gc;
+  bool gc_owned;
 
   /* first config file */
   const char *config;
@@ -94,6 +149,9 @@ struct options
 # define MODE_POINT_TO_POINT 0
 # define MODE_SERVER         1
   int mode;
+
+  /* enable forward compatibility for post-2.1 features */
+  bool forward_compatible;
 
   /* persist parms */
   bool persist_config;
@@ -111,17 +169,19 @@ struct options
 #endif
 
   /* Networking parms */
-  const char *local;
-  int local_port;
-  bool local_port_defined;
-  int remote_port;
-  bool port_option_used;
-  bool remote_float;
+  struct connection_entry ce;
+
+#ifdef ENABLE_CONNECTION
+  struct connection_list *connection_list;
   struct remote_list *remote_list;
+#endif
+
+#ifdef GENERAL_PROXY_SUPPORT
+  struct auto_proxy_info *auto_proxy_info;
+#endif
+
   bool remote_random;
   const char *ipchange;
-  bool bind_defined;
-  bool bind_local;
   const char *dev;
   const char *dev_type;
   const char *dev_node;
@@ -140,14 +200,6 @@ struct options
   int link_mtu;          /* MTU of device over which tunnel packets pass via TCP/UDP */
   bool tun_mtu_defined;  /* true if user overriding parm with command line option */
   bool link_mtu_defined; /* true if user overriding parm with command line option */
-
-  /* Protocol type (PROTO_UDP or PROTO_TCP) */
-  int proto;
-  int connect_retry_seconds;
-  int connect_retry_max;
-  bool connect_retry_defined;
-  int connect_timeout;
-  bool connect_timeout_defined;
 
   /* Advanced MTU negotiation and datagram fragmentation options */
   int mtu_discover_type; /* used if OS supports setting Path MTU discovery options on socket */
@@ -253,21 +305,8 @@ struct options
   bool route_delay_defined;
   struct route_option_list *routes;
   bool route_nopull;
-
-#ifdef GENERAL_PROXY_SUPPORT
-  struct auto_proxy_info *auto_proxy_info;
-#endif
-
-#ifdef ENABLE_HTTP_PROXY
-  struct http_proxy_options *http_proxy_options;
-#endif
-
-#ifdef ENABLE_SOCKS
-  /* socks proxy */
-  const char *socks_proxy_server;
-  int socks_proxy_port;
-  bool socks_proxy_retry;
-#endif
+  bool route_gateway_via_dhcp;
+  bool allow_pull_fqdn; /* as a client, allow server to push a FQDN for certain parameters */
 
 #ifdef ENABLE_OCC
   /* Enable options consistency check between peers */
@@ -281,12 +320,13 @@ struct options
   int management_log_history_cache;
   int management_echo_buffer_size;
   int management_state_buffer_size;
-  bool management_query_passwords;
-  bool management_hold;
-  bool management_signal;
-  bool management_forget_disconnect;
-  bool management_client;
   const char *management_write_peer_info_file;
+
+  const char *management_client_user;
+  const char *management_client_group;
+
+  /* Mask of MF_ values of manage.h */
+  unsigned int management_flags;
 #endif
 
 #ifdef ENABLE_PLUGIN
@@ -306,7 +346,10 @@ struct options
   in_addr_t server_netmask;
 
 # define SF_NOPOOL (1<<0)
+# define SF_TCP_NODELAY_HELPER (1<<1)
   unsigned int server_flags;
+
+  bool server_bridge_proxy_dhcp;
 
   bool server_bridge_defined;
   in_addr_t server_bridge_ip;
@@ -346,10 +389,9 @@ struct options
   int max_clients;
   int max_routes_per_client;
 
-  bool client_cert_not_required;
-  bool username_as_common_name;
   const char *auth_user_pass_verify_script;
   bool auth_user_pass_verify_script_via_file;
+  unsigned int ssl_flags; /* set to SSLF_x flags from ssl.h */
 #if PORT_SHARE
   char *port_share_host;
   int port_share_port;
@@ -377,6 +419,8 @@ struct options
   bool authname_defined;
   const char *authname;
   int keysize;
+  const char *prng_hash;
+  int prng_nonce_secret_len;
   const char *engine;
   bool replay;
   bool mute_replay_warnings;
@@ -419,6 +463,7 @@ struct options
   bool pkcs11_cert_private[MAX_PARMS];
   int pkcs11_pin_cache_period;
   const char *pkcs11_id;
+  bool pkcs11_id_management;
 #endif
 
 #ifdef WIN32
@@ -500,6 +545,7 @@ struct options
 #define OPT_P_PLUGIN          (1<<24)
 #define OPT_P_SOCKBUF         (1<<25)
 #define OPT_P_SOCKFLAGS       (1<<26)
+#define OPT_P_CONNECTION      (1<<27)
 
 #define OPT_P_DEFAULT   (~(OPT_P_INSTANCE|OPT_P_PULL_MODE))
 
@@ -536,6 +582,12 @@ struct options
 #define PLUGIN_OPTION_LIST(opt) (NULL)
 #endif
 
+#ifdef MANAGEMENT_DEF_AUTH
+#define MAN_CLIENT_AUTH_ENABLED(opt) ((opt)->management_flags & MF_CLIENT_AUTH)
+#else
+#define MAN_CLIENT_AUTH_ENABLED(opt) (false)
+#endif
+
 void parse_argv (struct options *options,
 		 const int argc,
 		 char *argv[],
@@ -548,7 +600,7 @@ void notnull (const char *arg, const char *description);
 
 void usage_small (void);
 
-void init_options (struct options *o);
+void init_options (struct options *o, const bool init_gc);
 void uninit_options (struct options *o);
 
 void setenv_settings (struct env_set *es, const struct options *o);
@@ -566,14 +618,14 @@ char *options_string (const struct options *o,
 		      bool remote,
 		      struct gc_arena *gc);
 
-int options_cmp_equal_safe (char *actual, const char *expected, size_t actual_n);
+bool options_cmp_equal_safe (char *actual, const char *expected, size_t actual_n);
 void options_warning_safe (char *actual, const char *expected, size_t actual_n);
-int options_cmp_equal (char *actual, const char *expected);
+bool options_cmp_equal (char *actual, const char *expected);
 void options_warning (char *actual, const char *expected);
 
 #endif
 
-void options_postprocess (struct options *options, bool first_time);
+void options_postprocess (struct options *options);
 
 void pre_pull_save (struct options *o);
 void pre_pull_restore (struct options *o);
@@ -631,15 +683,33 @@ const char *auth_retry_print (void);
 
 #endif
 
-#ifdef ENABLE_PLUGIN
-
-void options_plugin_import (struct options *options,
+void options_string_import (struct options *options,
 			    const char *config,
 			    const int msglevel,
 			    const unsigned int permission_mask,
 			    unsigned int *option_types_found,
 			    struct env_set *es);
 
+/*
+ * inline functions
+ */
+static inline bool
+connection_list_defined (const struct options *o)
+{
+#ifdef ENABLE_CONNECTION
+  return o->connection_list != NULL;
+#else
+  return false;
 #endif
+}
+
+static inline void
+connection_list_set_no_advance (struct options *o)
+{
+#ifdef ENABLE_CONNECTION
+  if (o->connection_list)
+    o->connection_list->no_advance = true;
+#endif
+}
 
 #endif

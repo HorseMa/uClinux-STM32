@@ -65,7 +65,8 @@ static	char	const	rcsid[] = "$Id: pdf.c,v 1.61 2007/02/12 20:46:09 njh Exp $";
 #endif
 
 #ifdef	CL_DEBUG
-/*#define	SAVE_TMP	/* Save the file being worked on in tmp */
+/*#define	SAVE_TMP	
+ *Save the file being worked on in tmp */
 #endif
 
 static	int	try_flatedecode(unsigned char *buf, off_t real_len, off_t calculated_len, int fout, cli_ctx *ctx);
@@ -79,7 +80,7 @@ static	const	char	*cli_pmemstr(const char *haystack, size_t hs, const char *need
  * TODO: handle embedded URLs if (options&CL_SCAN_MAILURL)
  */
 int
-cli_pdf(const char *dir, int desc, cli_ctx *ctx)
+cli_pdf(const char *dir, int desc, cli_ctx *ctx, off_t offset)
 {
 	off_t size;	/* total number of bytes in the file */
 	off_t bytesleft, trailerlength;
@@ -99,12 +100,12 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 		return CL_EOPEN;
 	}
 
-	size = statb.st_size;
+	size = statb.st_size - offset;
 
 	if(size <= 7)	/* doesn't even include the file header */
 		return CL_CLEAN;
 
-	p = buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, desc, 0);
+	p = buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, desc, offset);
 	if(buf == MAP_FAILED) {
 		cli_errmsg("cli_pdf: mmap() failed\n");
 		return CL_EMEM;
@@ -115,28 +116,24 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 	/* Lines are terminated by \r, \n or both */
 
 	/* File Header */
-	if(memcmp(p, "%PDF-1.", 7) != 0) {
-		munmap(buf, size);
-		cli_dbgmsg("cli_pdf: file header not found\n");
-		return CL_CLEAN;
+	bytesleft = size - 5;
+	for(q = p; bytesleft; bytesleft--, q++) {
+	    if(!strncasecmp(q, "%PDF-", 5)) {
+		bytesleft = size - (off_t) (q - p);
+		p = q;
+		break;
+	    }
 	}
 
-#if	0
-	q = pdf_nextlinestart(&p[6], size - 6);
-	if(q == NULL) {
-		munmap(buf, size);
-		return CL_CLEAN;
+	if(!bytesleft) {
+	    munmap(buf, size);
+	    cli_dbgmsg("cli_pdf: file header not found\n");
+	    return CL_CLEAN;
 	}
-	bytesleft = size - (long)(q - p);
-	p = q;
-#else
-	p = &p[6];
-	bytesleft = size - 6;
-#endif
 
 	/* Find the file trailer */
-	for(q = &p[bytesleft - 6]; q > p; --q)
-		if(memcmp(q, "%%EOF", 5) == 0)
+	for(q = &p[bytesleft - 5]; q > p; --q)
+		if(strncasecmp(q, "%%EOF", 5) == 0)
 			break;
 
 	if(q <= p) {
@@ -395,7 +392,10 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 		if(streamend <= streamstart) {
 			close(fout);
 			cli_dbgmsg("cli_pdf: Empty stream\n");
-			unlink(fullname);
+			if (cli_unlink(fullname)) {
+				rc = CL_EIO;
+				break;
+			}
 			continue;
 		}
 		calculated_streamlen = (int)(streamend - streamstart);
@@ -421,7 +421,10 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 
 			if(ret != CL_CLEAN) {
 				close(fout);
-				unlink(fullname);
+				if (cli_unlink(fullname)) {
+					rc = CL_EIO;
+					break;
+				}
 				continue;
 			}
 
@@ -429,7 +432,10 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 
 			if(tmpbuf == NULL) {
 				close(fout);
-				unlink(fullname);
+				if (cli_unlink(fullname)) {
+					rc = CL_EIO;
+					break;
+				}
 				continue;
 			}
 
@@ -438,7 +444,10 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 			if(ret == -1) {
 				free(tmpbuf);
 				close(fout);
-				unlink(fullname);
+				if (cli_unlink(fullname)) {
+					rc = CL_EIO;
+					break;
+				}
 				continue;
 			}
 			if(ret) {
@@ -450,7 +459,10 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 				if(t == NULL) {
 					free(tmpbuf);
 					close(fout);
-					unlink(fullname);
+					if (cli_unlink(fullname)) {
+						rc = CL_EIO;
+						break;
+					}
 					continue;
 				}
 				tmpbuf = t;
@@ -491,8 +503,12 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 
 				if(tableFind(md5table, md5str) >= 0) {
 					cli_dbgmsg("cli_pdf: not scanning duplicate embedded file '%s'\n", fullname);
+					ctx->scannedfiles++;
 					close(fout);
-					unlink(fullname);
+					if (cli_unlink(fullname)) {
+						rc = CL_EIO;
+						break;
+					}
 					continue;
 				} else
 					tableInsert(md5table, md5str, 1);
@@ -502,7 +518,8 @@ cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 			rc = cli_magic_scandesc(fout, ctx);
 		}
 		close(fout);
-		if(!cli_leavetemps_flag) unlink(fullname);
+		if(!cli_leavetemps_flag)
+			if (cli_unlink(fullname)) rc = CL_EIO;
 		if(rc != CL_CLEAN) break;
 	}
 
@@ -652,7 +669,10 @@ flatedecode(unsigned char *buf, off_t len, int fout, cli_ctx *ctx)
 	}
 			
 #ifdef	SAVE_TMP
-	unlink(tmpfilename);
+	if (cli_unlink(tmpfilename)) {
+		inflateEnd(&stream);
+		return CL_EIO;
+	}
 #endif
 	inflateEnd(&stream);
 	return CL_CLEAN;
@@ -846,7 +866,7 @@ cli_pmemstr(const char *haystack, size_t hs, const char *needle, size_t ns)
 #include "pdf.h"
 
 int
-cli_pdf(const char *dir, int desc, cli_ctx *ctx)
+cli_pdf(const char *dir, int desc, cli_ctx *ctx, off_t offset)
 {
 	cli_dbgmsg("File not decoded - PDF decoding needs mmap() (for now)\n");
 	return CL_CLEAN;

@@ -661,7 +661,7 @@ console_initcall(ks8695_console_init);
 
 static struct uart_driver ks8695_reg = {
 	.owner			= THIS_MODULE,
-	.driver_name		= "serial_ks8695",
+	.driver_name		= "serial",
 	.dev_name		= SERIAL_KS8695_DEVNAME,
 	.major			= SERIAL_KS8695_MAJOR,
 	.minor			= SERIAL_KS8695_MINOR,

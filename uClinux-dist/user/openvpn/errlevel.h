@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -75,6 +75,7 @@
 #define D_CLOSE              LOGLEV(2, 22, 0)        /* show socket and TUN/TAP close */
 #define D_SHOW_OCC_HASH      LOGLEV(2, 23, 0)        /* show MD5 hash of option compatibility string */
 #define D_PROXY              LOGLEV(2, 24, 0)        /* show http proxy control packets */
+#define D_ARGV               LOGLEV(2, 25, 0)        /* show struct argv errors */
 
 #define D_TLS_DEBUG_LOW      LOGLEV(3, 20, 0)        /* low frequency info from tls_session routines */
 #define D_GREMLIN            LOGLEV(3, 30, 0)        /* show simulated outage info from gremlin module */
@@ -94,6 +95,7 @@
 #define D_ROUTE_QUOTA        LOGLEV(3, 43, 0)        /* show route quota exceeded messages */
 #define D_OSBUF              LOGLEV(3, 44, 0)        /* show socket/tun/tap buffer sizes */
 #define D_PS_PROXY           LOGLEV(3, 45, 0)        /* messages related to --port-share option */
+#define D_PF_INFO            LOGLEV(3, 46, 0)        /* packet filter informational messages */
 
 #define D_SHOW_PARMS         LOGLEV(4, 50, 0)        /* show all parameters on program initiation */
 #define D_SHOW_OCC           LOGLEV(4, 51, 0)        /* show options compatibility string */
@@ -101,6 +103,7 @@
 #define D_DHCP_OPT           LOGLEV(4, 53, 0)        /* show DHCP options binary string */
 #define D_MBUF               LOGLEV(4, 54, 0)        /* mbuf.[ch] routines */
 #define D_PACKET_TRUNC_ERR   LOGLEV(4, 55, 0)        /* PACKET_TRUNCATION_CHECK */
+#define D_PF_DROPPED         LOGLEV(4, 56, 0)        /* packet filter dropped a packet */
 
 #define D_LOG_RW             LOGLEV(5, 0,  0)        /* Print 'R' or 'W' to stdout for read/write */
 
@@ -118,7 +121,7 @@
 #define D_MULTI_DEBUG        LOGLEV(7, 70, M_DEBUG)  /* show medium-freq multi debugging info */
 #define D_MSS                LOGLEV(7, 70, M_DEBUG)  /* show MSS adjustments */
 #define D_COMP_LOW           LOGLEV(7, 70, M_DEBUG)  /* show adaptive compression state changes */
-#define D_REMOTE_LIST        LOGLEV(7, 70, M_DEBUG)  /* show --remote list */
+#define D_CONNECTION_LIST    LOGLEV(7, 70, M_DEBUG)  /* show <connection> list info */
 #define D_SCRIPT             LOGLEV(7, 70, M_DEBUG)  /* show parms & env vars passed to scripts */
 #define D_SHOW_NET           LOGLEV(7, 70, M_DEBUG)  /* show routing table and adapter list */
 #define D_ROUTE_DEBUG        LOGLEV(7, 70, M_DEBUG)  /* show verbose route.[ch] output */
@@ -135,6 +138,11 @@
 #define D_PING               LOGLEV(7, 70, M_DEBUG)  /* PING send/receive messages */
 #define D_PS_PROXY_DEBUG     LOGLEV(7, 70, M_DEBUG)  /* port share proxy debug */
 #define D_AUTO_USERID        LOGLEV(7, 70, M_DEBUG)  /* AUTO_USERID debugging */
+#define D_TLS_KEYSELECT      LOGLEV(7, 70, M_DEBUG)  /* show information on key selection for data channel */
+#define D_ARGV_PARSE_CMD     LOGLEV(7, 70, M_DEBUG)  /* show parse_line() errors in argv_printf %sc */
+#define D_CRYPTO_DEBUG       LOGLEV(7, 70, M_DEBUG)  /* show detailed info from crypto.c routines */
+#define D_PF_DROPPED_BCAST   LOGLEV(7, 71, M_DEBUG)  /* packet filter dropped a broadcast packet */
+#define D_PF_DEBUG           LOGLEV(7, 72, M_DEBUG)  /* packet filter debugging, must also define PF_DEBUG in pf.h */
 
 #define D_HANDSHAKE_VERBOSE  LOGLEV(8, 70, M_DEBUG)  /* show detailed description of each handshake */
 #define D_TLS_DEBUG_MED      LOGLEV(8, 70, M_DEBUG)  /* limited info from tls_session routines */
@@ -146,7 +154,6 @@
 #define D_MULTI_TCP          LOGLEV(8, 70, M_DEBUG)  /* show debug info from mtcp.c */
 
 #define D_TLS_DEBUG          LOGLEV(9, 70, M_DEBUG)  /* show detailed info from TLS routines */
-#define D_CRYPTO_DEBUG       LOGLEV(9, 70, M_DEBUG)  /* show detailed info from crypto.c routines */
 #define D_COMP               LOGLEV(9, 70, M_DEBUG)  /* show compression info */
 #define D_READ_WRITE         LOGLEV(9, 70, M_DEBUG)  /* show all tun/tcp/udp reads/writes/opens */
 #define D_PACKET_CONTENT     LOGLEV(9, 70, M_DEBUG)  /* show before/after encryption packet content */

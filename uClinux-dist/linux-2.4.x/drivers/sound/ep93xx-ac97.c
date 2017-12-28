@@ -881,22 +881,13 @@ static void ep93xx_set_volume
 
 static void ep93xx_init_mixer(void)
 {
-	u16 cap, oldcap;
+	u16 cap;
 	int i;
 
 	/* mixer masks */
 	codec_supported_mixers 	= AC97_SUPPORTED_MASK;
 	
 	cap = peek( AC97_00_RESET );
-	/* We wait for this setting to stabilise a little */
-	oldcap = cap?0:1;
-	for (i=0; oldcap != cap && i < 10; i++) {
-		oldcap = cap;
-		mdelay( 10 );
-		cap = peek( AC97_00_RESET );
-	}
-	if (i == 10)
-		printk( KERN_INFO "ep93xx_init_mixer cap didn't settle.\n");
 	if( !(cap & 0x04) )
 	{
 		codec_supported_mixers &= ~(SOUND_MASK_BASS|SOUND_MASK_TREBLE);

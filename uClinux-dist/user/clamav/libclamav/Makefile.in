@@ -58,7 +58,9 @@ DIST_COMMON = $(include_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/acinclude.m4 \
-	$(top_srcdir)/m4/lib-link.m4 $(top_srcdir)/m4/lib-prefix.m4 \
+	$(top_srcdir)/m4/fdpassing.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 \
+	$(top_srcdir)/m4/mmap_private.m4 $(top_srcdir)/m4/resolv.m4 \
 	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -75,21 +77,22 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 libLTLIBRARIES_INSTALL = $(INSTALL)
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 @ENABLE_UNRAR_FALSE@libclamav_la_DEPENDENCIES = lzma/liblzma.la
-@ENABLE_UNRAR_TRUE@libclamav_la_DEPENDENCIES = lzma/liblzma.la \
-@ENABLE_UNRAR_TRUE@	$(top_builddir)/libclamunrar_iface/libclamunrar_iface.la
+@ENABLE_UNRAR_TRUE@libclamav_la_DEPENDENCIES = $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la \
+@ENABLE_UNRAR_TRUE@	lzma/liblzma.la
 am_libclamav_la_OBJECTS = matcher-ac.lo matcher-bm.lo matcher.lo \
 	md5.lo others.lo readdb.lo cvd.lo dsig.lo str.lo scanners.lo \
 	textdet.lo filetypes.lo rtf.lo blob.lo mbox.lo message.lo \
 	table.lo text.lo ole2_extract.lo vba_extract.lo msexpand.lo \
-	pe.lo upx.lo htmlnorm.lo chmunpack.lo rebuildpe.lo petite.lo \
-	wwunpack.lo unsp.lo aspack.lo packlibs.lo fsg.lo mew.lo \
-	upack.lo line.lo untar.lo unzip.lo inflate64.lo special.lo \
-	binhex.lo is_tar.lo tnef.lo autoit.lo strlcpy.lo regcomp.lo \
-	regerror.lo regexec.lo regfree.lo unarj.lo bzlib.lo nulsft.lo \
-	infblock.lo pdf.lo spin.lo yc.lo elf.lo sis.lo uuencode.lo \
-	phishcheck.lo phish_domaincheck_db.lo phish_whitelist.lo \
-	regex_list.lo mspack.lo cab.lo entconv.lo hashtab.lo dconf.lo \
-	lzma_iface.lo explode.lo textnorm.lo
+	pe.lo disasm.lo upx.lo htmlnorm.lo chmunpack.lo rebuildpe.lo \
+	petite.lo wwunpack.lo unsp.lo aspack.lo packlibs.lo fsg.lo \
+	mew.lo upack.lo line.lo untar.lo unzip.lo inflate64.lo \
+	special.lo binhex.lo is_tar.lo tnef.lo autoit.lo strlcpy.lo \
+	regcomp.lo regerror.lo regexec.lo regfree.lo unarj.lo bzlib.lo \
+	nulsft.lo infblock.lo pdf.lo spin.lo yc.lo elf.lo sis.lo \
+	uuencode.lo phishcheck.lo phish_domaincheck_db.lo \
+	phish_whitelist.lo regex_list.lo regex_suffix.lo mspack.lo \
+	cab.lo entconv.lo hashtab.lo dconf.lo lzma_iface.lo explode.lo \
+	textnorm.lo dlp.lo js-norm.lo uniq.lo version.lo
 libclamav_la_OBJECTS = $(am_libclamav_la_OBJECTS)
 libclamav_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
@@ -146,6 +149,8 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFGDIR = @CFGDIR@
 CFLAGS = @CFLAGS@
+CHECK_CFLAGS = @CHECK_CFLAGS@
+CHECK_LIBS = @CHECK_LIBS@
 CLAMAVGROUP = @CLAMAVGROUP@
 CLAMAVUSER = @CLAMAVUSER@
 CLAMAV_MILTER_LIBS = @CLAMAV_MILTER_LIBS@
@@ -164,7 +169,10 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FRESHCLAM_LIBS = @FRESHCLAM_LIBS@
+GCOV = @GCOV@
+GENHTML = @GENHTML@
 GETENT = @GETENT@
+GPERF = @GPERF@
 GREP = @GREP@
 HAVE_LIBGMP = @HAVE_LIBGMP@
 INSTALL = @INSTALL@
@@ -172,7 +180,10 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+LCOV = @LCOV@
 LDFLAGS = $(patsubst $(ROOTDIR)/%.o,,@LDFLAGS@)
+LIBBZ2 = @LIBBZ2@
+LIBBZ2_PREFIX = @LIBBZ2_PREFIX@
 LIBCLAMAV_LIBS = @LIBCLAMAV_LIBS@
 LIBCLAMAV_VERSION = @LIBCLAMAV_VERSION@
 LIBGMP = @LIBGMP@
@@ -196,6 +207,7 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -261,8 +273,8 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = lzma .
 AM_CPPFLAGS = -I$(top_srcdir) -I@srcdir@/nsis -I@srcdir@/lzma
-@ENABLE_UNRAR_FALSE@libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ lzma/liblzma.la
-@ENABLE_UNRAR_TRUE@libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ lzma/liblzma.la $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la
+@ENABLE_UNRAR_FALSE@libclamav_la_LIBADD = lzma/liblzma.la @LIBCLAMAV_LIBS@ @THREAD_LIBS@
+@ENABLE_UNRAR_TRUE@libclamav_la_LIBADD = $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la lzma/liblzma.la @LIBCLAMAV_LIBS@ @THREAD_LIBS@
 libclamav_la_LDFLAGS = @TH_SAFE@ -version-info @LIBCLAMAV_VERSION@ \
 	-no-undefined $(am__append_1)
 include_HEADERS = clamav.h
@@ -314,6 +326,9 @@ libclamav_la_SOURCES = \
 	msexpand.h \
 	pe.c \
 	pe.h \
+	disasm.c \
+	disasm.h \
+	disasmpriv.h \
 	upx.c \
 	upx.h \
 	htmlnorm.c \
@@ -398,9 +413,12 @@ libclamav_la_SOURCES = \
 	phish_domaincheck_db.h \
 	phish_whitelist.c \
 	phish_whitelist.h \
+	iana_cctld.h \
 	iana_tld.h \
 	regex_list.c \
 	regex_list.h \
+	regex_suffix.c \
+	regex_suffix.h \
 	mspack.c \
 	mspack.h \
 	cab.c \
@@ -418,7 +436,17 @@ libclamav_la_SOURCES = \
 	explode.c \
 	explode.h \
 	textnorm.c \
-	textnorm.h
+	textnorm.h \
+	dlp.c \
+	dlp.h \
+	jsparse/js-norm.c \
+	jsparse/js-norm.h \
+	jsparse/lexglobal.h \
+	jsparse/textbuf.h \
+	uniq.c \
+	uniq.h \
+	version.c\
+	version.h
 
 libclamav_internal_utils_la_SOURCES = str.c \
 				    str.h \
@@ -429,8 +457,17 @@ libclamav_internal_utils_la_LDFLAGS = -static
 libclamav_internal_utils_la_CFLAGS = -DCLI_MEMFUNSONLY
 lib_LTLIBRARIES = libclamav.la
 noinst_LTLIBRARIES = libclamav_internal_utils.la
-EXTRA_DIST = regex/engine.c libclamav.map
-all: all-recursive
+EXTRA_DIST = regex/engine.c libclamav.map \
+	     jsparse/generated/operators.h jsparse/generated/keywords.h jsparse/future_reserved_words.list\
+	     jsparse/keywords.list jsparse/special_keywords.list jsparse/operators.gperf
+
+COMMON_CLEANFILES = version.h version.h.tmp *.gcda *.gcno lzma/*.gcda lzma/*.gcno
+@MAINTAINER_MODE_TRUE@BUILT_SOURCES = jsparse/generated/operators.h jsparse/generated/keywords.h jsparse-keywords.gperf
+@MAINTAINER_MODE_TRUE@GPERF_FLAGS = -E -t -L ANSI-C -C -F ', TOK_ERROR' -c
+@MAINTAINER_MODE_FALSE@CLEANFILES = $(COMMON_CLEANFILES)
+@MAINTAINER_MODE_TRUE@CLEANFILES = $(COMMON_CLEANFILES) @srcdir@/jsparse/generated/operators.h @srcdir@/jsparse/generated/keywords.h
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
 .SUFFIXES:
 .SUFFIXES: .c .lo .o .obj
@@ -519,6 +556,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/chmunpack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cvd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dconf.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/disasm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsig.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/entconv.Plo@am__quote@
@@ -530,6 +569,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/infblock.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/inflate64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/is_tar.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/js-norm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libclamav_internal_utils_la-others.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libclamav_internal_utils_la-str.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/line.Plo@am__quote@
@@ -558,6 +598,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/regcomp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/regerror.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/regex_list.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/regex_suffix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/regexec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/regfree.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rtf.Plo@am__quote@
@@ -573,6 +614,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/textnorm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tnef.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unarj.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uniq.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unsp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/untar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unzip.Plo@am__quote@
@@ -580,6 +622,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/upx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uuencode.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vba_extract.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/version.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wwunpack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/yc.Plo@am__quote@
 
@@ -659,6 +702,13 @@ infblock.lo: nsis/infblock.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='nsis/infblock.c' object='infblock.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o infblock.lo `test -f 'nsis/infblock.c' || echo '$(srcdir)/'`nsis/infblock.c
+
+js-norm.lo: jsparse/js-norm.c
+@am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT js-norm.lo -MD -MP -MF $(DEPDIR)/js-norm.Tpo -c -o js-norm.lo `test -f 'jsparse/js-norm.c' || echo '$(srcdir)/'`jsparse/js-norm.c
+@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/js-norm.Tpo $(DEPDIR)/js-norm.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='jsparse/js-norm.c' object='js-norm.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o js-norm.lo `test -f 'jsparse/js-norm.c' || echo '$(srcdir)/'`jsparse/js-norm.c
 
 libclamav_internal_utils_la-str.lo: str.c
 @am__fastdepCC_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libclamav_internal_utils_la_CFLAGS) $(CFLAGS) -MT libclamav_internal_utils_la-str.lo -MD -MP -MF $(DEPDIR)/libclamav_internal_utils_la-str.Tpo -c -o libclamav_internal_utils_la-str.lo `test -f 'str.c' || echo '$(srcdir)/'`str.c
@@ -871,14 +921,16 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: check-recursive
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-recursive
 all-am: Makefile $(LTLIBRARIES) $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
 	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-install: install-recursive
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-recursive
 install-exec: install-exec-recursive
 install-data: install-data-recursive
 uninstall: uninstall-recursive
@@ -895,6 +947,7 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -902,6 +955,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-recursive
 
 clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
@@ -981,6 +1035,50 @@ uninstall-am: uninstall-includeHEADERS uninstall-libLTLIBRARIES
 	tags tags-recursive uninstall uninstall-am \
 	uninstall-includeHEADERS uninstall-libLTLIBRARIES
 
+
+.PHONY: version.h.tmp
+version.lo: version.h
+version.h: version.h.tmp
+	@if test -f version.h.static; then\
+		cp version.h.static version.h;\
+	elif ! diff $@ version.h.tmp >/dev/null 2>/dev/null; then\
+		cp version.h.tmp $@;\
+	fi
+
+version.h.tmp:
+	@test -f version.h || touch version.h;\
+	rm -f $@;\
+	REVISION="$$(LANG=C svnversion "$(top_srcdir)" 2>/dev/null || echo exported)";\
+	if test $$REVISION = "exported"; then\
+		REVISION="$$(LANG=C cd "$(top_srcdir)"; git-svn info configure 2>/dev/null| awk '/Revision:/ { print $$2 }' || echo)";\
+		if test -n "$$REVISION"; then\
+			REVISION="$$REVISION-$$(LANG=C cd "$(top_srcdir)"; git-describe --always 2>/dev/null)";\
+		fi;\
+	fi;\
+	if test -n "$$REVISION"; then\
+		echo "#define REPO_VERSION \"devel-r$$REVISION\"" >> $@;\
+	else\
+		touch version.h.tmp;\
+	fi
+
+@MAINTAINER_MODE_TRUE@jsparse-keywords.gperf: jsparse/keywords.list jsparse/future_reserved_words.list jsparse/special_keywords.list
+@MAINTAINER_MODE_TRUE@	echo -e "struct keyword { const char *name; int val; };\n%%" >keywords-g-tmp
+@MAINTAINER_MODE_TRUE@	for i in `cat @srcdir@/jsparse/keywords.list`; do j=`echo $$i |tr \[a-z\] \[A-Z\]`; echo "$$i, TOK_$$j" >>keywords-g-tmp; done
+@MAINTAINER_MODE_TRUE@	for i in `cat @srcdir@/jsparse/future_reserved_words.list`; do echo "$$i, TOK_FUTURE_RESERVED_WORD" >>keywords-g-tmp; done
+@MAINTAINER_MODE_TRUE@	cat @srcdir@/jsparse/special_keywords.list >>keywords-g-tmp
+@MAINTAINER_MODE_TRUE@	mv keywords-g-tmp $@
+
+@MAINTAINER_MODE_TRUE@jsparse/generated/operators.h: jsparse/operators.gperf
+@MAINTAINER_MODE_TRUE@	$(GPERF) $(GPERF_FLAGS) -H op_hash -N in_op_set -W oplist $< >operators-tmp-g
+@MAINTAINER_MODE_TRUE@	grep -v '^#line' <operators-tmp-g | sed -e 's/^const struct/static const struct/' -e 's/register //g' >operators-tmp
+@MAINTAINER_MODE_TRUE@	rm operators-tmp-g
+@MAINTAINER_MODE_TRUE@	mv operators-tmp @srcdir@/jsparse/generated/operators.h
+
+@MAINTAINER_MODE_TRUE@jsparse/generated/keywords.h: jsparse-keywords.gperf
+@MAINTAINER_MODE_TRUE@	$(GPERF) $(GPERF_FLAGS) $< >keywords-tmp-g
+@MAINTAINER_MODE_TRUE@	grep -v '^#line' <keywords-tmp-g |  sed -e 's/^const struct/static const struct/' -e 's/register //g' >keywords-tmp
+@MAINTAINER_MODE_TRUE@	rm keywords-tmp-g
+@MAINTAINER_MODE_TRUE@	mv keywords-tmp @srcdir@/jsparse/generated/keywords.h
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

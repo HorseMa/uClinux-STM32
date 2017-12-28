@@ -115,6 +115,14 @@ config ARCH_SE4000
 	help
 	  Support for SnapGear SE4000 VPN Router.
 
+config MACH_SE5100
+	bool "SnapGear SE5100"
+	select DMABOUNCE
+	select PCI
+	depends on ARCH_IXP4XX
+	help
+	  Support for SnapGear SE5100 VPN/VOIP Router.
+
 config MACH_SG560
 	bool "SnapGear SG560"
 	depends on ARCH_IXP4XX

@@ -784,7 +784,7 @@ static void closeall(void)
 static void fail(void) ATTRIBUTE_NORETURN;
 static void fail(void)
 {
-	longjmp(failpt, 1);
+	siglongjmp(failpt, 1);
 	/* NOTREACHED */
 }
 
@@ -1336,9 +1336,9 @@ static void onecommand(void)
 	execflg = 0;
 
 	failpt = m1;
-	setjmp(failpt);		/* Bruce Evans' fix */
+	sigsetjmp(failpt, 0);	/* Bruce Evans' fix */
 	failpt = m1;
-	if (setjmp(failpt) || yyparse() || intr) {
+	if (sigsetjmp(failpt, 0) || yyparse() || intr) {
 		DBGPRINTF(("ONECOMMAND: this is not good.\n"));
 
 		while (global_env.oenv)

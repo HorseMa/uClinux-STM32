@@ -36,7 +36,9 @@ subdir = test
 DIST_COMMON = README $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/acinclude.m4 \
-	$(top_srcdir)/m4/lib-link.m4 $(top_srcdir)/m4/lib-prefix.m4 \
+	$(top_srcdir)/m4/fdpassing.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 \
+	$(top_srcdir)/m4/mmap_private.m4 $(top_srcdir)/m4/resolv.m4 \
 	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -57,6 +59,8 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFGDIR = @CFGDIR@
 CFLAGS = @CFLAGS@
+CHECK_CFLAGS = @CHECK_CFLAGS@
+CHECK_LIBS = @CHECK_LIBS@
 CLAMAVGROUP = @CLAMAVGROUP@
 CLAMAVUSER = @CLAMAVUSER@
 CLAMAV_MILTER_LIBS = @CLAMAV_MILTER_LIBS@
@@ -75,7 +79,10 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FRESHCLAM_LIBS = @FRESHCLAM_LIBS@
+GCOV = @GCOV@
+GENHTML = @GENHTML@
 GETENT = @GETENT@
+GPERF = @GPERF@
 GREP = @GREP@
 HAVE_LIBGMP = @HAVE_LIBGMP@
 INSTALL = @INSTALL@
@@ -83,6 +90,7 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+LCOV = @LCOV@
 LDFLAGS = @LDFLAGS@
 LIBBZ2 = @LIBBZ2@
 LIBBZ2_PREFIX = @LIBBZ2_PREFIX@
@@ -109,6 +117,7 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -172,6 +181,14 @@ target_os = @target_os@
 target_vendor = @target_vendor@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+FILES = clam-v2.rar clam-v3.rar clam.cab clam.exe.bz2 clam.exe clam.zip \
+	clam.arj clam.exe.rtf clam.exe.szdd clam.tar.gz clam.chm clam.sis \
+	clam-aspack.exe clam-pespin.exe clam-upx.exe clam-fsg.exe clam-mew.exe\
+	clam-nsis.exe clam-petite.exe clam-upack.exe clam-wwpack.exe clam.pdf\
+	clam.mail clam.ppt clam.tnef clam.ea05.exe clam.ea06.exe clam.d64.zip\
+	clam.exe.mbox.base64 clam.exe.mbox.uu clam.exe.binhex clam.ole.doc \
+	clam.impl.zip
+
 SPLIT_DIR = $(top_srcdir)/test/.split
 EXTRA_DIST = .split
 all: all-am
@@ -342,28 +359,13 @@ uninstall-am:
 	uninstall uninstall-am
 
 
-all: clam-v2.rar clam-v3.rar clam.cab clam.exe.bz2 clam.exe clam.zip
+all: $(FILES)
 
-clam-v2.rar:
-	cat $(SPLIT_DIR)/split.clam-v2.raraa $(SPLIT_DIR)/split.clam-v2.rarab >clam-v2.rar
-
-clam-v3.rar:
-	cat $(SPLIT_DIR)/split.clam-v3.raraa $(SPLIT_DIR)/split.clam-v3.rarab >clam-v3.rar
-
-clam.cab:
-	cat $(SPLIT_DIR)/split.clam.cabaa $(SPLIT_DIR)/split.clam.cabab >clam.cab
-
-clam.exe.bz2:
-	cat $(SPLIT_DIR)/split.clam.exe.bz2aa $(SPLIT_DIR)/split.clam.exe.bz2ab >clam.exe.bz2
-
-clam.exe:
-	cat $(SPLIT_DIR)/split.clam.exeaa $(SPLIT_DIR)/split.clam.exeab >clam.exe
-
-clam.zip:
-	cat $(SPLIT_DIR)/split.clam.zipaa $(SPLIT_DIR)/split.clam.zipab >clam.zip
+$(FILES) :
+	cat $(SPLIT_DIR)/split.$@aa $(SPLIT_DIR)/split.$@ab > $@
 
 clean-local:
-	rm -f clam-v2.rar clam-v3.rar clam.cab clam.exe.bz2 clam.exe clam.zip
+	rm -f $(FILES)
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

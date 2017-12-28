@@ -1,26 +1,19 @@
+FILES = clam-v2.rar clam-v3.rar clam.cab clam.exe.bz2 clam.exe clam.zip \
+	clam.arj clam.exe.rtf clam.exe.szdd clam.tar.gz clam.chm clam.sis \
+	clam-aspack.exe clam-pespin.exe clam-upx.exe clam-fsg.exe clam-mew.exe\
+	clam-nsis.exe clam-petite.exe clam-upack.exe clam-wwpack.exe clam.pdf\
+	clam.mail clam.ppt clam.tnef clam.ea05.exe clam.ea06.exe clam.d64.zip\
+	clam.exe.mbox.base64 clam.exe.mbox.uu clam.exe.binhex clam.ole.doc \
+	clam.impl.zip
+
 SPLIT_DIR=$(top_srcdir)/test/.split
 
-all: clam-v2.rar clam-v3.rar clam.cab clam.exe.bz2 clam.exe clam.zip
+all: $(FILES)
 
-clam-v2.rar:
-	cat $(SPLIT_DIR)/split.clam-v2.raraa $(SPLIT_DIR)/split.clam-v2.rarab >clam-v2.rar
-
-clam-v3.rar:
-	cat $(SPLIT_DIR)/split.clam-v3.raraa $(SPLIT_DIR)/split.clam-v3.rarab >clam-v3.rar
-
-clam.cab:
-	cat $(SPLIT_DIR)/split.clam.cabaa $(SPLIT_DIR)/split.clam.cabab >clam.cab
-
-clam.exe.bz2:
-	cat $(SPLIT_DIR)/split.clam.exe.bz2aa $(SPLIT_DIR)/split.clam.exe.bz2ab >clam.exe.bz2
-
-clam.exe:
-	cat $(SPLIT_DIR)/split.clam.exeaa $(SPLIT_DIR)/split.clam.exeab >clam.exe
-
-clam.zip:
-	cat $(SPLIT_DIR)/split.clam.zipaa $(SPLIT_DIR)/split.clam.zipab >clam.zip
+$(FILES) :
+	cat $(SPLIT_DIR)/split.$@aa $(SPLIT_DIR)/split.$@ab > $@
 
 clean-local:
-	rm -f clam-v2.rar clam-v3.rar clam.cab clam.exe.bz2 clam.exe clam.zip
+	rm -f $(FILES)
 
 EXTRA_DIST = .split

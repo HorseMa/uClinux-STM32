@@ -154,10 +154,7 @@ auto-increments.
 #include <linux/modversions.h>
 #endif
 
-#include "mcf_qspi.h"
-
-
-
+#include <asm/mcf_qspi.h>
 
 #define DEVICE_NAME "qspi"
 

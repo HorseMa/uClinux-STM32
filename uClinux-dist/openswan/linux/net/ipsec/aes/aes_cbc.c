@@ -23,11 +23,8 @@
 #else
 #include <sys/types.h>
 #endif
-#include "crypto/aes_cbc.h"
-#include "crypto/cbc_generic.h"
-#ifdef OCF_ASSIST
-#include "crypto/ocf_assist.h"
-#endif
+#include "klips-crypto/aes_cbc.h"
+#include "klips-crypto/cbc_generic.h"
 
 /* returns bool success */
 int AES_set_key(aes_context *aes_ctx, const u_int8_t *key, int keysize) {
@@ -35,29 +32,11 @@ int AES_set_key(aes_context *aes_ctx, const u_int8_t *key, int keysize) {
 	return 1;	
 }
 
-#ifdef OCF_ASSIST
-
-CBC_IMPL_BLK16(_AES_cbc_encrypt, aes_context, u_int8_t *, aes_encrypt, aes_decrypt);
-
-int
-AES_cbc_encrypt(aes_context *ctx, const u_int8_t *in, u_int8_t *out, int ilen,
-		const u_int8_t *iv, int encrypt)
-{
-	if (ocf_aes_assist() & OCF_PROVIDES_AES) {
-		return ocf_aes_cbc_encrypt(ctx, in, out, ilen, iv, encrypt);
-	} else {
-		return _AES_cbc_encrypt(ctx, in, out, ilen, iv, encrypt);
-	}
-}
-
-#else
 CBC_IMPL_BLK16(AES_cbc_encrypt, aes_context, u_int8_t *, aes_encrypt, aes_decrypt);
-#endif
-
 
 /*
  * $Log: aes_cbc.c,v $
- * Revision 1.2  2004-07-10 07:48:40  mcr
+ * Revision 1.2  2004/07/10 07:48:40  mcr
  * Moved from linux/crypto/ciphers/aes/aes_cbc.c,v
  *
  * Revision 1.1  2004/04/06 02:48:12  mcr

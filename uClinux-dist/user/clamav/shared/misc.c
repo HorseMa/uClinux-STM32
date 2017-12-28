@@ -42,18 +42,32 @@
 #include "libclamav/clamav.h"
 #include "libclamav/cvd.h"
 #include "libclamav/others.h" /* for cli_rmdirs() */
+#include "libclamav/regex/regex.h"
+#include "libclamav/version.h"
 #include "shared/misc.h"
 
 #ifndef	O_BINARY
 #define	O_BINARY	0
 #endif
 
-#ifdef CL_EXPERIMENTAL
-#define VERSION_EXP	VERSION"-exp"
-#else
-#define VERSION_EXP	VERSION
+#ifndef REPO_VERSION
+#define REPO_VERSION "exported"
 #endif
 
+#ifdef CL_EXPERIMENTAL
+#define EXP_VER "-exp"
+#else
+#define EXP_VER
+#endif
+
+const char *get_version(void)
+{
+	if(!strncmp("devel-",VERSION,6) && strcmp("exported",REPO_VERSION)) {
+		return REPO_VERSION""EXP_VER;
+	}
+	/* it is a release, or we have nothing better */
+	return VERSION""EXP_VER;
+}
 /* CL_NOLIBCLAMAV means to omit functions that depends on libclamav */
 #ifndef CL_NOLIBCLAMAV
 char *freshdbdir(void)
@@ -105,6 +119,7 @@ char *freshdbdir(void)
     return retdir;
 }
 
+
 void print_version(const char *dbdir)
 {
 	char *fdbdir, *path;
@@ -118,7 +133,7 @@ void print_version(const char *dbdir)
 	pt = fdbdir = freshdbdir();
 
     if(!pt) {
-	printf("ClamAV "VERSION_EXP"\n");
+	printf("ClamAV %s\n",get_version());
 	return;
     }
 
@@ -138,10 +153,10 @@ void print_version(const char *dbdir)
     if(!access(path, R_OK) && (daily = cl_cvdhead(path))) {
 	    time_t t = (time_t) daily->stime;
 
-	printf("ClamAV "VERSION_EXP"/%d/%s", daily->version, ctime(&t));
+	printf("ClamAV %s/%d/%s", get_version(), daily->version, ctime(&t));
 	cl_cvdfree(daily);
     } else {
-	printf("ClamAV "VERSION_EXP"\n");
+	printf("ClamAV %s\n",get_version());
     }
 
     free(path);
@@ -224,7 +239,7 @@ int dircopy(const char *src, const char *dest)
     }
 
     while((dent = readdir(dd))) {
-#if   (!defined(C_CYGWIN)) && (!defined(C_INTERIX)) && (!defined(C_WINDOWS))
+#if (!defined(C_INTERIX)) && (!defined(C_WINDOWS))
 	if(dent->d_ino)
 #endif
 	{
@@ -319,3 +334,42 @@ int daemonize(void)
     return 0;
 #endif
 }
+
+#ifndef CL_NOLIBCLAMAV
+int match_regex(const char *filename, const char *pattern)
+{
+	regex_t reg;
+	int match, flags = REG_EXTENDED | REG_NOSUB;
+	char fname[513];
+#if defined(C_OS2) || defined(C_WINDOWS)
+	size_t len;
+
+	flags |= REG_ICASE; /* case insensitive on Windows */
+#endif
+	if(cli_regcomp(&reg, pattern, flags) != 0)
+	    return 2;
+
+#if !defined(C_OS2) && !defined(C_WINDOWS)
+	if(pattern[strlen(pattern) - 1] == '/') {
+	    snprintf(fname, 511, "%s/", filename);
+	    fname[512] = 0;
+#else
+	if(pattern[strlen(pattern) - 1] == '\\') {
+	    strncpy(fname, filename, 510);
+	    fname[509]='\0';
+	    len = strlen(fname);
+	    if(fname[len - 1] != '\\') {
+		fname[len] = '\\';
+		fname[len + 1] = 0;
+	    }
+#endif
+	} else {
+	    strncpy(fname, filename, 513);
+	    fname[512]='\0';
+	}
+
+	match = (cli_regexec(&reg, fname, 0, NULL, 0) == REG_NOMATCH) ? 0 : 1;
+	cli_regfree(&reg);
+	return match;
+}
+#endif

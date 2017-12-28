@@ -23,6 +23,8 @@ SECTIONS {
 		*(.text.lock)
 		*(.exitcall.exit)
 		*(.rodata)
+		*(.rodata.str1.1)
+
         *(.modinfo)
 		. = ALIGN(0x4) ;
 		*(.kstrtab)
@@ -34,6 +36,8 @@ SECTIONS {
 		__start___ksymtab = .;  /* Kernel symbol table          */
 		*(__ksymtab)
 		__stop___ksymtab = .;
+		. = ALIGN(0x4);
+		*(.eh_frame)
 		. = ALIGN(4) ;
 		_etext = . ;
 	} > ram

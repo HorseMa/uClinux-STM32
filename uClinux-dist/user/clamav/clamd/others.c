@@ -55,9 +55,6 @@
 #ifdef HAVE_SYS_FILIO_H
 #include <sys/filio.h>
 #endif
-#ifdef HAVE_SYS_UIO_H
-#include <sys/uio.h>
-#endif
 
 /* submitted by breiter@wolfereiter.com: do not use poll(2) on Interix */
 #ifdef C_INTERIX
@@ -93,58 +90,70 @@ void virusaction(const char *filename, const char *virname, const struct cfgstru
 }
 
 #else
-
 void virusaction(const char *filename, const char *virname, const struct cfgstruct *copt)
 {
 	pid_t pid;
 	const struct cfgstruct *cpt;
+	char *buffer, *pt, *cmd, *buffer_file, *buffer_vir;
+	size_t j;
+	char *env[4];
 
-    if(!(cpt = cfgopt(copt, "VirusEvent"))->enabled)
-	return;
+	if(!(cpt = cfgopt(copt, "VirusEvent"))->enabled)
+		return;
 
-    /* NB: we need to fork here since this function modifies the environment. 
-       (Modifications to the env. are not reentrant, but we need to be.) */
-    pid = fork();
+	env[0] = getenv("PATH");
+	j = env[0] ? 1 : 0;
+	/* Allocate env vars.. to be portable env vars should not be freed */
+	buffer_file = (char *) malloc(strlen(ENV_FILE) + strlen(filename) + 2);
+	if(buffer_file) {
+		sprintf(buffer_file, "%s=%s", ENV_FILE, filename);
+		env[j++] = buffer_file;
+	}
 
-    if ( pid == 0 ) {
-	/* child... */
-	char *buffer, *pt, *cmd;
+	buffer_vir = (char *) malloc(strlen(ENV_VIRUS) + strlen(virname) + 2);
+	if(buffer_vir) {
+		sprintf(buffer_vir, "%s=%s", ENV_VIRUS, virname);
+		env[j++] = buffer_vir;
+	}
+	env[j++] = NULL;
 
 	cmd = strdup(cpt->strarg);
 
-	if((pt = strstr(cmd, "%v"))) {
-	    buffer = (char *) malloc(strlen(cmd) + strlen(virname) + 10);
-	    *pt = 0; pt += 2;
-	    strcpy(buffer, cmd);
-	    strcat(buffer, virname);
-	    strcat(buffer, pt);
-	    free(cmd);
-	    cmd = strdup(buffer);
-	    free(buffer);
+	if(cmd && (pt = strstr(cmd, "%v"))) {
+		buffer = (char *) malloc(strlen(cmd) + strlen(virname) + 10);
+		if(buffer) {
+			*pt = 0; pt += 2;
+			strcpy(buffer, cmd);
+			strcat(buffer, virname);
+			strcat(buffer, pt);
+			free(cmd);
+			cmd = strdup(buffer);
+			free(buffer);
+		}
 	}
 
-	/* Allocate env vars.. to be portable env vars should not be freed */
-	buffer = (char *) malloc(strlen(ENV_FILE) + strlen(filename) + 2);
-	sprintf(buffer, "%s=%s", ENV_FILE, filename);
-	putenv(buffer);
+	if(!cmd) {
+		free(buffer_file);
+		free(buffer_vir);
+		return;
+	}
+	/* We can only call async-signal-safe functions after fork(). */
+	pid = fork();
 
-	buffer = (char *) malloc(strlen(ENV_VIRUS) + strlen(virname) + 2);
-	sprintf(buffer, "%s=%s", ENV_VIRUS, virname);
-	putenv(buffer);
-
-	/* WARNING: this is uninterruptable ! */
-	exit(system(cmd));
-
-	/* The below is not reached but is here for completeness to remind
-	   maintainers that this buffer is still allocated.. */
+	if ( pid == 0 ) {
+		/* child... */
+		/* WARNING: this is uninterruptable ! */
+		exit(execle("/bin/sh", "sh", "-c", cmd, NULL, env));
+	} else if (pid > 0) {
+		/* parent */
+		waitpid(pid, NULL, 0);
+	} else {
+		/* error.. */
+		logg("!VirusAction: fork failed.\n");
+	}
 	free(cmd);
-    } else if (pid > 0) {
-	/* parent */      
-	waitpid(pid, NULL, 0);
-    } else {
-	/* error.. */
-	logg("!VirusAction: fork failed.\n");
-    }
+	free(buffer_file);
+	free(buffer_vir);
 }
 #endif /* C_WINDOWS */
 
@@ -334,8 +343,6 @@ int writen(int fd, void *buff, unsigned int count)
 /*
    This procedure does timed clamd command and delimited input processing.  
    It is complex for several reasons:
-       1) FD commands are delivered on Unix domain sockets via recvnsg() on platforms which can do this.  
-          These command messages are accompanied by a single byte of data which is a NUL character.
        2) Newline delimited commands are indicated by a command which is prefixed by an 'n' character.  
           This character serves to indicate that the command will contain a newline which will cause
           command data to be read until the command input buffer is full or a newline is encountered.
@@ -347,24 +354,9 @@ int writen(int fd, void *buff, unsigned int count)
 */
 int readsock(int sockfd, char *buf, size_t size, unsigned char delim, int timeout_sec, int force_delim, int read_command)
 {
-	int fd;
 	ssize_t n;
 	size_t boff = 0;
 	char *pdelim;
-#ifdef HAVE_RECVMSG
-	struct msghdr msg;
-	struct iovec iov[1];
-#endif
-#ifdef HAVE_CONTROL_IN_MSGHDR
-#ifndef CMSG_SPACE
-#define CMSG_SPACE(len)	    (_CMSG_ALIGN(sizeof(struct cmsghdr)) + _CMSG_ALIGN(len))
-#endif
-#ifndef CMSG_LEN
-#define CMSG_LEN(len)	    (_CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
-#endif
-	struct cmsghdr *cmsg;
-	char tmp[CMSG_SPACE(sizeof(fd))];
-#endif
 	time_t starttime, timenow;
 
     time(&starttime);
@@ -381,52 +373,9 @@ int readsock(int sockfd, char *buf, size_t size, unsigned char delim, int timeou
 	break;
     }
     n = recv(sockfd, buf, size, MSG_PEEK);
+    if(n < 0)
+	return -1;
     if(read_command) {
-    	if((n >= 1) && (buf[0] == 0)) { /* FD message */
-#ifdef HAVE_RECVMSG
-	    iov[0].iov_base = buf;
-	    iov[0].iov_len = size;
-	    memset(&msg, 0, sizeof(msg));
-	    msg.msg_iov = iov;
-	    msg.msg_iovlen = 1;
-#endif
-#ifdef HAVE_ACCRIGHTS_IN_MSGHDR
-	    msg.msg_accrights = (caddr_t)&fd;
-	    msg.msg_accrightslen = sizeof(fd);
-#endif
-#ifdef HAVE_CONTROL_IN_MSGHDR
-	    msg.msg_control = tmp;
-	    msg.msg_controllen = sizeof(tmp);
-#endif
-#if defined(HAVE_RECVMSG) && !defined(C_OS2) && !defined(INCOMPLETE_CMSG)
-	    n = recvmsg(sockfd, &msg, 0);
-#else
-	    n = recv(sockfd, buf, size, 0);
-#endif
-	    if (n <= 0)
-		return n;
-	    errno = EBADF;
-#ifdef HAVE_ACCRIGHTS_IN_MSGHDR
-	    if(msg.msg_accrightslen != sizeof(fd))
-		return -1;
-#endif
-#ifdef HAVE_CONTROL_IN_MSGHDR
-	    cmsg = CMSG_FIRSTHDR(&msg);
-	    if(cmsg == NULL)
-		return -1;
-	    if(cmsg->cmsg_type != SCM_RIGHTS)
-		return -1;
-	    if(cmsg->cmsg_len != CMSG_LEN(sizeof(fd)))
-		return -1;
-	    fd = *(int *)CMSG_DATA(cmsg);
-#endif
-	    if(fd < 0)
-		return -1;
-	    n = snprintf(buf, size, "FD %d", fd);
-	    if((size_t) n >= size)
-		return -1;
-	    return n;
-	}
 	if((n >= 1) && (buf[0] == 'n')) { /* Newline delimited command */
 	    force_delim = 1;
 	    delim = '\n';
@@ -440,6 +389,8 @@ int readsock(int sockfd, char *buf, size_t size, unsigned char delim, int timeou
 		break;
 	    } else {
 		n = recv(sockfd, buf+boff, n, 0);
+		if(n < 0)
+		    return -1;
 		if((boff+n) == size)
 		    break;
 		boff += n;
@@ -470,6 +421,8 @@ int readsock(int sockfd, char *buf, size_t size, unsigned char delim, int timeou
 	if(n == 0)
 	    break;
     }
+    if(n < 0)
+	return -1;
     n += boff;
     if(read_command) {
 	if((n >= 1) && (buf[0] == 'n')) { /* Need to strip leading 'n' from command to attain standard command */

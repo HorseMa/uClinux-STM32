@@ -307,6 +307,23 @@ distclean: mrproper
 	-$(MAKE) -C tools/sg-cksum clean
 	-rm -f tools/cksum
 
+.PHONY: bugreport
+bugreport:
+	rm -rf ./bugreport.tar.gz ./bugreport
+	mkdir bugreport
+	$(HOSTCC) -v 2> ./bugreport/host_vers
+	$(CROSS_COMPILE)gcc -v 2> ./bugreport/toolchain_vers
+	cp .config bugreport/
+	mkdir bugreport/$(LINUXDIR)
+	cp $(LINUXDIR)/.config bugreport/$(LINUXDIR)/
+	mkdir bugreport/$(LIBCDIR)
+	[ ! -f $(LIBCDIR)/.config ] || cp $(LIBCDIR)/.config bugreport/$(LIBCDIR)/
+	mkdir bugreport/config
+	cp config/.config bugreport/config/
+	cp $(LINUXDIR)/.config bugreport/$(LINUXDIR)/
+	tar czf bugreport.tar.gz bugreport
+	rm -rf ./bugreport
+
 %_only:
 	@case "$(@)" in \
 	*/*) d=`expr $(@) : '\([^/]*\)/.*'`; \

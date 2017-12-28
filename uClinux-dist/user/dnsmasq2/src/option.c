@@ -61,7 +61,7 @@ struct myoption {
 };
 #endif
 
-#define OPTSTRING "9531yZDNLERKzowefnbvhdkqr:m:p:c:l:s:i:t:u:g:a:x:S:C:A:T:H:Q:I:B:F:G:O:M:X:V:U:j:P:J:W:Y:2:4:6:7:8:0:_:%"
+#define OPTSTRING "9531yZDNLERKzowefnbvhdkqr:m:p:c:l:s:i:t:u:g:a:x:S:C:A:T:H:Q:I:B:F:G:O:M:X:V:U:j:P:J:W:Y:2:4:6:7:8:0:_:"
 
 /* options which don't have a one-char version */
 #define LOPT_RELOAD    256
@@ -97,6 +97,7 @@ struct myoption {
 #define LOPT_LOCAL     286
 #define LOPT_NAPTR     287
 #define LOPT_MINPORT   288
+#define LOPT_REPLY_DST 289
 
 #ifdef HAVE_GETOPT_LONG
 static const struct option opts[] =  
@@ -198,7 +199,7 @@ static const struct myoption opts[] =
     {"preload-file", 1, 0, '_'},
 #endif
 #ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
-    {"reply-with-dest", 1, 0, '%'},
+    {"reply-with-dest", 1, 0, LOPT_REPLY_DST },
 #endif
     {"dhcp-ignore-names", 2, 0, LOPT_NO_NAMES },
     {"enable-tftp", 0, 0, LOPT_TFTP },
@@ -2321,6 +2322,14 @@ static char *one_opt(int option, char *arg, char *gen_prob, int nest)
 	new->weight = weight;
 	break;
       }
+
+#ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
+    case LOPT_REPLY_DST: /* --reply-with-dest */
+      {
+	daemon->custom_options |= OPT_REPLY_DST;
+	break;
+      }
+#endif
     }
 
   if (problem)

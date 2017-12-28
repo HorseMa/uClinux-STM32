@@ -228,12 +228,12 @@ struct element* hashtab_find(const struct hashtable *s,const char* key,const siz
 			PROFILE_FIND_NOTFOUND(s, tries);
 			return NULL; /* element not found, place is empty*/
 		}
-		else if(element->key != DELETED_KEY && len == element->len && strncmp(key, element->key,len)==0) {
+		else if(element->key != DELETED_KEY && len == element->len && (key == element->key || strncmp(key, element->key,len)==0)) {
 			PROFILE_FIND_FOUND(s, tries);
 			return element;/* found */
 		}
 		else {
-			idx = (idx + tries++) % s->capacity;
+			idx = (idx + tries++) & (s->capacity-1);
 			element = &s->htable[idx];
 		}
 	} while (tries <= s->capacity);
@@ -243,9 +243,10 @@ struct element* hashtab_find(const struct hashtable *s,const char* key,const siz
 
 static int hashtab_grow(struct hashtable *s)
 {
-	const size_t new_capacity = nearest_power(s->capacity);
+	const size_t new_capacity = nearest_power(s->capacity + 1);
 	struct element* htable = cli_calloc(new_capacity, sizeof(*s->htable));
 	size_t i,idx, used = 0;
+	cli_dbgmsg("hashtab.c: new capacity: %lu\n",new_capacity);
 	if(new_capacity == s->capacity || !htable)
 		return CL_EMEM;
 
@@ -286,14 +287,18 @@ static int hashtab_grow(struct hashtable *s)
 	return CL_SUCCESS;
 }
 
-int hashtab_insert(struct hashtable *s, const char* key, const size_t len, const element_data data)
+const struct element* hashtab_insert(struct hashtable *s, const char* key, const size_t len, const element_data data)
 {
 	struct element* element;
 	struct element* deleted_element = NULL;
 	size_t tries = 1;
 	size_t idx;
 	if(!s)
-		return CL_ENULLARG;
+		return NULL;
+	if(s->used > s->maxfill) {
+		cli_dbgmsg("hashtab.c:Growing hashtable %p, because it has exceeded maxfill, old size:%ld\n",(void*)s,s->capacity);
+		hashtab_grow(s);
+	}
 	do {
 		PROFILE_CALC_HASH(s);
 		idx = hash((const unsigned char*)key, len, s->capacity);
@@ -313,17 +318,14 @@ int hashtab_insert(struct hashtable *s, const char* key, const size_t len, const
 				}
 				thekey = cli_malloc(len+1);
 				if(!thekey)
-					return CL_EMEM;
+					return NULL;
 				strncpy(thekey, key, len+1);
+				thekey[len]='\0';
 				element->key = thekey;
 				element->data = data;
 				element->len = len;
 				s->used++;
-				if(s->used > s->maxfill) {
-					cli_dbgmsg("hashtab.c:Growing hashtable %p, because it has exceeded maxfill, old size:%ld\n",(void*)s,s->capacity);
-					hashtab_grow(s);
-				}
-				return 0;
+				return element;
 			}
 			else if(element->key == DELETED_KEY) {
 				deleted_element = element;
@@ -331,7 +333,7 @@ int hashtab_insert(struct hashtable *s, const char* key, const size_t len, const
 			else if(len == element->len && strncmp(key, element->key, len)==0) {
 				PROFILE_DATA_UPDATE(s, tries);
 				element->data = data;/* key found, update */
-				return 0;
+				return element;
 			}
 			else {
 				idx = (idx + tries++) % s->capacity;
@@ -343,18 +345,7 @@ int hashtab_insert(struct hashtable *s, const char* key, const size_t len, const
 		cli_dbgmsg("hashtab.c: Growing hashtable %p, because its full, old size:%ld.\n",(void*)s,s->capacity);
 	} while( hashtab_grow(s) >= 0 );
 	cli_warnmsg("hashtab.c: Unable to grow hashtable\n");
-	return CL_EMEM;
-}
-
-void hashtab_delete(struct hashtable *s, const char* key, const size_t len)
-{
-	struct element* e = hashtab_find(s,key,len);
-	if(e && e->key) {
-		PROFILE_HASH_DELETE(s);
-		free((void *)e->key);
-		e->key = DELETED_KEY;
-		s->used--;
-	}
+	return NULL;
 }
 
 void hashtab_clear(struct hashtable *s)
@@ -365,10 +356,18 @@ void hashtab_clear(struct hashtable *s)
 		if(s->htable[i].key && s->htable[i].key != DELETED_KEY)
 			free((void *)s->htable[i].key);
 	}
-	memset(s->htable, 0, s->capacity);
+	if(s->htable)
+		memset(s->htable, 0, s->capacity);
 	s->used = 0;
 }
 
+void hashtab_free(struct hashtable *s)
+{
+	hashtab_clear(s);
+	free(s->htable);
+	s->htable = NULL;
+	s->capacity = 0;
+}
 
 int hashtab_store(const struct hashtable *s,FILE* out)
 {

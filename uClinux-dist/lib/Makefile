@@ -38,8 +38,6 @@ endif
 # and build these if someone needs them
 #
 dir_3_$(CONFIG_LIB_FLEX)         += flex
-dir_3_$(CONFIG_LIB_LIBAES)       += libaes
-dir_3_$(CONFIG_LIB_LIBDES)       += libdes
 dir_3_$(CONFIG_LIB_LIBSSL)       += libssl
 dir_3_$(CONFIG_LIB_LIBGMP)       += libgmp
 dir_3_$(CONFIG_LIB_LIBG)         += libg
@@ -75,6 +73,7 @@ dir_3_$(CONFIG_LIB_POPT)         += popt
 dir_3_$(CONFIG_LIB_LIBJUDY)      += libjudy
 dir_3_$(CONFIG_LIB_CLASSPATH)    += classpath
 dir_3_$(CONFIG_LIB_LIBFFI)       += libffi
+dir_3_$(CONFIG_LIB_BITVECTOR)    += bitvector
 
 # See Kconfig for the dependencies
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
@@ -162,7 +161,9 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/group /etc/group
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/mtab /etc/mtab
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/fstab /etc/fstab
+	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/hosts /etc/hosts
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/resolv.conf /etc/resolv.conf
+	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -e CONFIG_USER_BASH_BASH -s config/profile /etc/profile
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -e CONFIG_USER_TINYLOGIN_SHADOWPASSWDS -s config/shadow /etc/shadow
 	for i in $(DIRS_y) ; do \
 		[ ! -d $$i ] || $(MAKE) -C $$i romfs || exit $$? ; \
@@ -188,8 +189,6 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libpng/*.a \
 	$(ROOTDIR)/lib/libm/*.a \
 	$(ROOTDIR)/lib/libatm/src/lib/.libs/*.a \
-	$(ROOTDIR)/lib/libdes/*.a \
-	$(ROOTDIR)/lib/libaes/*.a \
 	$(ROOTDIR)/lib/libpam/build/libpam*/.libs/*.a \
 	$(ROOTDIR)/lib/libpam/build/libpam*/.libs/*.so \
 	$(ROOTDIR)/lib/libpcap/build/*.a \
@@ -212,6 +211,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libldap/builddir/libraries/libldap/.libs/*.a \
 	$(ROOTDIR)/lib/libldap/builddir/libraries/liblber/.libs/*.a \
 	$(ROOTDIR)/lib/pcre/builddir/.libs/*.a \
+	$(ROOTDIR)/lib/bitvector/*.so \
 	$(ROOTDIR)/prop/acld/libacld.a \
 	$(ROOTDIR)/prop/libsnapgear++/*.a $(ROOTDIR)/prop/libsnapgear++/*.so* \
 	$(ROOTDIR)/prop/libsnapgear/*.a $(ROOTDIR)/prop/libsnapgear/*.so* \
@@ -252,7 +252,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libffi/install/lib/*.a \
 	$(ROOTDIR)/lib/libffi/install/lib/*.la \
 	$(ROOTDIR)/lib/libffi/install/lib/pkgconfig/*.pc \
-	$(ROOTDIR)/prop/librep/librep.a
+	$(ROOTDIR)/prop/libtrustedsource/librep/librep.so*
 
 # The dynamic linker library needs to be linked into lib via a different name
 LD_LIB = $(ROOTDIR)/lib/uClibc/lib/ld-uClibc-0.9.29.so

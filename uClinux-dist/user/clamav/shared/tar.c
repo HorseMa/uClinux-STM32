@@ -60,10 +60,8 @@ int tar_addfile(int fd, gzFile *gzs, const char *file)
 	unsigned int i, chksum = 0;
 
 
-    if((s = open(file, O_RDONLY|O_BINARY)) == -1) {
-	close(s);
+    if((s = open(file, O_RDONLY|O_BINARY)) == -1)
 	return -1;
-    }
 
     if(fstat(s, &sb) == -1) {
 	close(s);
@@ -72,6 +70,7 @@ int tar_addfile(int fd, gzFile *gzs, const char *file)
 
     memset(&hdr, 0, TARBLK);
     strncpy(hdr.name, file, 100);
+    hdr.name[99]='\0';
     snprintf(hdr.size, 12, "%o", (unsigned int) sb.st_size);
     pt = (unsigned char *) &hdr;
     for(i = 0; i < TARBLK; i++)

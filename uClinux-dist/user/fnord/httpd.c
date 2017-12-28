@@ -30,8 +30,6 @@
 #include "byte.h"
 #include "scan.h"
 
-#include <config/autoconf.h>
-
 #ifdef USE_AUTH
 #include "auth.h"
 #endif
@@ -193,10 +191,9 @@ char *post_miss;
 unsigned long post_mlen;
 unsigned long post_len=0;
 #endif
-extern int auth_fallback;
 
 #ifdef USE_AUTH
-char *config_file = "/etc/config/boa.conf";
+char *config_file = "boa.conf";
 #endif
 
 #if _FILE_OFFSET_BITS == 64
@@ -218,10 +215,10 @@ static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
 #define MAXHEADERLEN 8192
 
 char* remote_ip;
+char* local_ip;
 #ifdef CGI
 char* remote_port;
 char* remote_ident;
-char* local_ip;
 char* local_port;
 #endif
 
@@ -538,6 +535,12 @@ static void do_cgi(const char* pathinfo,const char* const* envp) {
     tmp+=str_copy(tmp,"USER_AUTHBY=");
     tmp+=str_copy(tmp,remote_user_authby);
     *tmp=0; ++tmp;
+
+    if (auth_fallback) {
+      cgi_env[++i]=tmp;
+      tmp+=str_copy(tmp,"AUTH_FALLBACK=true");
+      *tmp=0; ++tmp;
+    }
   }
 #endif
 
@@ -570,12 +573,6 @@ static void do_cgi(const char* pathinfo,const char* const* envp) {
     tmp+=str_copy(tmp,"PATH_TRANSLATED=");
     tmp+=realpath(pathinfo,tmp)?str_len(tmp):str_copy(tmp,pathinfo);
     ++tmp;
-  }
-  
-  if (auth_fallback) {
-    cgi_env[++i]=tmp;
-    tmp+=str_copy(tmp,"AUTH_FALLBACK=true");
-    *tmp=0; ++tmp;
   }
 
   /* Set the default path for cgis */
@@ -748,11 +745,7 @@ static void start_cgi(int nph,const char* pathinfo,const char *const *envp) {
 		buffer_puts(buffer_1,"HTTP/1.0 401 Authorization Required\r\n"
 		  "WWW-Authenticate: Basic realm=\"");
 		signal(SIGCHLD,SIG_IGN);
-#ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
-		buffer_puts(buffer_1, local_ip);
-#else
 		buffer_puts(buffer_1, host);
-#endif
 		buffer_puts(buffer_1,"\"\r\nConnection: close\r\n\r\n"
 		  "Access to this site is restricted.\r\n"
 		  "Please provide credentials.\r\n");
@@ -1151,7 +1144,7 @@ static void handleredirect(const char *url,const char* origurl) {
     /* el-cheapo redirection */
     redirectboilerplate();
     buffer_put(buffer_1,symlink,len);
-#ifdef OLD_STYLE_REDIRECT
+#if defined(OLD_STYLE_REDIRECT) || defined (AUTO_REDIRECT)
 fini:
 #endif
     retcode=301;
@@ -1170,6 +1163,15 @@ fini:
   } else if ((env=getenv("REDIRECT_URI"))) {
     redirectboilerplate();
     buffer_puts(buffer_1,env);
+    goto fini;
+  }
+#endif
+#ifdef AUTO_REDIRECT
+  if (local_ip) {
+    redirectboilerplate();
+    buffer_puts(buffer_1,"http://");
+    buffer_puts(buffer_1,local_ip);
+    buffer_puts(buffer_1,"/");
     goto fini;
   }
 #endif
@@ -1307,23 +1309,6 @@ static int handleindexcgi(const char *testurl,const char* origurl,char* space) {
 }
 #endif
 
-#ifdef CONFIG_USER_FNORD_404_REDIR
-/* Redirect any invalid URL to the main start page on the IP address that the user came in on */
-static void handle404redirect(void)
-{
-  char buf[128];
-
-  /*syslog(LOG_INFO, " 404 redirected to http://%s/", local_ip);*/
-  redirectboilerplate();
-  snprintf(buf, sizeof(buf), "http://%s/\r\n\r\n", local_ip);
-  buffer_put(buffer_1, buf, strlen(buf));
-  retcode = 301;
-  dolog(0);
-  buffer_flush(buffer_1);
-  exit(0);
-}
-#endif
-
 static void get_ucspi_env(void) {
   char* ucspi=getenv("PROTO");
   if (ucspi) {
@@ -1331,13 +1316,13 @@ static void get_ucspi_env(void) {
     unsigned int tmp=str_copy(buf,ucspi);
     buf[tmp+str_copy(buf+tmp,"REMOTEIP")]=0;
     remote_ip=getenv(buf);
+    buf[tmp+str_copy(buf+tmp,"LOCALIP")]=0;
+    local_ip=getenv(buf);
 #ifdef CGI
     buf[tmp+str_copy(buf+tmp,"REMOTEPORT")]=0;
     remote_port=getenv(buf);
     buf[tmp+str_copy(buf+tmp,"REMOTEINFO")]=0;
     remote_ident=getenv(buf);
-    buf[tmp+str_copy(buf+tmp,"LOCALIP")]=0;
-    local_ip=getenv(buf);
     buf[tmp+str_copy(buf+tmp,"LOCALPORT")]=0;
     local_port=getenv(buf);
 #endif
@@ -1566,7 +1551,7 @@ int main(int argc,char *argv[],const char *const *envp) {
 
   if (argc) chdir(argv[0]);
 
-  openlog("httpd", 0, 0);
+  openlog("httpd", LOG_PID, 0);
 
 #ifdef USE_AUTH
   /* Very simple parser for lines of the form: "Auth /cgi-bin/saveall /etc/config/htpasswd" */
@@ -1971,14 +1956,6 @@ hostb0rken:
     dolog(0);
     buffer_puts(buffer_1,"HTTP/1.0 401 Authorization Required\r\n"
       "WWW-Authenticate: Basic realm=\"");
-#ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
-    /* 
-     * The hostname might not match our IP or name, so set the host to the 
-     * IP address of the server. Don't use the hostname because this gives
-     * away information that might compromise security.
-     */
-    host = local_ip;
-#endif
     buffer_puts(buffer_1, host);
     buffer_puts(buffer_1,"\"\r\nConnection: close\r\n\r\n"
       "Access to this site is restricted.\r\n"
@@ -2186,11 +2163,7 @@ tuttikaputti:
       handledirlist(origurl);
 #endif
 
-#ifdef CONFIG_USER_FNORD_404_REDIR
-      handle404redirect();
-#else
       badrequest(404,"Not Found","<title>Not Found</title>No such file or directory.");
-#endif
     }
   case 406: badrequest(406,"Not Acceptable","<title>Not Acceptable</title>Nothing acceptable found.");
   case 416: badrequest(416,"Requested Range Not Satisfiable","");

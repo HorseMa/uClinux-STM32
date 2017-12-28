@@ -41,6 +41,7 @@
 #include "others.h"
 #include "clamav.h"
 #include "scanners.h"
+#include "sis.h"
 
 #define EC32(x) le32_to_host(x)
 #define EC16(x) le16_to_host(x)
@@ -506,9 +507,11 @@ static int real_scansis(FILE *f, cli_ctx *ctx, const char *tmpd) {
 	    return CL_EIO;
 	  }
 	  if (cli_writen(fd, decomp, olen)!=(int)olen) {
+	    close(fd);
 	    free(decomp);
 	    free(ptrs);
 	    free(alangs);
+	    close(fd);
 	    return CL_EIO;
 	  }
 	  free(decomp);

@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+
 #ifdef	HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -40,13 +42,13 @@
 #include "others.h"
 #include "global.h"
 #include "manager.h"
-#include "treewalk.h"
 
 #include "shared/misc.h"
 #include "shared/output.h"
 #include "shared/options.h"
 
 #include "libclamav/str.h"
+#include "libclamav/clamav.h"
 
 void help(void);
 
@@ -64,6 +66,7 @@ int main(int argc, char **argv)
 	struct timeval t1, t2;
 #ifndef C_WINDOWS
 	struct timezone tz;
+	sigset_t sigset;
 #endif
 	struct optstruct *opt;
 	const char *pt;
@@ -73,6 +76,12 @@ int main(int argc, char **argv)
 	mprintf("!Can't start the win32 pthreads layer\n");
 	return 72;
     }
+#endif
+
+#if !defined(C_WINDOWS) && !defined(C_BEOS)
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGXFSZ);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
 #endif
 
     opt = opt_parse(argc, argv, clamscan_shortopt, clamscan_longopt, NULL);
@@ -237,7 +246,7 @@ int main(int argc, char **argv)
 	dms += (dms < 0) ? (1000000):(0);
 	logg("\n----------- SCAN SUMMARY -----------\n");
 	logg("Known viruses: %u\n", info.sigs);
-	logg("Engine version: %s\n", cl_retver());
+	logg("Engine version: %s\n", get_version());
 	logg("Scanned directories: %u\n", info.dirs);
 	logg("Scanned files: %u\n", info.files);
 	logg("Infected files: %u\n", info.ifiles);
@@ -270,7 +279,7 @@ void help(void)
     mprintf_stdout = 1;
 
     mprintf("\n");
-    mprintf("                       Clam AntiVirus Scanner "VERSION"\n");
+    mprintf("                       Clam AntiVirus Scanner %s\n", get_version());
     mprintf("      (C) 2002 - 2007 ClamAV Team - http://www.clamav.net/team\n\n");
 
     mprintf("    --help                -h             Print this help screen\n");
@@ -306,10 +315,16 @@ void help(void)
 #endif
     mprintf("\n");
     mprintf("    --detect-pua                         Detect Possibly Unwanted Applications\n");
+    mprintf("    --exclude-pua=CAT                    Skip PUA sigs of category CAT\n");
+    mprintf("    --include-pua=CAT                    Load PUA sigs of category CAT\n");
+    mprintf("    --detect-structured                  Detect structured data (SSN, Credit Card)\n");
+    mprintf("    --structured-ssn-format=X            SSN format (0=normal,1=stripped,2=both)\n");
+    mprintf("    --structured-ssn-count=N             Min SSN count to generate a detect\n");
+    mprintf("    --structured-cc-count=N              Min CC count to generate a detect\n");
     mprintf("    --no-mail                            Disable mail file support\n");
     mprintf("    --no-phishing-sigs                   Disable signature-based phishing detection\n");
     mprintf("    --no-phishing-scan-urls              Disable url-based phishing detection\n");
-    mprintf("    --no-phishing-restrictedscan         Enable phishing detection for all domains (might lead to false positives!)\n");
+    mprintf("    --heuristic-scan-precedence          Stop scanning as soon as a heuristic match is found\n");
     mprintf("    --phishing-ssl                       Always block SSL mismatches in URLs (phishing module)\n");
     mprintf("    --phishing-cloak                     Always block cloaked URLs (phishing module)\n");
     mprintf("    --no-algorithmic                     Disable algorithmic detection\n");
@@ -318,7 +333,7 @@ void help(void)
     mprintf("    --no-ole2                            Disable OLE2 support\n");
     mprintf("    --no-pdf                             Disable PDF support\n");
     mprintf("    --no-html                            Disable HTML support\n");
-    mprintf("    --no-archive                         Disable libclamav archive support\n");
+    mprintf("    --no-archive                         Disable archive support\n");
     mprintf("    --detect-broken                      Try to detect broken executable files\n");
     mprintf("    --block-encrypted                    Block encrypted archives\n");
     mprintf("    --mail-follow-urls                   Download and scan URLs\n");
@@ -328,15 +343,8 @@ void help(void)
     mprintf("    --max-files=#n                       The maximum number of files to scan for each container file (*)\n");
     mprintf("    --max-recursion=#n                   Maximum archive recursion level for container file (*)\n");
     mprintf("    --max-dir-recursion=#n               Maximum directory recursion level\n");
-    mprintf("    --unzip[=FULLPATH]                   Enable support for .zip files\n");
-    mprintf("    --unrar[=FULLPATH]                   Enable support for .rar files\n");
-    mprintf("    --arj[=FULLPATH]                     Enable support for .arj files\n");
-    mprintf("    --unzoo[=FULLPATH]                   Enable support for .zoo files\n");
-    mprintf("    --lha[=FULLPATH]                     Enable support for .lha files\n");
-    mprintf("    --jar[=FULLPATH]                     Enable support for .jar files\n");
-    mprintf("    --tar[=FULLPATH]                     Enable support for .tar files\n");
-    mprintf("    --deb[=FULLPATH to ar]               Enable support for .deb files\n");
-    mprintf("    --tgz[=FULLPATH]                     Enable support for .tar.gz, .tgz files\n\n");
-    mprintf("(*) Certain files (e.g. documents, archives, etc.) may in turn contain other files inside.\n");
-    mprintf("    The above options ensure safe processing of this kind of data.\n\n");
+
+    mprintf("\n");
+    mprintf("(*) Certain files (e.g. documents, archives, etc.) may in turn contain other\n");
+    mprintf("    files inside. The above options ensure safe processing of this kind of data.\n\n");
 }

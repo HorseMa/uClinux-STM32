@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Mon Jul 28 18:47:28 2008
+# Fri Oct 17 13:48:49 2008
 #
 CONFIG_MODULES=y
 
@@ -44,6 +44,7 @@ CONFIG_OCF_IXP4XX=m
 # CONFIG_OCF_HIFN is not set
 # CONFIG_OCF_HIFNHIPP is not set
 # CONFIG_OCF_TALITOS is not set
+# CONFIG_OCF_EP80579 is not set
 # CONFIG_OCF_OCFNULL is not set
 # CONFIG_OCF_BENCH is not set
 

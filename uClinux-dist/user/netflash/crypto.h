@@ -4,7 +4,7 @@
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/md5.h>
-#include <aes.h>
+#include <openssl/aes.h>
 
 #ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
 #define PUBLIC_KEY_FILE 	"/etc/publickey.pem"

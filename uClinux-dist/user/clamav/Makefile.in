@@ -68,10 +68,12 @@ DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(top_srcdir)/docs/man/sigtool.1.in AUTHORS COPYING ChangeLog \
 	INSTALL NEWS config/config.guess config/config.rpath \
 	config/config.sub config/depcomp config/install-sh \
-	config/ltmain.sh config/missing mkinstalldirs
+	config/ltmain.sh config/missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/acinclude.m4 \
-	$(top_srcdir)/m4/lib-link.m4 $(top_srcdir)/m4/lib-prefix.m4 \
+	$(top_srcdir)/m4/fdpassing.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 \
+	$(top_srcdir)/m4/mmap_private.m4 $(top_srcdir)/m4/resolv.m4 \
 	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -118,7 +120,6 @@ am__remove_distdir = \
          && rm -fr $(distdir); }; }
 DIST_ARCHIVES = $(distdir).tar.gz $(distdir).tar.bz2
 GZIP_ENV = --best
-distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
@@ -131,6 +132,8 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFGDIR = @CFGDIR@
 CFLAGS = @CFLAGS@
+CHECK_CFLAGS = @CHECK_CFLAGS@
+CHECK_LIBS = @CHECK_LIBS@
 CLAMAVGROUP = @CLAMAVGROUP@
 CLAMAVUSER = @CLAMAVUSER@
 CLAMAV_MILTER_LIBS = @CLAMAV_MILTER_LIBS@
@@ -149,7 +152,10 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FRESHCLAM_LIBS = @FRESHCLAM_LIBS@
+GCOV = @GCOV@
+GENHTML = @GENHTML@
 GETENT = @GETENT@
+GPERF = @GPERF@
 GREP = @GREP@
 HAVE_LIBGMP = @HAVE_LIBGMP@
 INSTALL = @INSTALL@
@@ -157,6 +163,7 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+LCOV = @LCOV@
 LDFLAGS = @LDFLAGS@
 LIBBZ2 = @LIBBZ2@
 LIBBZ2_PREFIX = @LIBBZ2_PREFIX@
@@ -183,6 +190,7 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -247,11 +255,34 @@ target_vendor = @target_vendor@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I m4
-SUBDIRS = libclamunrar libclamunrar_iface libclamav clamscan clamd clamdscan freshclam sigtool clamconf database docs etc clamav-milter test
+SUBDIRS = libclamunrar libclamunrar_iface libclamav clamscan clamd clamdscan freshclam sigtool clamconf database docs etc clamav-milter test unit_tests
 EXTRA_DIST = FAQ examples BUGS shared libclamav.pc.in UPGRADE COPYING.bzip2 COPYING.lzma COPYING.unrar COPYING.LGPL COPYING.file COPYING.zlib COPYING.BSD contrib
 bin_SCRIPTS = clamav-config
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libclamav.pc
+
+# don't complain that configuration files and databases are not removed, this is intended
+distuninstallcheck_listfiles = find . -type f ! -name clamd.conf ! -name freshclam.conf ! -name daily.cvd ! -name main.cvd -print
+DISTCLEANFILES = target.h
+DISTCHECK_CONFIGURE_FLAGS = --enable-milter CFLAGS="-Wno-pointer-sign \
+	-Wno-error=attributes -Werror-implicit-function-declaration \
+	-Werror -Wextra -Wall -Wbad-function-cast -Wcast-align \
+	-Wendif-labels -Wfloat-equal -Wformat=2 -Wmissing-declarations \
+	-Wmissing-prototypes -Wno-error=missing-prototypes \
+	-Wnested-externs -Wno-error=nested-externs -Wpointer-arith \
+	-Wstrict-prototypes -Wno-error=strict-prototypes -Wno-switch \
+	-Wno-switch-enum -Wundef -Wwrite-strings -Wstrict-overflow=1 \
+	-Winit-self -Wmissing-include-dirs -Wstrict-aliasing \
+	-Wdeclaration-after-statement -Waggregate-return \
+	-Wmissing-format-attribute -Wno-error=missing-format-attribute \
+	-Wpadded -Wno-error=type-limits -Wno-error=unused-value \
+	-Wno-error=unused-variable -Wcast-qual -Wno-error=cast-qual \
+	-Wno-error=sign-compare -Wshadow -Wno-error=shadow \
+	-Wno-error=uninitialized -fdiagnostics-show-option \
+	-Wno-unused-parameter -Wpacked -Wno-error=packed \
+	-Wno-error=unreachable-code -Winvalid-pch \
+	-Wno-error=invalid-pch -O2 -D_FORTIFY_SOURCE=2 \
+	-fstack-protector-all -Wstack-protector -Wno-error=padded"
 all: clamav-config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -347,6 +378,21 @@ uninstall-binSCRIPTS:
 	  echo " rm -f '$(DESTDIR)$(bindir)/$$f'"; \
 	  rm -f "$(DESTDIR)$(bindir)/$$f"; \
 	done
+
+installcheck-binSCRIPTS: $(bin_SCRIPTS)
+	bad=0; pid=$$$$; list="$(bin_SCRIPTS)"; for p in $$list; do \
+	  case ' $(AM_INSTALLCHECK_STD_OPTIONS_EXEMPT) ' in \
+	   *" $$p "* | *" $(srcdir)/$$p "*) continue;; \
+	  esac; \
+	  f=`echo "$$p" | sed 's,^.*/,,;$(transform)'`; \
+	  for opt in --help --version; do \
+	    if "$(DESTDIR)$(bindir)/$$f" $$opt >c$${pid}_.out \
+	         2>c$${pid}_.err </dev/null \
+		 && test -n "`cat c$${pid}_.out`" \
+		 && test -z "`cat c$${pid}_.err`"; then :; \
+	    else echo "$$f does not support $$opt" 1>&2; bad=1; fi; \
+	  done; \
+	done; rm -f c$${pid}_.???; exit $$bad
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -680,6 +726,7 @@ clean-generic:
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
+	-test -z "$(DISTCLEANFILES)" || rm -f $(DISTCLEANFILES)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -720,7 +767,7 @@ install-pdf: install-pdf-recursive
 
 install-ps: install-ps-recursive
 
-installcheck-am:
+installcheck-am: installcheck-binSCRIPTS
 
 maintainer-clean: maintainer-clean-recursive
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
@@ -757,12 +804,14 @@ uninstall-am: uninstall-binSCRIPTS uninstall-pkgconfigDATA
 	install-html-am install-info install-info-am install-man \
 	install-pdf install-pdf-am install-pkgconfigDATA install-ps \
 	install-ps-am install-strip installcheck installcheck-am \
-	installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-recursive \
-	uninstall uninstall-am uninstall-binSCRIPTS \
-	uninstall-pkgconfigDATA
+	installcheck-binSCRIPTS installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-recursive uninstall uninstall-am \
+	uninstall-binSCRIPTS uninstall-pkgconfigDATA
 
+lcov:
+	($(MAKE); cd unit_tests; $(MAKE) lcov)
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

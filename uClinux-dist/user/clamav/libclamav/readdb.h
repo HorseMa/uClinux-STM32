@@ -21,12 +21,11 @@
 #ifndef __READDB_H
 #define __READDB_H
 
-#include <zlib.h>
-
 #include "clamav.h"
 #include "matcher.h"
 #include "str.h"
 #include "cltypes.h"
+#include "cvd.h"
 
 #define CLI_DBEXT(ext)				\
     (						\
@@ -40,6 +39,8 @@
 	cli_strbcasestr(ext, ".mdu")   ||	\
 	cli_strbcasestr(ext, ".ndb")   ||	\
 	cli_strbcasestr(ext, ".ndu")   ||	\
+	cli_strbcasestr(ext, ".ldb")   ||	\
+	cli_strbcasestr(ext, ".ldu")   ||	\
 	cli_strbcasestr(ext, ".sdb")   ||	\
 	cli_strbcasestr(ext, ".zmd")   ||	\
 	cli_strbcasestr(ext, ".rmd")   ||	\
@@ -47,17 +48,19 @@
 	cli_strbcasestr(ext, ".wdb")   ||	\
 	cli_strbcasestr(ext, ".ftm")   ||	\
 	cli_strbcasestr(ext, ".ign")   ||	\
+	cli_strbcasestr(ext, ".cfg")   ||	\
 	cli_strbcasestr(ext, ".cvd")   ||	\
 	cli_strbcasestr(ext, ".cld")		\
     )
 
+char *cli_virname(char *virname, unsigned int official, unsigned int allocated);
 
-int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hexsig, uint16_t rtype, uint16_t type, const char *offset, uint8_t target);
+int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hexsig, uint16_t rtype, uint16_t type, const char *offset, uint8_t target, const uint32_t *lsigid, unsigned int options);
 
 int cli_initengine(struct cl_engine **engine, unsigned int options);
 
-int cli_load(const char *filename, struct cl_engine **engine, unsigned int *signo, unsigned int options, gzFile *gzs, unsigned int gzrsize);
+int cli_load(const char *filename, struct cl_engine **engine, unsigned int *signo, unsigned int options, struct cli_dbio *dbio);
 
-char *cli_dbgets(char *buff, unsigned int size, FILE *fs, gzFile *gzs, unsigned int *gzrsize);
+char *cli_dbgets(char *buff, unsigned int size, FILE *fs, struct cli_dbio *dbio);
 
 #endif

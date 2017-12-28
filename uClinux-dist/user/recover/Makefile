@@ -41,7 +41,7 @@ ADD_LIBZ = -lz
 endif
 
 ifdef CONFIG_USER_NETFLASH_CRYPTO
-ADD_LIBZ += $(LIBAES) $(LIBCRYPTO)
+ADD_LIBZ += $(LIBCRYPTO)
 endif
 
 all: $(RECOVER)

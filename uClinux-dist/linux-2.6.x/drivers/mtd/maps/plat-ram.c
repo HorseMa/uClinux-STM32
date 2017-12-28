@@ -50,6 +50,8 @@ struct platram_info {
 	struct mtd_info		*mtd;
 	struct map_info		 map;
 	struct mtd_partition	*partitions;
+	bool			free_partitions;
+	struct resource		*area;
 	struct platdata_mtd_ram	*pdata;
 };
 
@@ -98,9 +100,11 @@ static int platram_remove(struct platform_device *pdev)
 
 	if (info->mtd) {
 #ifdef CONFIG_MTD_PARTITIONS
-		del_mtd_partitions(info->mtd);
-		if (info->partitions)
-			kfree(info->partitions);
+		if (info->partitions) {
+			del_mtd_partitions(info->mtd);
+			if (info->free_partitions)
+				kfree(info->partitions);
+		}
 #endif
 		del_mtd_device(info->mtd);
 		map_destroy(info->mtd);
@@ -172,7 +176,8 @@ static int platram_probe(struct platform_device *pdev)
 
 	info->map.phys = res->start;
 	info->map.size = (res->end - res->start) + 1;
-	info->map.name = pdata->mapname != NULL ? pdata->mapname : (char *)pdev->name;
+	info->map.name = pdata->mapname != NULL ?
+			(char *)pdata->mapname : (char *)pdev->name;
 	info->map.bankwidth = pdata->bankwidth;
 
 	/* remap the memory area */
@@ -190,9 +195,19 @@ static int platram_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "initialised map, probing for mtd\n");
 
-	/* probe for the right mtd map driver */
+	/* probe for the right mtd map driver
+	 * supplied by the platform_data struct */
 
-	info->mtd = do_map_probe("map_ram" , &info->map);
+	if (pdata->map_probes) {
+		const char **map_probes = pdata->map_probes;
+
+		for ( ; !info->mtd && *map_probes; map_probes++)
+			info->mtd = do_map_probe(*map_probes , &info->map);
+	}
+	/* fallback to map_ram */
+	else
+		info->mtd = do_map_probe("map_ram", &info->map);
+
 	if (info->mtd == NULL) {
 		dev_err(&pdev->dev, "failed to probe for map_ram\n");
 		err = -ENOMEM;
@@ -207,21 +222,23 @@ static int platram_probe(struct platform_device *pdev)
 	 * to add this device whole */
 
 #ifdef CONFIG_MTD_PARTITIONS
-	if (pdata->nr_partitions > 0) {
-		err = add_mtd_partitions(info->mtd, pdata->partitions,
-					 pdata->nr_partitions);
-		if (err < 0)
-			goto exit_free;
-	} else if (pdata->probes) {
-		err = parse_mtd_partitions(info->mtd, pdata->probes,
+	if (!pdata->nr_partitions) {
+		/* try to probe using the supplied probe type */
+		if (pdata->probes) {
+			err = parse_mtd_partitions(info->mtd, pdata->probes,
 					   &info->partitions, 0);
-		if (err > 0) {
-			err = add_mtd_partitions(info->mtd, info->partitions,
-						 err);
+			info->free_partitions = 1;
+			if (err > 0)
+				err = add_mtd_partitions(info->mtd,
+					info->partitions, err);
 		}
 		if (err < 0)
 			goto exit_free;
 	}
+	/* use the static mapping */
+	else
+		err = add_mtd_partitions(info->mtd, pdata->partitions,
+				pdata->nr_partitions);
 #endif /* CONFIG_MTD_PARTITIONS */
 
 	if (add_mtd_device(info->mtd)) {
@@ -230,12 +247,13 @@ static int platram_probe(struct platform_device *pdev)
 		goto exit_free;
 	}
 
-	dev_info(&pdev->dev, "registered mtd device\n");
+	if (!err)
+		dev_info(&pdev->dev, "registered mtd device\n");
 
 	if (pdata->root_dev)
 		ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, info->mtd->index);
 
-	return 0;
+	return err;
 
  exit_free:
 	platram_remove(pdev);
@@ -244,6 +262,9 @@ static int platram_probe(struct platform_device *pdev)
 }
 
 /* device driver info */
+
+/* work with hotplug and coldplug */
+MODULE_ALIAS("platform:mtd-ram");
 
 static struct platform_driver platram_driver = {
 	.probe		= platram_probe,

@@ -799,8 +799,7 @@ static void cp_tx (struct cp_private *cp)
 		BUG_ON(!skb);
 
 		dma_unmap_single(&cp->pdev->dev, le64_to_cpu(txd->addr),
-				 le32_to_cpu(txd->opts1) & 0xffff,
-				 PCI_DMA_TODEVICE);
+				 skb->len, PCI_DMA_TODEVICE);
 
 		if (status & LastFrag) {
 			if (status & (TxError | TxFIFOUnder)) {
@@ -1273,7 +1272,9 @@ static int cp_open (struct net_device *dev)
 	if (rc)
 		return rc;
 
+#ifndef FAST_POLL
 	napi_enable(&cp->napi);
+#endif
 
 	cp_init_hw(cp);
 

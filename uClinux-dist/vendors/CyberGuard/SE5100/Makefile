@@ -168,14 +168,16 @@ image: mkcramfs
 # Real filesystem building from here on in
 #
 
-LILO_CFLAGS = -I$(ROOTDIR)/user/lilo -DLCF_IGNORECASE -DHAS_BOOT_H -DLCF_M386 -DLCF_READONLY -DLCF_VARSETUP -DLCF_SOLO_CHAIN -DLILO=0xbb920890
+LILO_CFLAGS = -I$(ROOTDIR)/user/lilo -DLCF_IGNORECASE -DHAS_BOOT_H -DLCF_M386 -DLCF_READONLY -DLCF_VARSETUP -DNOSIZELIMIT=1
+#LILO_CFLAGS = -I$(ROOTDIR)/user/lilo -DLCF_IGNORECASE -DHAS_BOOT_H -DLCF_M386 -DLCF_READONLY -DLCF_VARSETUP
 
 LILOSOURCE = lilo.c map.c geometry.c boot.c device.c common.c bsect.c cfg.c \
-	temp.c partition.c identify.c probe.c shs2.c raid.c edit.c
+	temp.c partition.c identify.c probe.c shs2.c
 
-.PHONY: lilo
 lilo:
-	gcc $(LILO_CFLAGS) -o $@ $(patsubst %.c,$(ROOTDIR)/user/lilo/%.c,$(LILOSOURCE))
+	# Note: A binary is now checked into CVS to make this less dependent
+	# on the host system
+	#gcc $(LILO_CFLAGS) -o $@ $(patsubst %.c,$(ROOTDIR)/user/lilo/%.c,$(LILOSOURCE))
 
 .PHONY: extimage
 extimage: lilo

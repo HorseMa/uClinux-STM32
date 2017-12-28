@@ -89,7 +89,7 @@ clean:
 	done
 
 romfs:
-	$(ROMFSINST) -e CONFIG_USER_TINYTCL_TCLSH /bin/tclsh
+	$(ROMFSINST) -d -e CONFIG_USER_TINYTCL_TCLSH /bin/tclsh
 ifndef CONFIG_LIB_TINYTCL_STATIC
 	$(ROMFSINST) /lib/libtcl.so
 	for e in $(EXTENSIONS); do \

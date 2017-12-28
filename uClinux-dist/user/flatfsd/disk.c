@@ -33,7 +33,7 @@ struct flatinfo_s {
 	int flags;
 };
 
-static struct flatinfo_s flatinfo = { fd: -1 };
+static struct flatinfo_s flatinfo = { .fd = -1 };
 
 /***************************************************************************/
 
@@ -72,7 +72,7 @@ int flat_dev_open(const char *flatfs, const char *mode)
 	flatinfo.flags = 0;
 	if (*mode == 'w') {
 		flatinfo.flags |= FLAG_WRITING;
-		open_mode = O_WRONLY;
+		open_mode = O_RDWR;
 	} else {
 		open_mode = O_RDONLY;
 	}
@@ -172,7 +172,7 @@ int flat_dev_write(off_t offset, const void *buf, size_t len)
 int flat_dev_read(void *buf, size_t len)
 {
 	assert(flatinfo.fd != -1);
-	assert(!(flatinfo.flags & FLAG_WRITING));
+	/*assert(!(flatinfo.flags & FLAG_WRITING));*/
 	return read(flatinfo.fd, buf, len);
 }
 

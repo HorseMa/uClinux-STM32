@@ -13,7 +13,6 @@
  * for more details.
  */
 
-char ipsec_ipcomp_c_version[] = "RCSID $Id: ipsec_ipcomp.c,v 1.5.2.3 2007-09-05 02:56:09 paul Exp $";
 #ifndef AUTOCONF_INCLUDED
 #include <linux/config.h>
 #endif
@@ -57,6 +56,7 @@ char ipsec_ipcomp_c_version[] = "RCSID $Id: ipsec_ipcomp.c,v 1.5.2.3 2007-09-05 
 #include "openswan/ipsec_xform.h"
 #include "openswan/ipsec_tunnel.h"
 #include "openswan/ipsec_rcv.h"
+extern int sysctl_ipsec_inbound_policy_check;
 #include "openswan/ipsec_xmit.h"
 
 #include "openswan/ipsec_auth.h"
@@ -66,11 +66,6 @@ char ipsec_ipcomp_c_version[] = "RCSID $Id: ipsec_ipcomp.c,v 1.5.2.3 2007-09-05 
 #endif /* CONFIG_KLIPS_IPCOMP */
 
 #include "openswan/ipsec_proto.h"
-
-#ifdef CONFIG_KLIPS_DEBUG
-int debug_ipcomp = 0;
-#endif /* CONFIG_KLIPS_DEBUG */
-
 
 #ifdef CONFIG_KLIPS_IPCOMP
 enum ipsec_rcv_value
@@ -114,7 +109,7 @@ ipsec_rcv_ipcomp_decomp(struct ipsec_rcv_state *irs)
 	}
 
 	if(sysctl_ipsec_inbound_policy_check &&
-	   ((((ntohl(ipsp->ips_said.spi) & 0x0000ffff) != ntohl(irs->said.spi)) &&
+	   ((((ntohl(ipsp->ips_said.spi) & 0x0000ffff) != (ntohl(irs->said.spi) & 0x0000ffff)) &&
 	     (ipsp->ips_encalg != ntohl(irs->said.spi))   /* this is a workaround for peer non-compliance with rfc2393 */
 		    ))) {
 		char sa2[SATOT_BUF];
@@ -126,11 +121,11 @@ ipsec_rcv_ipcomp_decomp(struct ipsec_rcv_state *irs)
 			    "klips_debug:ipsec_rcv: "
 			    "Incoming packet with SA(IPCA):%s does not match policy SA(IPCA):%s cpi=%04x cpi->spi=%08x spi=%08x, spi->cpi=%04x for SA grouping, dropped.\n",
 			    irs->sa_len ? irs->sa : " (error)",
-			    ipsp != NULL ? (sa_len2 ? sa2 : " (error)") : "NULL",
+			    sa_len2 ? sa2 : " (error)",
 			    ntohs(irs->protostuff.ipcompstuff.compp->ipcomp_cpi),
 			    (__u32)ntohl(irs->said.spi),
-			    ipsp != NULL ? (__u32)ntohl((ipsp->ips_said.spi)) : 0,
-			    ipsp != NULL ? (__u16)(ntohl(ipsp->ips_said.spi) & 0x0000ffff) : 0);
+			    (__u32)ntohl((ipsp->ips_said.spi)),
+			    (__u16)(ntohl(ipsp->ips_said.spi) & 0x0000ffff));
 		if(irs->stats) {
 			irs->stats->rx_dropped++;
 		}
@@ -183,9 +178,7 @@ enum ipsec_xmit_value
 ipsec_xmit_ipcomp_setup(struct ipsec_xmit_state *ixs)
 {
   unsigned int flags = 0;
-#ifdef CONFIG_KLIPS_DEBUG
   unsigned int old_tot_len = ntohs(ixs->iph->tot_len);
-#endif /* CONFIG_KLIPS_DEBUG */
 
   ixs->ipsp->ips_comp_ratio_dbytes += ntohs(ixs->iph->tot_len);
 
@@ -199,7 +192,6 @@ ipsec_xmit_ipcomp_setup(struct ipsec_xmit_state *ixs)
   
   ixs->ipsp->ips_comp_ratio_cbytes += ntohs(ixs->iph->tot_len);
   
-#ifdef CONFIG_KLIPS_DEBUG
   if (debug_tunnel & DB_TN_CROUT)
     {
       if (old_tot_len > ntohs(ixs->iph->tot_len))
@@ -216,17 +208,18 @@ ipsec_xmit_ipcomp_setup(struct ipsec_xmit_state *ixs)
 		    "packet did not compress (flags = %d).\n",
 		    flags);
     }
-#endif /* CONFIG_KLIPS_DEBUG */
 
   return IPSEC_XMIT_OK;
 }
 
 struct xform_functions ipcomp_xform_funcs[]={
-	{rcv_checks:  ipsec_rcv_ipcomp_checks,
-	 rcv_decrypt: ipsec_rcv_ipcomp_decomp,
-	 xmit_setup:  ipsec_xmit_ipcomp_setup,
-	 xmit_headroom: 0,
-	 xmit_needtailroom: 0,
+	{
+		protocol:           IPPROTO_COMP,
+		rcv_checks:  ipsec_rcv_ipcomp_checks,
+		rcv_decrypt: ipsec_rcv_ipcomp_decomp,
+		xmit_setup:  ipsec_xmit_ipcomp_setup,
+		xmit_headroom: 0,
+		xmit_needtailroom: 0,
 	},
 };
 
@@ -234,6 +227,7 @@ struct xform_functions ipcomp_xform_funcs[]={
 /* We probably don't want to install a pure IPCOMP protocol handler, but
    only want to handle IPCOMP if it is encapsulated inside an ESP payload
    (which is already handled) */
+#ifndef CONFIG_XFRM_ALTERNATE_STACK
 #ifdef CONFIG_KLIPS_IPCOMP
 struct inet_protocol comp_protocol =
 {
@@ -250,6 +244,7 @@ struct inet_protocol comp_protocol =
 #endif
 };
 #endif /* CONFIG_KLIPS_IPCOMP */
+#endif /* CONFIG_XFRM_ALTERNATE_STACK */
 #endif
 
 #endif /* CONFIG_KLIPS_IPCOMP */

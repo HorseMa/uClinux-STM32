@@ -87,6 +87,13 @@
 #if defined(CONFIG_SGI_IP22) || defined(CONFIG_SGI_IP28)
 /* don't care; ISA bus master won't work, ISA slave DMA supports 32bit addr */
 #define MAX_DMA_ADDRESS		PAGE_OFFSET
+#elif defined(CONFIG_CPU_CAVIUM_OCTEON)
+/* Octeon can support DMA to any memory installed */
+#ifdef CONFIG_64BIT
+#define MAX_DMA_ADDRESS		(PAGE_OFFSET + (1ull<<32))
+#else
+#define MAX_DMA_ADDRESS		(PAGE_OFFSET + (1ul<<30))
+#endif
 #else
 #define MAX_DMA_ADDRESS		(PAGE_OFFSET + 0x01000000)
 #endif

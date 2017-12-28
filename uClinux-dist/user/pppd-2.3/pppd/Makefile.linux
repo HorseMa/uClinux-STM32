@@ -14,8 +14,8 @@ MPPE=y
 
 ifdef MPPE
 OBJS += md4.o chap_ms.o cbcp.o mppe.o sha1dgst.o extra_crypto.o
-CFLAGS += -DCHAPMS=1 -DMSLANMAN=1 -DMPPE=1
-LDLIBS += $(LIBDES)
+CFLAGS += -DCHAPMS=1 -DMSLANMAN=1 -DMPPE=1 -DUSE_CRYPT=1
+LDLIBS += -lcrypt
 ifdef DYNAMIC
 CFLAGS += -DDYNAMIC=1
 endif

@@ -35,6 +35,8 @@
 #include <sys/types.h>
 #ifndef	C_WINDOWS
 #include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #endif
 #ifdef	HAVE_UNISTD_H
 #include <unistd.h>
@@ -51,6 +53,7 @@
 #include "others.h"
 #include "shared.h"
 #include "libclamav/others.h"
+#include "libclamav/readdb.h"
 
 #ifndef	C_WINDOWS
 #define	closesocket(s)	close(s)
@@ -65,10 +68,10 @@
 #endif
 
 int progexit = 0;
-pthread_mutex_t exit_mutex;
+pthread_mutex_t exit_mutex = PTHREAD_MUTEX_INITIALIZER;
 int reload = 0;
 time_t reloaded_time = 0;
-pthread_mutex_t reload_mutex;
+pthread_mutex_t reload_mutex = PTHREAD_MUTEX_INITIALIZER;
 int sighup = 0;
 static struct cl_stat *dbstat = NULL;
 
@@ -191,7 +194,8 @@ static struct cl_engine *reload_db(struct cl_engine *engine, unsigned int dbopti
 {
 	const char *dbdir;
 	int retval;
-	unsigned int sigs = 0, attempt = 1;
+	unsigned int sigs = 0;
+	char *pua_cats = NULL;
 
     *ret = 0;
     if(do_check) {
@@ -207,12 +211,6 @@ static struct cl_engine *reload_db(struct cl_engine *engine, unsigned int dbopti
 	    logg("SelfCheck: Database status OK.\n");
 	    return NULL;
 	}
-    }
-
-    /* release old structure */
-    if(engine) {
-	cl_free(engine);
-	engine = NULL;
     }
 
     dbdir = cfgopt(copt, "DatabaseDirectory")->strarg;
@@ -236,10 +234,30 @@ static struct cl_engine *reload_db(struct cl_engine *engine, unsigned int dbopti
 	return NULL;
     }
 
-    while((retval = cl_load(dbdir, &engine, &sigs, dboptions)) == CL_ELOCKDB) {
-	logg("!reload db failed: %s (attempt %u/3)\n", cl_strerror(retval), attempt);
-	if(++attempt > 3)
-	    break;
+    /* release old structure */
+    if(engine) {
+	if(engine->pua_cats)
+	    if(!(pua_cats = strdup(engine->pua_cats)))
+		logg("^Can't make a copy of pua_cats\n");
+
+	cl_free(engine);
+	engine = NULL;
+    }
+
+    if(pua_cats) {
+	if((retval = cli_initengine(&engine, dboptions))) {
+	    logg("!cli_initengine() failed: %s\n", cl_strerror(retval));
+	    *ret = 1;
+	    free(pua_cats);
+	    return NULL;
+	}
+	engine->pua_cats = pua_cats;
+    }
+
+    if((retval = cl_load(dbdir, &engine, &sigs, dboptions))) {
+	logg("!reload db failed: %s\n", cl_strerror(retval));
+	*ret = 1;
+	return NULL;
     }
 
     if(retval) {
@@ -272,12 +290,11 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	char timestr[32];
 #ifndef	C_WINDOWS
 	struct sigaction sigact;
+	sigset_t sigset;
+	struct rlimit rlim;
 #endif
 	mode_t old_umask;
 	struct cl_limits limits;
-#ifndef	C_WINDOWS
-	sigset_t sigset;
-#endif
 	client_conn_t *client_conn;
 	const struct cfgstruct *cpt;
 #ifdef HAVE_STRERROR_R
@@ -306,7 +323,9 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	if((fd = fopen(cpt->strarg, "w")) == NULL) {
 	    logg("!Can't save PID in file %s\n", cpt->strarg);
 	} else {
-	    fprintf(fd, "%u", (unsigned int) mainpid);
+	    if (fprintf(fd, "%u", (unsigned int) mainpid)<0) {
+	    	logg("!Can't save PID in file %s\n", cpt->strarg);
+	    }
 	    fclose(fd);
 	}
 	umask(old_umask);
@@ -329,6 +348,15 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     } else {
 	logg("^Limits: File size limit protection disabled.\n");
     }
+
+#ifndef C_WINDOWS
+    if(getrlimit(RLIMIT_FSIZE, &rlim) == 0) {
+	if((rlim.rlim_max < limits.maxfilesize) || (rlim.rlim_max < limits.maxscansize))
+	    logg("^System limit for file size is lower than maxfilesize or maxscansize\n");
+    } else {
+	logg("^Cannot obtain resource limits for file size\n");
+    }
+#endif
 
     if((limits.maxreclevel = cfgopt(copt, "MaxRecursion")->numarg)) {
         logg("Limits: Recursion level limit set to %u.\n", limits.maxreclevel);
@@ -400,6 +428,11 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	    options |= CL_SCAN_MAILURL;
 	}
 
+	if(cfgopt(copt, "ScanPartialMessages")->enabled) {
+	    logg("Mail: RFC1341 handling enabled.\n");
+	    options |= CL_SCAN_PARTIAL_MESSAGE;
+	}
+
     } else {
 	logg("Mail files support disabled.\n");
     }
@@ -438,6 +471,27 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	}
     }
 
+    if(cfgopt(copt,"HeuristicScanPrecedence")->enabled) {
+	    options |= CL_SCAN_HEURISTIC_PRECEDENCE;
+	    logg("Heuristic: precedence enabled\n");
+    }
+
+    if(cfgopt(copt, "StructuredDataDetection")->enabled) {
+        options |= CL_SCAN_STRUCTURED;
+
+        limits.min_cc_count = cfgopt(copt, "StructuredMinCreditCardCount")->numarg;
+        logg("Structured: Minimum Credit Card Number Count set to %u\n", limits.min_cc_count);
+
+        limits.min_ssn_count = cfgopt(copt, "StructuredMinSSNCount")->numarg;
+        logg("Structured: Minimum Social Security Number Count set to %u\n", limits.min_ssn_count);
+
+        if(cfgopt(copt, "StructuredSSNFormatNormal")->enabled)
+            options |= CL_SCAN_STRUCTURED_SSN_NORMAL;
+
+        if(cfgopt(copt, "StructuredSSNFormatStripped")->enabled)
+	    options |= CL_SCAN_STRUCTURED_SSN_STRIPPED;
+    }
+
     selfchk = cfgopt(copt, "SelfCheck")->numarg;
     if(!selfchk) {
 	logg("Self checking disabled.\n");
@@ -448,16 +502,19 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     if(cfgopt(copt, "ClamukoScanOnAccess")->enabled)
 #ifdef CLAMUKO
     {
-	pthread_attr_init(&clamuko_attr);
-	pthread_attr_setdetachstate(&clamuko_attr, PTHREAD_CREATE_JOINABLE);
-
-	tharg = (struct thrarg *) malloc(sizeof(struct thrarg));
-	tharg->copt = copt;
-	tharg->engine = engine;
-	tharg->limits = &limits;
-	tharg->options = options;
-
-	pthread_create(&clamuko_pid, &clamuko_attr, clamukoth, tharg);
+        do {
+	    if(!pthread_attr_init(&clamuko_attr)) break;
+	    pthread_attr_setdetachstate(&clamuko_attr, PTHREAD_CREATE_JOINABLE);
+	    if(!(tharg = (struct thrarg *) malloc(sizeof(struct thrarg)))) break;
+	    tharg->copt = copt;
+	    tharg->engine = engine;
+	    tharg->limits = &limits;
+	    tharg->options = options;
+	    if(pthread_create(&clamuko_pid, &clamuko_attr, clamukoth, tharg)) break;
+	    free(tharg);
+	    tharg=NULL;
+	} while(0);
+	if (!tharg) logg("!Unable to start Clamuko\n");
     }
 #else
 	logg("Clamuko is not available.\n");
@@ -496,9 +553,6 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     sigaction(SIGPIPE, &sigact, NULL);
     sigaction(SIGUSR2, &sigact, NULL);
 #endif
-
-    pthread_mutex_init(&exit_mutex, NULL);
-    pthread_mutex_init(&reload_mutex, NULL);
 
     idletimeout = cfgopt(copt, "IdleTimeout")->numarg;
 
@@ -564,26 +618,39 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 
 	if (!progexit && new_sd >= 0) {
 		client_conn = (client_conn_t *) malloc(sizeof(struct client_conn_tag));
-		client_conn->sd = new_sd;
-		client_conn->options = options;
-		client_conn->copt = copt;
-		client_conn->engine = cl_dup(engine);
-		client_conn->engine_timestamp = reloaded_time;
-		client_conn->limits = &limits;
-		client_conn->socketds = socketds;
-		client_conn->nsockets = nsockets;
-		if (!thrmgr_dispatch(thr_pool, client_conn)) {
-		    close(client_conn->sd);
-		    free(client_conn);
-		    logg("!thread dispatch failed\n");
+		if(client_conn) {
+		    client_conn->sd = new_sd;
+		    client_conn->options = options;
+		    client_conn->copt = copt;
+		    client_conn->engine = cl_dup(engine);
+		    client_conn->engine_timestamp = reloaded_time;
+		    client_conn->limits = &limits;
+		    client_conn->socketds = socketds;
+		    client_conn->nsockets = nsockets;
+		    if(!thrmgr_dispatch(thr_pool, client_conn)) {
+			closesocket(client_conn->sd);
+			free(client_conn);
+			logg("!thread dispatch failed\n");
+		    }
+		} else {
+		    logg("!Can't allocate memory for client_conn\n");
+		    closesocket(new_sd);
+		    if(cfgopt(copt, "ExitOnOOM")->enabled) {
+			pthread_mutex_lock(&exit_mutex);
+			progexit = 1;
+			pthread_mutex_unlock(&exit_mutex);
+		    }
 		}
 	}
 
 	pthread_mutex_lock(&exit_mutex);
 	if(progexit) {
-	    if (new_sd >= 0) {
+#ifdef C_WINDOWS
+	    closesocket(new_sd);
+#else
+  	    if(new_sd >= 0)
 		close(new_sd);
-	    }
+#endif
 	    pthread_mutex_unlock(&exit_mutex);
 	    break;
 	}
@@ -607,16 +674,21 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	    engine = reload_db(engine, dboptions, copt, FALSE, &ret);
 	    if(ret) {
 		logg("Terminating because of a fatal error.\n");
+#ifdef C_WINDOWS
+		closesocket(new_sd);
+#else
 		if(new_sd >= 0)
 		    close(new_sd);
+#endif
 		break;
 	    }
+
 	    pthread_mutex_lock(&reload_mutex);
 	    reload = 0;
 	    time(&reloaded_time);
 	    pthread_mutex_unlock(&reload_mutex);
 #ifdef CLAMUKO
-	    if(cfgopt(copt, "ClamukoScanOnAccess")->enabled) {
+	    if(cfgopt(copt, "ClamukoScanOnAccess")->enabled && tharg) {
 		logg("Stopping and restarting Clamuko.\n");
 		pthread_kill(clamuko_pid, SIGUSR1);
 		pthread_join(clamuko_pid, NULL);

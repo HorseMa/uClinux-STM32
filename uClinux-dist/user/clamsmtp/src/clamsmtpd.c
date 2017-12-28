@@ -70,7 +70,6 @@
 
 #ifdef CONFIG_USER_TRUSTEDSOURCE_V2
 #include "librep.h"
-#include "query.h"
 #endif
 
 /* -----------------------------------------------------------------------
@@ -168,9 +167,11 @@ clstate_t g_clstate;
  * Anti-spam globals
  */
 char *g_trustedsource_server = NULL;        /* server address */
+char *g_trustedsourcev2_server = NULL;        /* server address */
 char *g_serial = NULL;                      /* serial/key */
 char *g_vendor = NULL;                      /* vendor string */
 int g_threshold = 0;                        /* reject threshold */
+int g_thresholdv2 = 0;                        /* v2 reject threshold */
 int g_trustedsource_enabled = 0;            /* lookups enabled or disabled */
 int g_trustedsourcev2_enabled = 0;          /* ver 2 lookups enabled or disabled */
 int g_trustedsource_bwlist = 0;		    /* trustedsource blacklisting */ 
@@ -621,13 +622,13 @@ int cb_parse_option(const char* name, const char* value)
 
     else if(strcasecmp(CFG_TRUSTEDSOURCEV2_SERVER, name) == 0)
     {
-        g_trustedsource_server = (char *)value;
+        g_trustedsourcev2_server = (char *)value;
         return 1;
     }
 
     else if(strcasecmp(CFG_TRUSTEDSOURCEV2_THRESHOLD, name) == 0)
     {
-        g_threshold = strtol(value, &t, 10);
+        g_thresholdv2 = strtol(value, &t, 10);
         if(*t)
             errx(2, "invalid setting for " CFG_TRUSTEDSOURCEV2_THRESHOLD);
         return 1;
@@ -733,8 +734,9 @@ int check_bwlist_access(ipset white, ipset black, const unsigned long srcip) {
 int cb_check_client(spctx_t* sp, struct sockaddr_any* peeraddr)
 {
 #ifdef CONFIG_USER_TRUSTEDSOURCE_V2
-    RepQuery_t *repqu;
-    RepResponse_t *resp;
+    struct rep_network *rn;
+    struct rep_query *rq;
+    rep_response rr;
 #endif
 
 #ifdef CONFIG_USER_TRUSTEDSOURCE
@@ -849,49 +851,54 @@ trustedsourcev2:
 	return bwlist;
     } /* else: do the ts v1 or 2 lookup as normal */
 #endif
-
-    repqu = RepQuery_New();
-    if (repqu == NULL)
-    {
-        sp_messagex(sp, LOG_ERR, "error creating Trusted Source v2 query");
+    rn = repnet_init(3, 5, g_trustedsourcev2_server, NULL);
+    if (!rn) {
+        sp_messagex(sp, LOG_ERR, "error initialising Trusted Source v2");
         return 1;
     }
-
-    RepQuery_NewQuery(repqu);
-    RepQuery_NewChunk(repqu, C_IM);
-    RepQuery_AddDeviceSerial(repqu, g_serial);
-    RepQuery_AddIP(repqu, peeraddr->s.in.sin_addr.s_addr);
-
-    if(RepQuery_Connect(repqu, g_trustedsource_server)) {
-      sp_message(sp, LOG_ERR, "error connecting to Trusted Source v2 server");
-      return 1;
+    rq = repquery_init(rn);
+    if(!rq) {
+	repnet_destroy(rn);
+        sp_messagex(sp, LOG_ERR, "error creating Trusted Source v2 query");
+	return 1;
     }
-
-    resp = RepQuery_DoQuery(repqu);
-    if (resp == NULL)
+    repquery_set_serial(rq, "clamsmtp");
+    repquery_newquery(rq);
+    repquery_newchunk_meta(rq);
+    repquery_newchunk(rq, C_IM);
+    repquery_adddeviceserial(rq, g_serial);
+    repquery_addip(rq, peeraddr->s.in.sin_addr.s_addr);
+    
+    if (!repquery_doquery(rq, &rr))
     {
+	repnet_destroy(rn);
+	repquery_destroy(rq);
         sp_message(sp, LOG_ERR, "error invalid or no response from Trusted Source v2 server");
         return 1;
     }
 
-    if (VALUE_IS_SET(resp->error)) {
-        sp_messagex(sp, LOG_ERR, "error querying Trusted Source v2 server, code: %d", VALUE_GET(resp->error));
+    repnet_destroy(rn);
+    repquery_destroy(rq);
+
+    if (rr.has_error) {
+        sp_messagex(sp, LOG_ERR, "error querying Trusted Source v2 server, code: %d", rr.error);
         return 1;
-    } else {
+    } else if (rr.has_pr_ip) {
         /* DEBUG sp_message(sp, LOG_ERR, "IP Trusted Source v2 reputation: %d", VALUE_GET(resp->pr_ip)); */
 
-        if (VALUE_GET(resp->pr_ip) >= g_threshold) {
-            sp_messagex(sp, LOG_ERR, "client connection from %s is untrusted (score: %d)", inet_ntoa(peeraddr->s.in.sin_addr), VALUE_GET(resp->pr_ip));
+        if (rr.pr_ip >= g_thresholdv2) {
+            sp_messagex(sp, LOG_ERR, "client connection from %s is untrusted (score: %d is above threshold of %d)", inet_ntoa(peeraddr->s.in.sin_addr), rr.pr_ip, g_thresholdv2);
             return -1;
         } else {
             sp_messagex(sp, LOG_DEBUG, "client connection from %s is acceptable (score: %d is below threshold of %d)\n", 
-                        inet_ntoa(peeraddr->s.in.sin_addr), VALUE_GET(resp->pr_ip), g_threshold);
+                        inet_ntoa(peeraddr->s.in.sin_addr), rr.pr_ip, g_thresholdv2);
             return 1;
         }
+    } else {
+            sp_messagex(sp, LOG_DEBUG, "client connection from %s is unknown\n", 
+                        inet_ntoa(peeraddr->s.in.sin_addr));
+            return 1;
     }
-
-    RepResponse_Delete(resp);
-    RepQuery_Delete(repqu);
 #endif
 
 #if !(defined(CONFIG_USER_TRUSTEDSOURCE_V2))

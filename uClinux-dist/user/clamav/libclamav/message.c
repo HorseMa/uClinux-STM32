@@ -480,7 +480,7 @@ messageAddArguments(message *m, const char *s)
 		const char *key, *cptr;
 		char *data, *field;
 
-		if(isspace(*string) || (*string == ';')) {
+		if(isspace(*string & 0xff) || (*string == ';')) {
 			string++;
 			continue;
 		}
@@ -1707,6 +1707,30 @@ base64Flush(message *m, unsigned char *buf)
 	return NULL;
 }
 
+int messageSavePartial(message *m, const char *dir, const char *md5id, unsigned part)
+{
+	char fullname[1024];
+	fileblob *fb;
+	unsigned long time_val;
+
+	cli_dbgmsg("messageSavePartial\n");
+	time_val  = time(NULL);
+	snprintf(fullname, 1024, "%s/clamav-partial-%lu_%s-%u", dir, time_val, md5id, part);
+
+	fb = messageExport(m, fullname,
+		(void *(*)(void))fileblobCreate,
+		(void(*)(void *))fileblobDestroy,
+		(void(*)(void *, const char *, const char *))fileblobPartialSet,
+		(void(*)(void *, const unsigned char *, size_t))fileblobAddData,
+		(void *(*)(text *, void *, int))textToFileblob,
+		(void(*)(void *, cli_ctx *))fileblobSetCTX,
+		0);
+	if(!fb)
+		return CL_EFORMAT;
+	fileblobDestroy(fb);
+	return CL_SUCCESS;
+}
+
 /*
  * Decode and transfer the contents of the message into a fileblob
  * The caller must free the returned fileblob
@@ -1819,14 +1843,13 @@ messageToText(message *m)
 				for(t_line = messageGetBody(m); t_line; t_line = t_line->t_next) {
 					if(first == NULL)
 						first = last = cli_malloc(sizeof(text));
-					else {
+					else if (last) {
 						last->t_next = cli_malloc(sizeof(text));
 						last = last->t_next;
 					}
 
 					if(last == NULL) {
 						if(first) {
-							last->t_next = NULL;
 							textDestroy(first);
 						}
 						return NULL;
@@ -1840,7 +1863,8 @@ messageToText(message *m)
 			case UUENCODE:
 				cli_errmsg("messageToText: Unexpected attempt to handle uuencoded file - report to http://bugs.clamav.net\n");
 				if(first) {
-					last->t_next = NULL;
+					if(last)
+						last->t_next = NULL;
 					textDestroy(first);
 				}
 				return NULL;
@@ -1850,7 +1874,8 @@ messageToText(message *m)
 				if(t_line == NULL) {
 					/*cli_warnmsg("YENCODED attachment is missing begin statement\n");*/
 					if(first) {
-						last->t_next = NULL;
+						if(last)
+							last->t_next = NULL;
 						textDestroy(first);
 					}
 					return NULL;
@@ -1886,7 +1911,7 @@ messageToText(message *m)
 
 			if(first == NULL)
 				first = last = cli_malloc(sizeof(text));
-			else {
+			else if (last) {
 				last->t_next = cli_malloc(sizeof(text));
 				last = last->t_next;
 			}
@@ -1924,7 +1949,7 @@ messageToText(message *m)
 			if(decode(m, NULL, data, base64, FALSE) && data[0]) {
 				if(first == NULL)
 					first = last = cli_malloc(sizeof(text));
-				else {
+				else if (last) {
 					last->t_next = cli_malloc(sizeof(text));
 					last = last->t_next;
 				}

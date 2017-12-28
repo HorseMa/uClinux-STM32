@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Mon Jul 28 18:05:58 2008
+# Thu Jul 31 18:13:04 2008
 #
 # TARGET_alpha is not set
 # TARGET_arm is not set
@@ -47,7 +47,7 @@ ARCH_BIG_ENDIAN=y
 UCLIBC_HAS_FLOATS=y
 # UCLIBC_HAS_FPU is not set
 DO_C99_MATH=y
-KERNEL_HEADERS="$(ROOTDIR)/$(LINUXDIR)/include"
+KERNEL_HEADERS="$(ROOTDIR)/include"
 UCLIBC_UCLINUX_BROKEN_MUNMAP=y
 EXCLUDE_BRK=y
 HAVE_DOT_CONFIG=y

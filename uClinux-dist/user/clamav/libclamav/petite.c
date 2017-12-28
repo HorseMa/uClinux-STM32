@@ -214,8 +214,15 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct cli
       /* Let's compact data */
       for (t = 0; t < j ; t++) {
 	usects[t].raw = (t>0)?(usects[t-1].raw + usects[t-1].rsz):0;
-	if (usects[t].rsz != 0 && CLI_ISCONTAINED(buf, bufsz, buf + usects[t].raw, usects[t].rsz))
-	  memmove(buf + usects[t].raw, adjbuf + usects[t].rva, usects[t].rsz);
+	if (usects[t].rsz != 0) {
+	  if(CLI_ISCONTAINED(buf, bufsz, buf + usects[t].raw, usects[t].rsz)) {
+	    memmove(buf + usects[t].raw, adjbuf + usects[t].rva, usects[t].rsz);
+	  } else {
+	    cli_dbgmsg("Petite: Skipping section %d, Raw: %x, RSize:%x\n", t, usects[t].raw, usects[t].rsz);
+	    usects[t].raw = t>0 ? usects[t-1].raw : 0;
+	    usects[t].rsz = 0;
+	  }
+	}
       }
 
       /* Showtime!!! */
@@ -265,6 +272,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct cli
       uint32_t check1, check2;
       uint8_t mydl = 0;
       uint8_t goback;
+      unsigned int q;
       
       /* Unpak each original section in turn */
 
@@ -312,15 +320,18 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct cli
        * (eg the icon): let's fix the rva
        */
 
-      if (!check4resources) {
-	unsigned int q;
-	for ( q = 0 ; q < sectcount ; q++ ) {
-	  if ( thisrva <= sections[q].rva || thisrva >= sections[q].rva + sections[q].vsz)
-	    continue;
+      for ( q = 0 ; q < sectcount ; q++ ) {
+	if(!CLI_ISCONTAINED(sections[q].rva, sections[q].vsz, usects[j].rva, usects[j].vsz))
+	  continue;
+	if (!check4resources) {
 	  usects[j].rva = sections[q].rva;
 	  usects[j].rsz = thisrva - sections[q].rva + size;
-	  break;
 	}
+	break;
+      }
+      if (q == sectcount) {
+	free(usects);
+	return 1;
       }
 
       /* Increase count of unpacked sections */

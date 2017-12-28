@@ -14,10 +14,9 @@
  * for more details.
  *
  * Modifications to use OCF interface written by
- * Daniel Djamaludin <ddjamaludin@cyberguard.com>
+ * Daniel Djamaludin <danield@cyberguard.com>
  * Copyright (C) 2004-2005 Intel Corporation.  All Rights Reserved.
  *
- * RCSID $Id: plutomain.c,v 1.102.2.7 2007-04-06 17:10:37 paul Exp $
  */
 
 #include <stdio.h>
@@ -31,21 +30,20 @@
 #include <sys/un.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include <resolv.h>
 #include <arpa/nameser.h>	/* missing from <resolv.h> on old systems */
-#include <sys/queue.h>
 
 #include <openswan.h>
 
-#include <pfkeyv2.h>
-#include <pfkey.h>
+#include <openswan/pfkeyv2.h>
+#include <openswan/pfkey.h>
 
+#include "sysdep.h"
 #include "constants.h"
+#include "oswconf.h"
 #include "defs.h"
 #include "id.h"
 #include "x509.h"
 #include "pgp.h"
-#include "paths.h"
 #include "certs.h"
 #include "ac.h"
 #include "smartcard.h"
@@ -68,6 +66,7 @@
 #include "ipsec_doi.h"	/* needs demux.h and state.h */
 #include "ocsp.h"
 #include "fetch.h"
+#include "timer.h"
 
 #include "sha1.h"
 #include "md5.h"
@@ -75,23 +74,27 @@
 #include "vendor.h"
 #include "pluto_crypt.h"
 
-#ifdef VIRTUAL_IP
 #include "virtual.h"
-#endif
 
 #ifdef NAT_TRAVERSAL
 #include "nat_traversal.h"
 #endif
 
-#ifdef HAVE_OCF_AND_OPENSSL
-#include "ocf_cryptodev.h"
+#ifdef TPM
+#include <tcl.h>
+#include "tpm/tpm.h"
 #endif
+
+#include "oswcrypto.h"
 
 #ifndef IPSECDIR
 #define IPSECDIR "/etc/ipsec.d"
 #endif
 
-const char *ipsec_dir = IPSECDIR;
+#ifdef HAVE_LIBNSS
+#include <nss.h>
+#endif
+
 const char *ctlbase = "/var/run/pluto";
 
 openswan_passert_fail_t openswan_passert_fail = passert_fail;
@@ -113,6 +116,7 @@ usage(const char *mess)
 	    " \\\n\t"
 	    "[--nofork]"
 	    " [--stderrlog]"
+	    " [--force_busy]"
 	    " [--nocrsend]"
 	    " [--strictcrlpolicy]"
 	    " [--crlcheckinterval]"
@@ -123,7 +127,7 @@ usage(const char *mess)
 	    " [--use-netkey]"
 	    " [--use-nostack]"         /* old --no_klips */
 	    " \\\n\t"
-	    "[--interface <ifname>]"
+	    "[--interface <ifname|ifaddr>]"
 	    " [--ikeport <port-number>]"
 	    " \\\n\t"
 	    "[--ctlbase <path>]"
@@ -144,14 +148,18 @@ usage(const char *mess)
 	    " \\\n\t"
 	    "[--debug-raw]"
 	    " [--debug-crypt]"
+	    " [--debug-crypto]"
 	    " [--debug-parsing]"
 	    " [--debug-emitting]"
 	    " \\\n\t"
 	    "[--debug-control]"
 	    "[--debug-lifecycle]"
 	    " [--debug-klips]"
+	    " [--debug-netkey]"
+	    " [--debug-x509]"
 	    " [--debug-dns]"
 	    " [--debug-oppo]"
+	    " [--debug-oppoinfo]"
 	    " [--debug-dpd]"
 	    " [ --debug-private]"
 	    " [ --debug-pfkey]"
@@ -163,10 +171,8 @@ usage(const char *mess)
 	    " \\\n\t"
             "[--force_keepalive] [--disable_port_floating]"
 #endif
-#ifdef VIRTUAL_IP
 	   " \\\n\t"
 	   "[--virtual_private <network_list>]"
-#endif
 	    "\n"
 	"Openswan %s\n"
 	, ipsec_version_code());
@@ -260,21 +266,25 @@ bool strict_crl_policy = FALSE;
 /** by default pluto does not check crls dynamically */
 long crl_check_interval = 0;
 
+/** by default pluto sends no cookies in ikev2 or ikev1 aggrmode */
+bool force_busy = FALSE;
+
 /* whether or not to use klips */
 enum kernel_interface kern_interface = AUTO_PICK;
 
 char **global_argv;
 int    global_argc;
+bool   log_to_stderr_desired = FALSE;
 
 int
 main(int argc, char **argv)
 {
     bool fork_desired = TRUE;
-    bool log_to_stderr_desired = FALSE;
     int lockfd;
     char* ocspuri = NULL;
     int nhelpers = -1;
     char *coredir;
+    const struct osw_conf_options *oco;
 
 #ifdef NAT_TRAVERSAL
     /** Overridden by nat_traversal= in ipsec.conf */
@@ -283,9 +293,12 @@ main(int argc, char **argv)
     unsigned int keep_alive = 0;
     bool force_keepalive = FALSE;
 #endif
-#ifdef VIRTUAL_IP
     /** Overridden by virtual_private= in ipsec.conf */
     char *virtual_private = NULL;
+#ifdef LEAK_DETECTIVE
+    leak_detective=1;
+#else
+    leak_detective=0;
 #endif
 
     global_argv = argv;
@@ -294,6 +307,10 @@ main(int argc, char **argv)
 
     /* see if there is an environment variable */
     coredir = getenv("PLUTO_CORE_DIR");
+
+    if(getenv("PLUTO_WAIT_FOR_GDB")) {
+	sleep(120);
+    }
 
     /* handle arguments */
     for (;;)
@@ -308,6 +325,8 @@ main(int argc, char **argv)
 	    { "stderrlog", no_argument, NULL, 'e' },
 	    { "noklips", no_argument, NULL, 'n' },
 	    { "use-nostack",  no_argument, NULL, 'n' },
+	    { "use-none",     no_argument, NULL, 'n' },
+	    { "force_busy", no_argument, NULL, 'D' },
 	    { "nocrsend", no_argument, NULL, 'c' },
 	    { "strictcrlpolicy", no_argument, NULL, 'r' },
 	    { "crlcheckinterval", required_argument, NULL, 'x'},
@@ -319,6 +338,7 @@ main(int argc, char **argv)
 	    { "use-auto",  no_argument, NULL, 'G' },
 	    { "usenetkey", no_argument, NULL, 'K' },
 	    { "use-netkey", no_argument, NULL, 'K' },
+	    { "use-mast",   no_argument, NULL, 'M' },
 	    { "interface", required_argument, NULL, 'i' },
 	    { "ikeport", required_argument, NULL, 'p' },
 	    { "ctlbase", required_argument, NULL, 'b' },
@@ -344,25 +364,27 @@ main(int argc, char **argv)
 	    { "debug-nattraversal", no_argument, NULL, '5' },
 	    { "debug-nat-t", no_argument, NULL, '5' },
 #endif
-#ifdef VIRTUAL_IP
 	    { "virtual_private", required_argument, NULL, '6' },
-#endif
 	    { "nhelpers", required_argument, NULL, 'j' },
 #ifdef DEBUG
 	    { "debug-none", no_argument, NULL, 'N' },
-	    { "debug-all]", no_argument, NULL, 'A' },
+	    { "debug-all", no_argument, NULL, 'A' },
 
 	    { "debug-raw", no_argument, NULL, DBG_RAW + DBG_OFFSET },
 	    { "debug-crypt", no_argument, NULL, DBG_CRYPT + DBG_OFFSET },
+	    { "debug-crypto", no_argument, NULL, DBG_CRYPT + DBG_OFFSET },
 	    { "debug-parsing", no_argument, NULL, DBG_PARSING + DBG_OFFSET },
 	    { "debug-emitting", no_argument, NULL, DBG_EMITTING + DBG_OFFSET },
 	    { "debug-control", no_argument, NULL, DBG_CONTROL + DBG_OFFSET },
 	    { "debug-lifecycle", no_argument, NULL, DBG_LIFECYCLE + DBG_OFFSET },
 	    { "debug-klips", no_argument, NULL, DBG_KLIPS + DBG_OFFSET },
+	    { "debug-netkey", no_argument, NULL, DBG_NETKEY + DBG_OFFSET },
 	    { "debug-dns", no_argument, NULL, DBG_DNS + DBG_OFFSET },
 	    { "debug-oppo", no_argument, NULL, DBG_OPPO + DBG_OFFSET },
+	    { "debug-oppoinfo", no_argument, NULL, DBG_OPPOINFO + DBG_OFFSET },
 	    { "debug-controlmore", no_argument, NULL, DBG_CONTROLMORE + DBG_OFFSET },
 	    { "debug-dpd", no_argument, NULL, DBG_DPD + DBG_OFFSET },
+            { "debug-x509", no_argument, NULL, DBG_X509 + DBG_OFFSET },
 	    { "debug-private", no_argument, NULL, DBG_PRIVATE + DBG_OFFSET },
 	    { "debug-pfkey", no_argument, NULL, DBG_PFKEY + DBG_OFFSET },
 
@@ -450,6 +472,10 @@ main(int argc, char **argv)
 	    kern_interface = USE_KLIPS;
 	    continue;
 
+	case 'M':       /* --use-mast */
+	    kern_interface = USE_MASTKLIPS;
+	    continue;
+
 	case 'K':       /* --use-netkey */
 	    kern_interface = USE_NETKEY;
 	    continue;
@@ -457,6 +483,11 @@ main(int argc, char **argv)
 	case 'n':	/* --use-nostack */
 	    kern_interface = NO_KERNEL;
 	    continue;
+
+	case 'D':	/* --force_busy */
+	    force_busy = TRUE;
+	    continue
+	    ;
 
 	case 'c':	/* --nocrsend */
 	    no_cr_send = TRUE;
@@ -496,7 +527,7 @@ main(int argc, char **argv)
 	    uniqueIDs = TRUE;
 	    continue;
 
-	case 'i':	/* --interface <ifname> */
+	case 'i':	/* --interface <ifname|ifaddr> */
 	    if (!use_interface(optarg))
 		usage("too many --interface specifications");
 	    continue;
@@ -530,11 +561,11 @@ main(int argc, char **argv)
 	    continue;
 
 	case 's':	/* --secretsfile <secrets-file> */
-	    shared_secrets_file = optarg;
+	    pluto_shared_secrets_file = optarg;
 	    continue;
 
 	case 'f':	/* --ipsecdir <ipsec-dir> */
-	    ipsec_dir = optarg;
+	    (void)osw_init_ipsecdir(optarg);
 	    continue;
 
 	case 'a':	/* --adns <pathname> */
@@ -576,11 +607,9 @@ main(int argc, char **argv)
 	    base_debugging |= DBG_NATT;
 	    continue;
 #endif
-#ifdef VIRTUAL_IP
 	case '6':	/* --virtual_private */
 	    virtual_private = optarg;
 	    continue;
-#endif
 
 	default:
 #ifdef DEBUG
@@ -600,10 +629,14 @@ main(int argc, char **argv)
     reset_debugging();
 
     /* if a core dir was set, chdir there */
-    if(coredir) {
-	chdir(coredir);
+    if(coredir) 
+	if(chdir(coredir) == -1) {
+	   int e = errno;
+	   openswan_log("pluto: chdir() do dumpdir failed (%d %s)\n",
+                    e, strerror(e));
     }
 
+    oco = osw_init_options();
     lockfd = create_lock();
 
     /* select between logging methods */
@@ -613,13 +646,12 @@ main(int argc, char **argv)
     else
 	log_to_stderr = FALSE;
 
-    /* set the logging function of pfkey debugging */
 #ifdef DEBUG
-    pfkey_debug_func = DBG_log;
-    pfkey_error_func = DBG_log;
-#else
-    pfkey_debug_func = NULL;
-    pfkey_error_func = NULL;
+#if 0
+    if(kernel_ops->set_debug) {
+	(*kernel_ops->set_debug)(cur_debugging, DBG_log, DBG_log);
+    }
+#endif
 #endif
 
     /** create control socket.
@@ -710,11 +742,11 @@ main(int argc, char **argv)
 
 	/* make sure that stdin, stdout, stderr are reserved */
 	if (open("/dev/null", O_RDONLY) != 0)
-	    abort();
+	    osw_abort();
 	if (dup2(0, 1) != 1)
-	    abort();
+	    osw_abort();
 	if (!log_to_stderr && dup2(0, 2) != 2)
-	    abort();
+	    osw_abort();
     }
 
     init_constants();
@@ -728,24 +760,30 @@ main(int argc, char **argv)
         const char *v = init_pluto_vendorid();
 	const char *vc = ipsec_version_code();
 
-        openswan_log("Starting Pluto (Openswan Version %s%s; Vendor ID %s)"
-            , vc
-            , compile_time_interop_options
-            , v);
-	if(vc[0]=='c' && vc[1]=='v' && vc[2]=='s') {
+        openswan_log("Starting Pluto (Openswan Version %s%s; Vendor ID %s) pid:%u"
+		     , vc
+		     , compile_time_interop_options
+		     , v, getpid());
+#else
+        openswan_log("Starting Pluto (Openswan Version %s%s) pid:%u"
+		     , ipsec_version_code()
+		     , compile_time_interop_options, getpid());
+#endif
+
+	if((vc[0]=='c' && vc[1]=='v' && vc[2]=='s') ||
+	   (vc[2]=='g' && vc[3]=='i' && vc[4]=='t')) {
 	    /*
-	     * when people build RPMs from CVS, make sure they get blamed
-	     * appropriately, and that we get some way to identify who
-	     * did it, and when they did it. Use string concat, so that
-	     * strings the binary can or classic SCCS "what", will find
+	     * when people build RPMs from CVS or GIT, make sure they
+	     * get blamed appropriately, and that we get some way to
+	     * identify who did it, and when they did it. Use string concat,
+	     * so that strings the binary can or classic SCCS "what", will find
 	     * stuff too.
 	     */
-	    openswan_log("@(#) built on "__DATE__":"__TIME__":"BUILDER);
+	    openswan_log("@(#) built on "__DATE__":" __TIME__ " by " BUILDER);
 	}
-#else
-        openswan_log("Starting Pluto (Openswan Version %s%s)"
-            , ipsec_version_code()
-            , compile_time_interop_options);
+
+#if defined(USE_1DES)
+	openswan_log("WARNING: 1DES is enabled");
 #endif
     }
 
@@ -759,22 +797,33 @@ main(int argc, char **argv)
     init_nat_traversal(nat_traversal, keep_alive, force_keepalive, nat_t_spf);
 #endif
 
-#ifdef VIRTUAL_IP
-    init_virtual_ip(virtual_private);
+#if defined(HAVE_LIBNSS)
+	SECStatus nss_init_status= NSS_NoDB_Init(".");
+	if (nss_init_status != SECSuccess){
+    	loglog(RC_LOG_SERIOUS, "NSS initialization failed (err %d)\n", PR_GetError());
+  	}
+	else{
+	loglog(RC_LOG_SERIOUS, "NSS Initialized");
+	}
 #endif
+
+    init_virtual_ip(virtual_private);
     init_rnd_pool();
+    init_timer();
     init_secret();
     init_states();
     init_connections();
     init_crypto();
     init_crypto_helpers(nhelpers);
-#ifdef HAVE_OCF_AND_OPENSSL
-    load_cryptodev();
-#endif
+    load_oswcrypto();
     init_demux();
     init_kernel();
     init_adns();
     init_id();
+
+#ifdef TPM
+    init_tpm();
+#endif
 
 #ifdef HAVE_THREADS
     init_fetch();
@@ -783,11 +832,11 @@ main(int argc, char **argv)
     ocsp_set_default_uri(ocspuri);
 
     /* loading X.509 CA certificates */
-    load_authcerts("CA cert", CA_CERT_PATH, AUTH_CA);
+    load_authcerts("CA cert", oco->cacerts_dir, AUTH_CA);
     /* loading X.509 AA certificates */
-    load_authcerts("AA cert", AA_CERT_PATH, AUTH_AA);
+    load_authcerts("AA cert", oco->aacerts_dir, AUTH_AA);
     /* loading X.509 OCSP certificates */
-    load_authcerts("OCSP cert", OCSP_CERT_PATH, AUTH_OCSP);
+    load_authcerts("OCSP cert", oco->ocspcerts_dir, AUTH_OCSP);
 
     /* loading X.509 CRLs */
     load_crls();
@@ -818,6 +867,10 @@ exit_pluto(int status)
     /* free memory allocated by initialization routines.  Please don't
        forget to do this. */
 
+#ifdef TPM
+    free_tpm();
+#endif
+
 #ifdef HAVE_THREADS
     free_crl_fetch();          /* free chain of crl fetch requests */
 #endif
@@ -832,10 +885,10 @@ exit_pluto(int status)
     free_ifaces();          /* free interface list from memory */
     stop_adns();            /* Stop async DNS process (if running) */
     free_md_pool();         /* free the md pool */
+#ifdef HAVE_LIBNSS
+    NSS_Shutdown();
+#endif
     delete_lock();          /* delete any lock files */
-#ifdef LEAK_DETECTIVE
-    report_leaks();         /* report memory leaks now, after all free()s */
-#endif /* LEAK_DETECTIVE */
     close_log();            /* close the logfiles */
     exit(status);           /* exit, with our error code */
 }

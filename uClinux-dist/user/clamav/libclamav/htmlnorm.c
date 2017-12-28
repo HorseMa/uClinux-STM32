@@ -54,6 +54,7 @@ typedef enum {
 #include "blob.h"
 
 #include "entconv.h"
+#include "jsparse/js-norm.h"
 
 #define HTML_STR_LENGTH 1024
 #define MAX_TAG_CONTENTS_LENGTH HTML_STR_LENGTH
@@ -72,7 +73,7 @@ typedef enum {
     HTML_TAG_ARG_EQUAL,
     HTML_PROCESS_TAG,
     HTML_CHAR_REF_DECODE,
-    HTML_SKIP_LENGTH,
+    HTML_LOOKFOR_SCRENC,
     HTML_JSDECODE,
     HTML_JSDECODE_LENGTH,
     HTML_JSDECODE_DECRYPT,
@@ -275,7 +276,7 @@ static unsigned char *cli_readchunk(FILE *stream, m_area_t *m_area, unsigned int
 			if(count < chunk_len) {
 				chunk[count] = '\0';
 				/* seek-back to space */
-				fseek(stream, (long)(count - chunk_len), SEEK_CUR);
+				fseek(stream, -(long)(chunk_len - count), SEEK_CUR);
 			}
 		}
 	}
@@ -301,7 +302,7 @@ static inline void html_output_c(file_buff_t *fbuff1, unsigned char c)
 	}
 }
 
-static void html_output_str(file_buff_t *fbuff, const unsigned char *str, int len)
+static void html_output_str(file_buff_t *fbuff, const unsigned char *str, size_t len)
 {
 	if (fbuff) {
 		if ((fbuff->length + len) >= HTML_FILE_BUFF_LEN) {
@@ -490,18 +491,108 @@ static inline void html_tag_contents_done(tag_arguments_t *tags,int idx)
 	blobClose(tags->contents[idx-1]);
 }
 
+struct screnc_state {
+	uint32_t length;
+	uint32_t sum;
+	uint8_t  table_pos;
+};
+
+/* inplace decoding, so that we can normalize it later */
+static void screnc_decode(unsigned char *ptr, struct screnc_state *s)
+{
+	uint8_t  value;
+	unsigned char *dst = ptr;
+
+	if(!ptr || !s)
+		return;
+	while(s->length > 0 && *ptr) {
+		if ((*ptr == '\n') || (*ptr == '\r')) {
+			ptr++;
+			continue;
+		}
+		if (*ptr < 0x80) {
+			value = decrypt_tables[table_order[s->table_pos]][*ptr];
+			if (value == 0xFF) { /* special character */
+				ptr++;
+				s->length--;
+				switch (*ptr) {
+					case '\0':
+						/* Fixup for end of line */
+						ptr--;
+						break;
+					case 0x21:
+						value = 0x3c;
+						break;
+					case 0x23:
+						value = 0x0d;
+						break;
+					case 0x24:
+						value = 0x40;
+						break;
+					case 0x26:
+						value = 0x0a;
+						break;
+					case 0x2a:
+						value = 0x3e;
+						break;
+				}
+			}
+			s->sum += value;
+			*dst++ = value;
+			s->table_pos = (s->table_pos + 1) % 64;
+		} else {
+			*dst++ = *ptr++;
+			*dst++ = *ptr;
+		}
+		ptr++;
+		s->length--;
+	}
+	if(!s->length) {
+		size_t remaining;
+		if(strlen(ptr) >= 12) {
+			uint32_t expected;
+			expected = base64_chars[ptr[0]] << 2;
+			expected += base64_chars[ptr[1]] >> 4;
+			expected += (base64_chars[ptr[1]] & 0x0f) << 12;
+			expected += (base64_chars[ptr[2]] >> 2) << 8;
+			expected += (base64_chars[ptr[2]] & 0x03) << 22;
+			expected += base64_chars[ptr[3]] << 16;
+			expected += (base64_chars[ptr[4]] << 2) << 24;
+			expected += (base64_chars[ptr[5]] >> 4) << 24;
+			ptr += 8;
+			if(s->sum != expected) {
+				cli_dbgmsg("screnc_decode: checksum mismatch: %u != %u\n", s->sum, expected);
+			} else {
+				if(strncmp(ptr, "^#~@", 4) != 0) {
+					cli_dbgmsg("screnc_decode: terminator not found\n");
+				} else {
+					cli_dbgmsg("screnc_decode: OK\n");
+				}
+			}
+			ptr += 4;
+		}
+		/* copy remaining */
+		remaining = strlen(ptr) + 1;
+		memmove(dst, ptr, remaining);
+	} else {
+		*dst = '\0';
+	}
+}
+
 static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag_arguments_t *hrefs,const struct cli_dconf* dconf)
 {
 	int fd_tmp, tag_length, tag_arg_length, binary;
-	int retval=FALSE, escape, value = 0, hex, tag_val_length=0, table_pos, in_script=FALSE, text_space_written=FALSE;
+	int retval=FALSE, escape, value = 0, hex, tag_val_length=0;
+	int look_for_screnc=FALSE, in_screnc=FALSE,in_script=FALSE, text_space_written=FALSE;
 	FILE *stream_in = NULL;
-	html_state state=HTML_NORM, next_state=HTML_BAD_STATE;
+	html_state state=HTML_NORM, next_state=HTML_BAD_STATE, saved_next_state=HTML_BAD_STATE;
 	char filename[1024], tag[HTML_STR_LENGTH+1], tag_arg[HTML_STR_LENGTH+1];
 	char tag_val[HTML_STR_LENGTH+1], *tmp_file;
-	unsigned char *line, *ptr, *arg_value;
+	unsigned char *line, *ptr, *arg_value, *ptr_screnc;
 	tag_arguments_t tag_args;
 	quoted_state quoted;
 	unsigned long length;
+	struct screnc_state screnc_state;
 	file_buff_t *file_buff_o2, *file_buff_text;
 	file_buff_t *file_tmp_o1;
 	int in_ahref=0;/* index of <a> tag, whose contents we are parsing. Indexing starts from 1, 0 means outside of <a>*/
@@ -510,12 +601,13 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 	unsigned char* in_form_action = NULL;/* the action URL of the current <form> tag, if any*/
 
 	struct entity_conv conv;
-	int rc;
 	unsigned char entity_val[HTML_STR_LENGTH+1];
 	size_t entity_val_length = 0;
 	const int dconf_entconv = dconf && dconf->phishing&PHISHING_CONF_ENTCONV;
+	const int dconf_js = dirname && dconf && dconf->doc&DOC_CONF_JSNORM; /* TODO */
 	/* dconf for phishing engine sets scanContents, so no need for a flag here */
-
+	struct parser_state *js_state = NULL;
+	const unsigned char *js_begin = NULL, *js_end = NULL;
 
 	tag_args.scanContents=0;/* do we need to store the contents of <a></a>?*/
 	if (!m_area) {
@@ -555,7 +647,7 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 		/* this will still contains scripts that are inside comments */
 		snprintf(filename, 1024, "%s/nocomment.html", dirname);
 		file_buff_o2->fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, S_IWUSR|S_IRUSR);
-		if (!file_buff_o2->fd) {
+		if (file_buff_o2->fd == -1) {
 			cli_dbgmsg("open failed: %s\n", filename);
 			free(file_buff_o2);
 			file_buff_o2 = file_buff_text = NULL;
@@ -564,6 +656,7 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 
 		file_buff_text = (file_buff_t *) cli_malloc(sizeof(file_buff_t));
 		if(!file_buff_text) {
+			close(file_buff_o2->fd);
 			free(file_buff_o2);
 			file_buff_o2 = file_buff_text = NULL;
 			goto abort;
@@ -571,12 +664,13 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 
 		snprintf(filename, 1024, "%s/notags.html", dirname);
 		file_buff_text->fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, S_IWUSR|S_IRUSR);
-		if(!file_buff_text->fd) {
+		if(file_buff_text->fd == -1) {
 			cli_dbgmsg("open failed: %s\n", filename);
 			close(file_buff_o2->fd);
 			free(file_buff_o2);
 			free(file_buff_text);
 			file_buff_o2 = file_buff_text = NULL;
+			goto abort;
 		}
 		file_buff_o2->length = 0;
 		file_buff_text->length = 0;
@@ -613,13 +707,6 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 				/* An engine error has occurred */
 				cli_dbgmsg("HTML Engine Error\n");
 				goto abort;
-			case HTML_SKIP_LENGTH:
-				length--;
-				ptr++;
-				if (!length) {
-					state = next_state;
-				}
-				break;
 			case HTML_SKIP_WS:
 				if (isspace(*ptr)) {
 					ptr++;
@@ -933,7 +1020,9 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 					state = HTML_SKIP_WS;
 					next_state = HTML_NORM;
 					if (strcmp(tag, "/script") == 0) {
-						in_script=FALSE;
+						in_script = FALSE;
+						if(js_state)
+							js_end = ptr;
 						/*don't output newlines in nocomment.html
 						 * html_output_c(file_buff_o2, '\n');*/
 					}
@@ -965,8 +1054,25 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 						next_state = HTML_JSDECODE;
 						/* we already output the old tag, output the new tag now */
 						html_output_tag(file_buff_o2, tag, &tag_args);
-					} else {
+					} else if(strcmp(tag, "script") == 0) {
 						in_script = TRUE;
+						if(dconf_js && !js_state) {
+							js_state = cli_js_init();
+							if(!js_state) {
+								cli_dbgmsg("htmlnorm: Failed to initialize js parser");
+							}
+							js_begin = ptr;
+						}
+					}
+				} else if(strcmp(tag, "%@") == 0) {
+					arg_value = html_tag_arg_value(&tag_args, "language");
+					if(arg_value && (strcasecmp(arg_value,"jscript.encode") == 0||
+							strcasecmp(arg_value, "vbscript.encode") == 0)) {
+
+						saved_next_state = next_state;
+						next_state = state;
+						look_for_screnc = FALSE;
+						state = HTML_LOOKFOR_SCRENC;
 					}
 				} else if (hrefs) {
 					if(in_ahref && !href_contents_begin)
@@ -1222,6 +1328,16 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 					next_state = HTML_BAD_STATE;
 				}
 				break;
+			case HTML_LOOKFOR_SCRENC:
+				look_for_screnc = TRUE;
+				ptr_screnc = strstr(ptr, "#@~^");
+				if(ptr_screnc) {
+					*ptr_screnc = '\0';
+					ptr_screnc += 4;
+				}
+				state = next_state;
+				next_state = saved_next_state;
+				break;
 			case HTML_JSDECODE:
 				/* Check for start marker */
 				if (strncmp(ptr, "#@~^", 4) == 0) {
@@ -1239,68 +1355,33 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 					next_state = HTML_BAD_STATE;
 					break;
 				}
-				length = base64_chars[ptr[0]] << 2;
-				length += base64_chars[ptr[1]] >> 4;
-				length += (base64_chars[ptr[1]] & 0x0f) << 12;
-				length += (base64_chars[ptr[2]] >> 2) << 8;
-				length += (base64_chars[ptr[2]] & 0x03) << 22;
-				length += base64_chars[ptr[3]] << 16;
-				length += (base64_chars[ptr[4]] << 2) << 24;
-				length += (base64_chars[ptr[5]] >> 4) << 24;
-				table_pos = 0;
+				memset(&screnc_state, 0, sizeof(screnc_state));
+				screnc_state.length = base64_chars[ptr[0]] << 2;
+				screnc_state.length += base64_chars[ptr[1]] >> 4;
+				screnc_state.length += (base64_chars[ptr[1]] & 0x0f) << 12;
+				screnc_state.length += (base64_chars[ptr[2]] >> 2) << 8;
+				screnc_state.length += (base64_chars[ptr[2]] & 0x03) << 22;
+				screnc_state.length += base64_chars[ptr[3]] << 16;
+				screnc_state.length += (base64_chars[ptr[4]] << 2) << 24;
+				screnc_state.length += (base64_chars[ptr[5]] >> 4) << 24;
 				state = HTML_JSDECODE_DECRYPT;
+				in_screnc = TRUE;
 				next_state = HTML_BAD_STATE;
 				ptr += 8;
 				break;
 			case HTML_JSDECODE_DECRYPT:
-				if (length == 0) {
+				screnc_decode(ptr, &screnc_state);
+				if(!screnc_state.length) {
 					html_output_str(file_buff_o2, "</script>\n", 10);
-					length = 12;
-					state = HTML_SKIP_LENGTH;
-					next_state = HTML_NORM;
+					state = HTML_NORM;
+					next_state = HTML_BAD_STATE;
+					in_screnc = FALSE;
 					break;
+				} else {
+					state = HTML_NORM;
+					next_state = HTML_BAD_STATE;
 				}
-				if (*ptr < 0x80) {
-					value = decrypt_tables[table_order[table_pos]][*ptr];
-					if (value == 0xFF) { /* special character */
-						ptr++;
-						length--;
-						switch (*ptr) {
-						case '\0':
-							/* Fixup for end of line */
-							ptr--;
-							break;
-						case 0x21:
-							html_output_c(file_buff_o2, 0x3c);
-							break;
-							/*
-						case 0x23:
-							html_output_c(file_buff_o2, 0x0d);
-							break;
-							we strip whitespace
-							*/
-						case 0x24:
-							html_output_c(file_buff_o2, 0x40);
-							break;
-							/*
-						case 0x26:
-							html_output_c(file_buff_o2, 0x0a);
-							break;
-							we strip whitespace 
-							*/
-						case 0x2a:
-							html_output_c(file_buff_o2, 0x3e);
-							break;
-						}
-					} else if(!isspace(value&0xff)) {
-						html_output_c(file_buff_o2, tolower(value&0xff));
-					}
-				}
-				table_pos = (table_pos + 1) % 64;
-				ptr++;
-				length--;
 				break;
-
 			case HTML_RFC2397_TYPE:
 				if (*ptr == '\'') {
 					if (!escape && (quoted==SINGLE_QUOTED)) {
@@ -1383,7 +1464,7 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 					cli_dbgmsg("RFC2397 data file: %s\n", tmp_file);
 					file_tmp_o1->fd = open(tmp_file, O_WRONLY|O_CREAT|O_TRUNC, S_IWUSR|S_IRUSR);
 					free(tmp_file);
-					if (!file_tmp_o1->fd) {
+					if (file_tmp_o1->fd < 0) {
 						cli_dbgmsg("open failed: %s\n", filename);
 						free(file_tmp_o1);
 						goto abort;
@@ -1498,8 +1579,51 @@ static int cli_html_normalise(int fd, m_area_t *m_area, const char *dirname, tag
 			/* end of line, append contents now, resume on next line */
 			html_tag_contents_append(hrefs,in_ahref,href_contents_begin,ptr);
 		ptrend = NULL;
+
+		if(js_state) {
+			if(!js_begin)
+				js_begin = line;
+			if(!js_end)
+				js_end = ptr;
+			if(js_end > js_begin &&
+					CLI_ISCONTAINED(line, 8192, js_begin, 1) &&
+					CLI_ISCONTAINED(line, 8192, js_end, 1)) {
+
+				cli_js_process_buffer(js_state, js_begin, js_end - js_begin);
+			}
+			js_begin = js_end = NULL;
+			if(!in_script) {
+				/*  we found a /script, normalize script now */
+				cli_js_parse_done(js_state);
+				cli_js_output(js_state, dirname);
+				cli_js_destroy(js_state);
+				js_state = NULL;
+			}
+		}
+		if(look_for_screnc && ptr_screnc) {
+			/* start found, and stuff before it already processed */
+			ptr = ptr_screnc;
+			ptr_screnc = NULL;
+			state = HTML_JSDECODE_LENGTH;
+			next_state = HTML_BAD_STATE;
+			continue;
+		}
 		free(line);
 		ptr = line = cli_readchunk(stream_in, m_area, 8192);
+		if (in_screnc) {
+			state = HTML_JSDECODE_DECRYPT;
+			next_state = HTML_BAD_STATE;
+		} else if(look_for_screnc && !ptr_screnc &&
+				state != HTML_LOOKFOR_SCRENC) {
+			saved_next_state = next_state;
+			next_state = state;
+			state = HTML_LOOKFOR_SCRENC;
+		}
+		if(next_state == state) {
+			/* safeguard against infloop */
+			cli_dbgmsg("htmlnorm.c: next_state == state, changing next_state\n");
+			next_state = HTML_BAD_STATE;
+		}
 	}
 
 	if(dconf_entconv) {
@@ -1527,18 +1651,27 @@ abort:
 	if (in_ahref) /* tag not closed, force closing */
 		html_tag_contents_done(hrefs,in_ahref);
 
+	if(js_state) {
+		/*  output script so far */
+		cli_js_parse_done(js_state);
+		cli_js_output(js_state, dirname);
+		cli_js_destroy(js_state);
+		js_state = NULL;
+	}
 	html_tag_arg_free(&tag_args);
 	if (!m_area) {
 		fclose(stream_in);
 	}
 	if (file_buff_o2) {
 		html_output_flush(file_buff_o2);
-		close(file_buff_o2->fd);
+		if(file_buff_o2->fd != -1)
+			close(file_buff_o2->fd);
 		free(file_buff_o2);
 	}
 	if(file_buff_text) {
 		html_output_flush(file_buff_text);
-		close(file_buff_text->fd);
+		if(file_buff_text->fd != -1)
+			close(file_buff_text->fd);
 		free(file_buff_text);
 	}
 	return retval;
@@ -1586,14 +1719,14 @@ int html_normalise_fd(int fd, const char *dirname, tag_arguments_t *hrefs,const 
 
 int html_screnc_decode(int fd, const char *dirname)
 {
-	int fd_tmp, table_pos=0, result, count, state, retval=FALSE;
+	int fd_tmp, count, retval=FALSE;
 	unsigned char *line, tmpstr[6];
-	unsigned long length;
 	unsigned char *ptr, filename[1024];
 	FILE *stream_in;
-	file_buff_t file_buff;
-	
-	lseek(fd, 0, SEEK_SET);	
+	int ofd;
+	struct screnc_state screnc_state;
+
+	lseek(fd, 0, SEEK_SET);
 	fd_tmp = dup(fd);
 	if (fd_tmp < 0) {
 		return FALSE;
@@ -1603,17 +1736,16 @@ int html_screnc_decode(int fd, const char *dirname)
 		close(fd_tmp);
 		return FALSE;
 	}
-	
+
 	snprintf(filename, 1024, "%s/screnc.html", dirname);
-	file_buff.fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, S_IWUSR|S_IRUSR);
-	file_buff.length = 0;
-	
-	if (!file_buff.fd) {
+	ofd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, S_IWUSR|S_IRUSR);
+
+	if (ofd < 0) {
 		cli_dbgmsg("open failed: %s\n", filename);
 		fclose(stream_in);
 		return FALSE;
 	}
-	
+
 	while ((line = cli_readchunk(stream_in, NULL, 8192)) != NULL) {
 		ptr = strstr(line, "#@~^");
 		if (ptr) {
@@ -1624,7 +1756,7 @@ int html_screnc_decode(int fd, const char *dirname)
 	if (!line) {
 		goto abort;
 	}
-	
+
 	/* Calculate the length of the encoded string */
 	ptr += 4;
 	count = 0;
@@ -1636,88 +1768,36 @@ int html_screnc_decode(int fd, const char *dirname)
 				goto abort;
 			}
 		}
-		tmpstr[count++] = *ptr;
+		if(count < 6)
+			tmpstr[count] = *ptr;
+		count++;
 		ptr++;
-	} while (count < 6);
-	
-	length = base64_chars[tmpstr[0]] << 2;
-	length += base64_chars[tmpstr[1]] >> 4;
-	length += (base64_chars[tmpstr[1]] & 0x0f) << 12;
-	length += (base64_chars[tmpstr[2]] >> 2) << 8;
-	length += (base64_chars[tmpstr[2]] & 0x03) << 22;
-	length += base64_chars[tmpstr[3]] << 16;
-	length += (base64_chars[tmpstr[4]] << 2) << 24;
-	length += (base64_chars[tmpstr[5]] >> 4) << 24;
+	} while (count < 8);
 
-	/* Move forward 2 bytes */
-	count = 2;
-	state = HTML_SKIP_LENGTH;
+	memset(&screnc_state, 0, sizeof(screnc_state));
+	screnc_state.length = base64_chars[tmpstr[0]] << 2;
+	screnc_state.length += base64_chars[tmpstr[1]] >> 4;
+	screnc_state.length += (base64_chars[tmpstr[1]] & 0x0f) << 12;
+	screnc_state.length += (base64_chars[tmpstr[2]] >> 2) << 8;
+	screnc_state.length += (base64_chars[tmpstr[2]] & 0x03) << 22;
+	screnc_state.length += base64_chars[tmpstr[3]] << 16;
+	screnc_state.length += (base64_chars[tmpstr[4]] << 2) << 24;
+	screnc_state.length += (base64_chars[tmpstr[5]] >> 4) << 24;
 
-	while (length && line) {
-		while (length && *ptr) {
-			if ((*ptr == '\n') || (*ptr == '\r')) {
-				ptr++;
-				continue;
-			}
-			switch (state) {
-			case HTML_SKIP_LENGTH:
-				ptr++;
-				count--;
-				if (count == 0) {
-					state = HTML_NORM;
-				}
-				break;
-			case HTML_SPECIAL_CHAR:
-				switch (*ptr) {
-				case 0x21:
-					html_output_c(&file_buff, 0x3c);
-					break;
-				/*case 0x23:
-					html_output_c(&file_buff, 0x0d);
-					break;
-					we strip whitespace
-					*/
-				case 0x24:
-					html_output_c(&file_buff, 0x40);
-					break;
-				/*case 0x26:
-					html_output_c(&file_buff, 0x0a);
-					break;
-					we strip whitespace
-					*/
-				case 0x2a:
-					html_output_c(&file_buff, 0x3e);
-					break;
-				}
-				ptr++;
-				length--;
-				state = HTML_NORM;
-				break;
-			case HTML_NORM:	
-				if (*ptr < 0x80) {
-					result = decrypt_tables[table_order[table_pos]][*ptr];
-					if (result == 0xFF) { /* special character */
-						state = HTML_SPECIAL_CHAR;
-					} else if(!isspace(result&0xff)) {
-						html_output_c(&file_buff, tolower(result&0xff));
-					}
-				}
-				ptr++;
-				length--;
-				table_pos = (table_pos + 1) % 64;
-				break;
-			}
-		}
+	while (screnc_state.length && line) {
+		screnc_decode(ptr, &screnc_state);
+		cli_writen(ofd, ptr, strlen(ptr));
 		free(line);
-		if (length) {
+		if (screnc_state.length) {
 			ptr = line = cli_readchunk(stream_in, NULL, 8192);
 		}
 	}
+	if(screnc_state.length)
+		cli_dbgmsg("html_screnc_decode: missing %u bytes\n",screnc_state.length);
 	retval = TRUE;
-						
+
 abort:
 	fclose(stream_in);
-	html_output_flush(&file_buff);
-	close(file_buff.fd);
+	close(ofd);
 	return retval;
 }

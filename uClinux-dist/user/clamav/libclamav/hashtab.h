@@ -20,11 +20,11 @@
  *  MA 02110-1301, USA.
  */
 
-#include <stdio.h>
-#include <stddef.h>
 #ifndef _HASHTAB_H
 #define _HASHTAB_H
-
+#include <stdio.h>
+#include <stddef.h>
+#include "cltypes.h"
 typedef long element_data;
 
 /* define this for debugging/profiling purposes only, NOT in production/release code */
@@ -79,10 +79,10 @@ struct hashtable {
 int hashtab_generate_c(const struct hashtable *s,const char* name);
 struct element* hashtab_find(const struct hashtable *s, const char* key, const size_t len);
 int hashtab_init(struct hashtable *s,size_t capacity);
-int hashtab_insert(struct hashtable *s, const char* key, const size_t len, const element_data data);
+const struct element* hashtab_insert(struct hashtable *s, const char* key, const size_t len, const element_data data);
 void hashtab_delete(struct hashtable *s,const char* key,const size_t len);
 void hashtab_clear(struct hashtable *s);
-
+void hashtab_free(struct hashtable *s);
 int hashtab_load(FILE* in, struct hashtable *s);
 int hashtab_store(const struct hashtable *s,FILE* out);
 
@@ -104,6 +104,5 @@ int hashset_contains(const struct hashset* hs, const uint32_t key);
 int hashset_clear(struct hashset* hs);
 void hashset_destroy(struct hashset* hs);
 ssize_t hashset_toarray(const struct hashset* hs, uint32_t** array);
-
 #endif
 

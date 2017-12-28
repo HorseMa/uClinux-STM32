@@ -26,7 +26,8 @@
 
 #define CL_PHISH_BASE 100
 enum phish_status {CL_PHISH_NODECISION=0, CL_PHISH_CLEAN=CL_PHISH_BASE,
-	CL_PHISH_CLOAKED_UIU, CL_PHISH_NUMERIC_IP, CL_PHISH_HEX_URL, CL_PHISH_CLOAKED_NULL, CL_PHISH_SSL_SPOOF, CL_PHISH_NOMATCH};
+	CL_PHISH_CLOAKED_UIU, CL_PHISH_NUMERIC_IP, CL_PHISH_HEX_URL, CL_PHISH_CLOAKED_NULL, CL_PHISH_SSL_SPOOF, CL_PHISH_NOMATCH,
+        CL_PHISH_HASH0, CL_PHISH_HASH1, CL_PHISH_HASH2};
 
 #define CHECK_SSL         1
 #define CHECK_CLOAKING    2
@@ -44,12 +45,7 @@ struct string {
 };
 
 struct phishcheck {
-	regex_t preg;
-	regex_t preg_realurl;
-	regex_t preg_tld;
-	regex_t preg_cctld;
 	regex_t preg_numeric;
-	regex_t preg_hexurl;
 	int      is_disabled;
 };
 

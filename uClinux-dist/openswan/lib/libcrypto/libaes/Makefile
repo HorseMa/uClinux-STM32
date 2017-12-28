@@ -11,13 +11,15 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: Makefile,v 1.6.6.1 2007-10-22 14:29:29 paul Exp $
+# RCSID $Id: Makefile,v 1.8 2005/09/17 21:57:45 mcr Exp $
 
 
 OPENSWANSRCDIR?=$(shell cd ../../..; pwd)
 
 include ${OPENSWANSRCDIR}/Makefile.inc
 include ${OPENSWANSRCDIR}/Makefile.ver
+
+LIBRARY=crypto/libaes
 
 AES_CORE_OBJ:=aes.o
 AES_CORE_SRC:=aes.c
@@ -36,56 +38,12 @@ OBJS=${BASE_SRCS:.c=.o} ${AES_CORE_OBJ}
 
 HDRS=	
 
-KLIPSD=${OPENSWANSRCDIR}/linux/include
 SRCDIR=${OPENSWANSRCDIR}/linux/net/ipsec/aes
-
 VPATH += ${SRCDIR}
 
 LIB=libaes.a
+LIBRARY=crypto/libaes
+ONEFILE=test_main.c
 
-# Original flags
-CFLAGS+=-I. -I${SRCDIR} -I${KLIPSD} -I${OPENSWANSRCDIR} $(USERCOMPILE)
-CFLAGS+=-O3 -fomit-frame-pointer -Wall  -Wcast-qual 
-CFLAGS+= -Wmissing-prototypes
-CFLAGS+= -Wpointer-arith
-CFLAGS+= -Wcast-qual
-#CFLAGS+= -Wmissing-declarations
-CFLAGS+= -Wstrict-prototypes
-#CFLAGS+= -pedantic
-#CFLAGS+= -W
-#CFLAGS+= -Wwrite-strings
-CFLAGS+= -Wbad-function-cast 
+include ${srcdir}../../Makefile.library
 
-ifeq ($(HAVE_OCF),true)
-	CFLAGS += -DOCF_ASSIST=1
-	AES_CORE_OBJ += ocf_aes_assist.o
-endif
-
-.PHONY:	all install clean check depend checkprograms
-
-all:	$(LIB) 
-programs: $(LIB)
-
-install install_file_list:
-	@exit 0
-
-$(LIB):	$(OBJS)
-	$(AR) $(ARFLAGS) $(LIB) $(OBJS)
-
-$(OBJS):	$(HDRS)
-
-clean:
-	rm -f $(LIB) *.o try* core *.core $(EXTHDRS) $(EXTLIBS) version.c
-
-check:
-	echo no checks in lib right now.
-
-depend:
-	makedepend -Y -- $(CFLAGS) -- $(SRCS)
-
-checkprograms:
-
-# DO NOT DELETE
-
-#aes_xcbc_mac.o: aes.h aes_xcbc_mac.h
-#aes.o: aes.h 

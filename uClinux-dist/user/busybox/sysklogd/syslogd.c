@@ -138,8 +138,9 @@ static void logOneMessage(int pri, const char *msg, const char *timestamp, struc
 			r1 = "";
 			r2 = "";
 			if (target->target == SYSLOG_TARGET_REMOTE) {
+				syslogd_remote_config_t *remote = (syslogd_remote_config_t *)target;
 				r1 = " ";
-				r2 = syslogd_config->local_hostname;
+				r2 = remote->name ?: syslogd_config->local_hostname;
 			}
 #endif
 

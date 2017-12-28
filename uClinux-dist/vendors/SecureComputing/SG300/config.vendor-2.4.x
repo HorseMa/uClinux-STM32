@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Mon Jul 28 18:45:35 2008
+# Thu May 29 15:31:40 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -58,8 +58,6 @@ CONFIG_LIB_LIBCRYPT_OLD=y
 # CONFIG_LIB_PWLIB is not set
 # CONFIG_LIB_LIBOPENH323 is not set
 # CONFIG_LIB_LIBJUDY is not set
-# CONFIG_LIB_CLASSPATH is not set
-# CONFIG_LIB_LIBFFI is not set
 
 #
 # Library Configuration
@@ -572,7 +570,6 @@ CONFIG_USER_CHAT_CHAT=y
 # CONFIG_USER_HASERL_HASERL is not set
 CONFIG_USER_HD_HD=y
 # CONFIG_USER_CAN_HORCH is not set
-# CONFIG_USER_JAMVM_JAMVM is not set
 # CONFIG_USER_LCD_LCD is not set
 # CONFIG_USER_LEDCON_LEDCON is not set
 # CONFIG_USER_LHA_LHA is not set

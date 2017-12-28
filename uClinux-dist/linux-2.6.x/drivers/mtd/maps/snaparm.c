@@ -1,13 +1,14 @@
 /****************************************************************************/
 
 /*
- *      snaparm.c -- mappings for SnapGear ARM based boards
+ *      snaparm.c -- mappings for SnapGear ARM/MIPS based boards
  *
- *      (C) Copyright 2000-2005, Greg Ungerer (gerg@snapgear.com)
+ *      (C) Copyright 2000-2008, Greg Ungerer (gerg@snapgear.com)
  *      (C) Copyright 2001-2005, SnapGear (www.snapgear.com)
  *
  *	I expect most SnapGear ARM based boards will have similar
  *	flash arrangements. So this map driver can handle them all.
+ *	Even more modern varients with MIPS cores can use this.
  */
 
 /****************************************************************************/
@@ -26,7 +27,9 @@
 #include <linux/reboot.h>
 #include <linux/ioport.h>
 #include <asm/io.h>
+#ifdef CONFIG_ARM
 #include <asm/mach-types.h>
+#endif
 
 /****************************************************************************/
 
@@ -35,8 +38,13 @@ static struct resource *sg_res;
 
 /*
  *	This is the ARM method of setting up the initrd memory region now.
+ *	Mips uses the traditional "initrd_start" (like x86).
  */
-extern unsigned long phys_initrd_start;
+#ifdef CONFIG_ARM
+#define	initrd_start	phys_initrd_start
+#endif
+
+extern unsigned long initrd_start;
 
 /****************************************************************************/
 
@@ -67,10 +75,16 @@ extern unsigned long phys_initrd_start;
 #define FLASH_SIZE 0x01000000
 #define FLASH_WIDTH 2
 
-#elif defined(CONFIG_MACH_SG720)
+#elif defined(CONFIG_MACH_SG720) || defined(CONFIG_MACH_SG560USB)
 
 #define FLASH_ADDR 0x50000000
 #define FLASH_SIZE 0x01000000
+#define FLASH_WIDTH 1
+
+#elif defined(CONFIG_MIPS) && defined(CONFIG_SG590)
+
+#define FLASH_ADDR 0x1fc00000
+#define FLASH_SIZE 0x00400000
 #define FLASH_WIDTH 1
 
 #elif defined(CONFIG_MACH_CM4008)
@@ -87,7 +101,9 @@ extern unsigned long phys_initrd_start;
 
 #else
 
-/* Now the dynamic-configuration platforms (based on machine_arch_type) */
+/*
+ *	Now the dynamic-configuration platforms (based on machine_arch_type)
+ */
 #define DYNAMIC_SGARM_CONFIG
 
 typedef struct {
@@ -98,6 +114,7 @@ typedef struct {
 	unsigned long tagsize;			/* Size of boot tags */
 	unsigned long logdsize;			/* Size of logd segment */
 	unsigned long configsize;		/* Size of config partition */
+	unsigned long postlogdsize;		/* Size of legacy logd */
 	unsigned int width;			/* Flash bus width */
 } flash_layout_t;
 
@@ -109,16 +126,13 @@ static const flash_layout_t flash_layout[] = {
 	{ .type = MACH_TYPE_IVPN, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SG560) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG560, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x80000 },
-#endif
-#if defined(CONFIG_MACH_SG560USB) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG560USB, .addr = 0x50000000, .size = 0x01000000, .width = 1, .bootsize = 0x20000, .tagsize = 0x20000, .logdsize = 0x20000, .configsize = 0x80000 },
+	{ .type = MACH_TYPE_SG560, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x80000, .postlogdsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SG560ADSL) || defined (CONFIG_MACH_SGARMAUTO)
 	{ .type = MACH_TYPE_SG560ADSL, .addr = 0x50000000, .size = 0x01000000, .width = 1, .bootsize = 0x20000, .tagsize = 0x20000, .logdsize = 0x20000, .configsize = 0x80000 },
 #endif
 #if defined(CONFIG_MACH_SG580) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG580, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000 },
+	{ .type = MACH_TYPE_SG580, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000, .postlogdsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SG590) || defined (CONFIG_MACH_SGARMAUTO)
 	{ .type = MACH_TYPE_SG590, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000 },
@@ -126,11 +140,14 @@ static const flash_layout_t flash_layout[] = {
 #if defined(CONFIG_MACH_SG8100) || defined (CONFIG_MACH_SGARMAUTO)
 	{ .type = MACH_TYPE_SG8100, .addr = 0x50000000, .size = 0x02000000, .width = 2, .bootsize = 0x20000, .tagsize = 0x20000, .configsize = 0x100000 },
 #endif
+#if defined(CONFIG_MACH_SE5100) || defined (CONFIG_MACH_SGARMAUTO)
+	{ .type = MACH_TYPE_SE5100, .addr = 0x50000000, .size = 0x02000000, .width = 2, .bootsize = 0x20000, .tagsize = 0x20000, .configsize = 0x100000 },
+#endif
 #if defined(CONFIG_MACH_SG640) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG640, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000 },
+	{ .type = MACH_TYPE_SG640, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000, .postlogdsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SG565) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG565, .addr = 0x50000000, .size = 0x01000000, .width = 1, .bootsize = 0x20000, .configsize = 0x100000 },
+	{ .type = MACH_TYPE_SG565, .addr = 0x50000000, .size = 0x01000000, .width = 1, .bootsize = 0x20000, .configsize = 0x100000, .postlogdsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SHIVA1100)
 	{ .type = MACH_TYPE_SHIVA1100, .addr = 0x50000000, .size = 0x01000000, .width = 1, .bootsize = 0x20000, .configsize = 0x20000 },
@@ -139,7 +156,7 @@ static const flash_layout_t flash_layout[] = {
 	{ .type = MACH_TYPE_LITE300, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .configsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SG310)
-	{ .type = MACH_TYPE_SG310, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .tagsize = 0x20000, .configsize = 0x80000 },
+	{ .type = MACH_TYPE_SG310, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .tagsize = 0x20000, .configsize = 0x80000, .postlogdsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_PFW)
 	{ .type = MACH_TYPE_PFW, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .tagsize = 0x20000, .configsize = 0x20000 },
@@ -374,7 +391,7 @@ static void sg_copy_to(struct map_info *map, unsigned long to, const void *from,
 #if defined(CONFIG_MACH_CM4008) || defined(CONFIG_MACH_CM41xx)
 
 #define	VENDOR	"OpenGear"
-
+#define ROOTFS " image"
 /*
  *	Intel FLASH setup. This is the only flash device, it is the entire
  *	non-volatile storage (no IDE CF or hard drive or anything else).
@@ -418,9 +435,9 @@ static struct mtd_partition sg_partitions[] = {
 #define	VENDOR	"SnapGear"
 
 #if defined(CONFIG_MACH_SE5100) || defined(CONFIG_MACH_NG8100)
-#define	VENDOR_ROOTFS	"SnapGear filesystem"
+#define	ROOTFS	" filesystem"
 #else
-#define	VENDOR_ROOTFS	"SnapGear image"
+#define	ROOTFS	" image"
 #endif
 
 /*
@@ -527,31 +544,62 @@ static struct mtd_partition sg_partitions[] = {
 		offset: 0
 	},
 };
-#elif defined(CONFIG_MACH_SG720)
+#elif defined(CONFIG_MACH_SG560USB) || defined(CONFIG_SG590)
 static struct mtd_partition sg_partitions[] = {
 	{
-		name: "SnapGear Boot Loader",
+		name: "SnapGear Primary Boot Loader",
 		offset: 0,
-		size: 0x00080000
+		size: 0x00020000
 	},
 	{
 		name: "SnapGear Tags",
-		offset: 0x00080000,
-		size: 0x00080000
+		offset: 0x00020000,
+		size: 0x00020000
 	},
 	{
-		name: "SnapGear Log",
-		offset: 0x00100000,
-		size: 0x00100000
+		name: "SnapGear Log #0",
+		offset: 0x00040000,
+		size: 0x00020000
+	},
+	{
+		name: "SnapGear Log #1",
+		offset: 0x00060000,
+		size: 0x00020000
+	},
+	{
+		name: "SnapGear Linux Boot Loader",
+		offset: 0x00080000,
 	},
 	{
 		name: "SnapGear Intel/StrataFlash",
 		offset: 0
 	},
-	{
-		name: "SnapGear Unused",
-		offset: 0x00200000,
-	},
+};
+#elif defined(CONFIG_MACH_SG720)
+static struct mtd_partition sg_partitions[] = {
+    {
+        name: "SnapGear Boot Loader",
+        offset: 0,
+        size: 0x00080000
+    },
+    {
+        name: "SnapGear Tags",
+        offset: 0x00080000,
+        size: 0x00080000
+    },
+    {
+        name: "SnapGear Log",
+        offset: 0x00100000,
+        size: 0x00100000
+    },
+    {
+        name: "SnapGear Intel/StrataFlash",
+        offset: 0
+    },
+    {
+        name: "SnapGear Unused",
+        offset: 0x00200000,
+    },
 };
 #else
 /* We use a dynamic structure */
@@ -672,7 +720,7 @@ int __init sg_init(void)
 		sg_partitions[4].offset += flash_layout[index].bootsize;
 		sg_partitions[5].offset += flash_layout[index].bootsize;
 	}
-	/* If we have a separate tags segment, then set accordingly */
+
 	if (flash_layout[index].tagsize) {
 		sg_partitions[4].size = flash_layout[index].tagsize;
 		sg_partitions[1].offset += flash_layout[index].tagsize;
@@ -720,11 +768,13 @@ int __init sg_init(void)
         *IXP4XX_EXP_CS1 = *IXP4XX_EXP_CS0;
 #endif
 
+#ifndef CONFIG_SG590
 	sg_res = request_mem_region(FLASH_ADDR, sg_map.size, VENDOR " FLASH");
 	if (sg_res == NULL) {
 		printk(VENDOR ": failed memory resource request?\n");
 		return -EIO;
 	}
+#endif
 
 	/*
 	 *	Map flash into our virtual address space.
@@ -747,7 +797,32 @@ int __init sg_init(void)
 	}
 
 	printk(KERN_NOTICE VENDOR ": %s device size = %dK\n",
-		sg_mtd->name, sg_mtd->size>>10);
+		sg_mtd->name, sg_mtd->size >> 10);
+
+#ifdef DYNAMIC_SGARM_CONFIG
+	/*
+	 * Maybe add a legacy logd partition, now we know the flash size.
+	 * We do need to allow for legacy setups with and without a tags
+	 * segment present too.
+	 */
+	if ((numpartitions == 4) && flash_layout[index].postlogdsize) {
+		unsigned int logdsize = flash_layout[index].postlogdsize;
+		sg_partitions[4].name = sg_partitions[5].name;
+		sg_partitions[4].size = logdsize;
+		sg_partitions[4].offset = sg_mtd->size - logdsize;
+		sg_partitions[2].size = sg_mtd->size -
+			sg_partitions[2].offset - logdsize;
+		numpartitions = 5;
+	}
+	if ((numpartitions == 5) && flash_layout[index].postlogdsize) {
+		unsigned int logdsize = flash_layout[index].postlogdsize;
+		sg_partitions[5].size = logdsize;
+		sg_partitions[5].offset = sg_mtd->size - logdsize;
+		sg_partitions[2].size = sg_mtd->size -
+			sg_partitions[2].offset - logdsize;
+		numpartitions = 6;
+	}
+#endif
 
 	sg_mtd->owner = THIS_MODULE;
 	sg_mtd->priv = &sg_map;
@@ -757,13 +832,15 @@ int __init sg_init(void)
 		printk(KERN_NOTICE VENDOR ": add_mtd_partitions() failed?\n");
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (phys_initrd_start == 0)
+	if (initrd_start == 0)
 #endif
 	{
 		/* Mark mtd partition as root device */
-		index = sg_getmtdindex(VENDOR " image");
-		if (index >= 0)
+		index = sg_getmtdindex(VENDOR ROOTFS);
+		if (index >= 0) {
+			printk("SNAPARM: root device set to %d\n", index);
 			ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, index);
+		}
 	}
 
 	return rc;
@@ -795,6 +872,6 @@ module_exit(sg_cleanup);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Greg Ungerer <gerg@snapgear.com>");
-MODULE_DESCRIPTION("SnapGear/ARM flash support");
+MODULE_DESCRIPTION("SnapGear flash support");
 
 /****************************************************************************/

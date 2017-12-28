@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Fri Jul 25 09:16:42 2008
+# Thu Aug  7 15:31:39 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -182,11 +182,9 @@ CONFIG_DEFAULTS_SECURECOMPUTING_SG560_USB=y
 #
 # Kernel/Library/Defaults Selection
 #
-
-#
-# Kernel is linux-2.6.x
-#
 CONFIG_DEFAULTS_KERNEL_2_6=y
+# CONFIG_DEFAULTS_KERNEL_2_6_26 is not set
+# CONFIG_DEFAULTS_KERNEL_2_6_25 is not set
 CONFIG_DEFAULTS_LIBC_UCLIBC=y
 # CONFIG_DEFAULTS_LIBC_UC_LIBC is not set
 # CONFIG_DEFAULTS_LIBC_NONE is not set

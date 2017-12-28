@@ -35,7 +35,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <time.h>
-#ifndef	C_WINDOWS
+#ifdef C_WINDOWS
+#include <direct.h>	/* for chdir */
+#else
 #include <pwd.h>
 #include <grp.h>
 #endif
@@ -53,6 +55,7 @@
 #include "libclamav/clamav.h"
 #include "libclamav/others.h"
 #include "libclamav/matcher-ac.h"
+#include "libclamav/readdb.h"
 
 #include "shared/output.h"
 #include "shared/options.h"
@@ -65,6 +68,9 @@
 #include "others.h"
 #include "shared.h"
 
+#ifndef C_WINDOWS
+#define	closesocket(s)	close(s)
+#endif
 
 short debug_mode = 0, logok = 0;
 short foreground = 0;
@@ -72,7 +78,7 @@ short foreground = 0;
 static void help(void)
 {
     printf("\n");
-    printf("                      Clam AntiVirus Daemon "VERSION"\n");
+    printf("                      Clam AntiVirus Daemon %s\n", get_version());
     printf("    (C) 2002 - 2007 ClamAV Team - http://www.clamav.net/team\n\n");
 
     printf("    --help                   -h             Show this help.\n");
@@ -86,11 +92,14 @@ int main(int argc, char **argv)
 {
 	struct cfgstruct *copt;
 	const struct cfgstruct *cpt;
+#ifndef	C_WINDOWS
         struct passwd *user = NULL;
+#endif
 	time_t currtime;
 	struct cl_engine *engine = NULL;
 	const char *dbdir, *cfgfile;
-	int ret, tcpsock = 0, localsock = 0;
+	char *pua_cats = NULL;
+	int ret, tcpsock = 0, localsock = 0, i;
 	unsigned int sigs = 0;
 	int lsockets[2], nlsockets = 0;
 	unsigned int dboptions = 0;
@@ -179,7 +188,9 @@ int main(int argc, char **argv)
 		return 1;
 	    }
 #else
-	    mprintf("AllowSupplementaryGroups: initgroups() not supported.\n");
+	    mprintf("!AllowSupplementaryGroups: initgroups() is not available, please disable AllowSupplementaryGroups in %s\n", cfgfile);
+	    freecfg(copt);
+	    return 1;
 #endif
 	} else {
 #ifdef HAVE_SETGROUPS
@@ -279,10 +290,12 @@ int main(int argc, char **argv)
     if(cfgopt(copt, "LeaveTemporaryFiles")->enabled)
 	cl_settempdir(NULL, 1);
 
-    logg("#clamd daemon "VERSION" (OS: "TARGET_OS_TYPE", ARCH: "TARGET_ARCH_TYPE", CPU: "TARGET_CPU_TYPE")\n");
+    logg("#clamd daemon %s (OS: "TARGET_OS_TYPE", ARCH: "TARGET_ARCH_TYPE", CPU: "TARGET_CPU_TYPE")\n", get_version());
 
+#ifndef C_WINDOWS
     if(user)
 	logg("#Running as user %s (UID %u, GID %u)\n", user->pw_name, user->pw_uid, user->pw_gid);
+#endif
 
     if(logg_size)
 	logg("#Log file size limited to %d bytes.\n", logg_size);
@@ -293,10 +306,74 @@ int main(int argc, char **argv)
     dbdir = cfgopt(copt, "DatabaseDirectory")->strarg;
     logg("#Reading databases from %s\n", dbdir);
 
-    if(cfgopt(copt, "DetectPUA")->enabled)
+    if(cfgopt(copt, "DetectPUA")->enabled) {
 	dboptions |= CL_DB_PUA;
-    else
+
+	if((cpt = cfgopt(copt, "ExcludePUA"))->enabled) {
+	    dboptions |= CL_DB_PUA_EXCLUDE;
+	    i = 0;
+	    logg("#Excluded PUA categories:");
+	    while(cpt) {
+		if(!(pua_cats = realloc(pua_cats, i + strlen(cpt->strarg) + 3))) {
+		    logg("!Can't allocate memory for pua_cats\n");
+		    logg_close();
+		    freecfg(copt);
+		    return 1;
+		}
+		logg("# %s", cpt->strarg);
+		sprintf(pua_cats + i, ".%s", cpt->strarg);
+		i += strlen(cpt->strarg) + 1;
+		pua_cats[i] = 0;
+		cpt = cpt->nextarg;
+	    }
+	    logg("#\n");
+	    pua_cats[i] = '.';
+	    pua_cats[i + 1] = 0;
+	}
+
+	if((cpt = cfgopt(copt, "IncludePUA"))->enabled) {
+	    if(pua_cats) {
+		logg("!ExcludePUA and IncludePUA cannot be used at the same time\n");
+		logg_close();
+		freecfg(copt);
+		free(pua_cats);
+		return 1;
+	    }
+	    dboptions |= CL_DB_PUA_INCLUDE;
+	    i = 0;
+	    logg("#Included PUA categories:");
+	    while(cpt) {
+		if(!(pua_cats = realloc(pua_cats, i + strlen(cpt->strarg) + 3))) {
+		    logg("!Can't allocate memory for pua_cats\n");
+		    logg_close();
+		    freecfg(copt);
+		    return 1;
+		}
+		logg("# %s", cpt->strarg);
+		sprintf(pua_cats + i, ".%s", cpt->strarg);
+		i += strlen(cpt->strarg) + 1;
+		pua_cats[i] = 0;
+		cpt = cpt->nextarg;
+	    }
+	    logg("#\n");
+	    pua_cats[i] = '.';
+	    pua_cats[i + 1] = 0;
+	}
+
+	if(pua_cats) {
+	    /* FIXME with the new API */
+	    if((ret = cli_initengine(&engine, dboptions))) {
+		logg("!cli_initengine() failed: %s\n", cl_strerror(ret));
+		logg_close();
+		freecfg(copt);
+		free(pua_cats);
+		return 1;
+	    }
+	    engine->pua_cats = pua_cats;
+	}
+    } else {
 	logg("#Not loading PUA signatures.\n");
+    }
 
     if(cfgopt(copt, "PhishingSignatures")->enabled)
 	dboptions |= CL_DB_PHISHING;
@@ -366,7 +443,7 @@ int main(int argc, char **argv)
 	    logg_close();
 	    freecfg(copt);
 	    if(tcpsock)
-		close(lsockets[0]);
+		closesocket(lsockets[0]);
 	    return 1;
 	}
 	nlsockets++;
@@ -374,12 +451,23 @@ int main(int argc, char **argv)
 
     /* fork into background */
     if(!cfgopt(copt, "Foreground")->enabled) {
+#ifdef C_BSD	    
+	/* workaround for OpenBSD bug, see https://wwws.clamav.net/bugzilla/show_bug.cgi?id=885 */
+	for(ret=0;ret<nlsockets;ret++) {
+		fcntl(lsockets[ret], F_SETFL, fcntl(lsockets[ret], F_GETFL) | O_NONBLOCK);
+	}
+#endif
 	if(daemonize() == -1) {
 	    logg("!daemonize() failed\n");
 	    logg_close();
 	    freecfg(copt);
 	    return 1;
 	}
+#ifdef C_BSD
+	for(ret=0;ret<nlsockets;ret++) {
+		fcntl(lsockets[ret], F_SETFL, fcntl(lsockets[ret], F_GETFL) & ~O_NONBLOCK);
+	}
+#endif
 	if(!debug_mode)
 	    if(chdir("/") == -1)
 		logg("^Can't change current working directory to root\n");

@@ -6,7 +6,6 @@
  */
 
 #include <sys/types.h>
-
 #include <errno.h>
 #include <unistd.h>
 
@@ -23,6 +22,8 @@ extern ext2_loff_t ext2_llseek (unsigned int, ext2_loff_t, unsigned int);
 #ifdef HAVE_LLSEEK
 #include <syscall.h>
 
+#define my_llseek _llseek
+
 #else	/* HAVE_LLSEEK */
 
 #if defined(__alpha__) || defined(__ia64__)
@@ -32,12 +33,26 @@ extern ext2_loff_t ext2_llseek (unsigned int, ext2_loff_t, unsigned int);
 #else
 #include <linux/unistd.h>	/* for __NR__llseek */
 
+#ifdef __NR__llseek
+
 static int _llseek (unsigned int fd, unsigned long oh,
 		    unsigned long ol, ext2_loff_t *result,
 		    unsigned int origin)
 {
 	return syscall (__NR__llseek, fd, oh, ol, result, origin);
 }
+
+#else
+
+/* no __NR__llseek on compilation machine - might give it explicitly */
+static int _llseek (unsigned int fd, unsigned long oh,
+		    unsigned long ol, long long *result,
+		    unsigned int origin) {
+	errno = ENOSYS;
+	return -1;
+}
+
+#endif
 
 static ext2_loff_t my_llseek (unsigned int fd, ext2_loff_t offset,
 		unsigned int origin)

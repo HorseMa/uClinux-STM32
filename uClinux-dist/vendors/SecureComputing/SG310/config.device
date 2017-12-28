@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Fri Jul 25 00:32:07 2008
+# Tue Oct  7 13:39:47 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -187,9 +187,14 @@ CONFIG_DEFAULTS_SECURECOMPUTING_SG310=y
 # Kernel is linux-2.6.x
 #
 CONFIG_DEFAULTS_KERNEL_2_6=y
+# CONFIG_DEFAULTS_LIBC_GLIBC is not set
 CONFIG_DEFAULTS_LIBC_UCLIBC=y
 # CONFIG_DEFAULTS_LIBC_UC_LIBC is not set
 # CONFIG_DEFAULTS_LIBC_NONE is not set
+
+#
+# glibc Library Configuration
+#
 # CONFIG_DEFAULTS_OVERRIDE is not set
 # CONFIG_DEFAULTS_KERNEL is not set
 # CONFIG_DEFAULTS_MODULES is not set

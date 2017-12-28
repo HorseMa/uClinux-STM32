@@ -19,6 +19,7 @@ typedef struct {
 	syslogd_target_t common;
 	char *host;
 	int port;
+	char *name;
 } syslogd_remote_config_t;
 
 typedef struct {

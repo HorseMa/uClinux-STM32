@@ -81,12 +81,13 @@ static	char	const	rcsid[] = "$Id: mbox.c,v 1.381 2007/02/15 12:26:44 njh Exp $";
 #include "filetypes.h"
 #include "mbox.h"
 #include "dconf.h"
+#include "md5.h"
 
 #define DCONF_PHISHING mctx->ctx->dconf->phishing
 
 #ifdef	CL_DEBUG
 
-#if	defined(C_LINUX) || defined(C_CYGWIN)
+#if	defined(C_LINUX)
 #include <features.h>
 #endif
 
@@ -193,7 +194,7 @@ typedef	unsigned	int	in_addr_t;
 #endif
 
 /*
- * Define this to handle messages covered by section 7.3.2 of RFC1341.
+ * Use CL_SCAN_PARTIAL_MESSAGE to handle messages covered by section 7.3.2 of RFC1341.
  *	This is experimental code so it is up to YOU to (1) ensure it's secure
  * (2) periodically trim the directory of old files
  *
@@ -201,13 +202,6 @@ typedef	unsigned	int	in_addr_t;
  * more than one machine you must make sure that .../partial is on a shared
  * network filesystem
  */
-#ifdef CL_EXPERIMENTAL
-
-#ifndef	C_WINDOWS	/* TODO: when opendir() is done */
-#define	PARTIAL_DIR
-#endif
-
-#endif
 /*#define	NEW_WORLD*/
 
 /*#define	SCAN_UNENCODED_BOUNCES	*//*
@@ -250,9 +244,7 @@ static	int	parseMimeHeader(message *m, const char *cmd, const table_t *rfc821Tab
 static	int	saveTextPart(mbox_ctx *mctx, message *m, int destroy_text);
 static	char	*rfc2047(const char *in);
 static	char	*rfc822comments(const char *in, char *out);
-#ifdef	PARTIAL_DIR
 static	int	rfc1341(message *m, const char *dir);
-#endif
 static	bool	usefulHeader(int commandNumber, const char *cmd);
 static	char	*getline_from_mbox(char *buffer, size_t len, FILE *fin);
 static	bool	isBounceStart(mbox_ctx *mctx, const char *line);
@@ -1245,7 +1237,7 @@ cli_parse_mbox(const char *dir, int desc, cli_ctx *ctx)
 		/* empty message */
 		fclose(fd);
 #ifdef	SAVE_TMP
-		unlink(tmpfilename);
+		if (cli_unlink(tmpfilename)) return CL_EIO;
 #endif
 		return CL_CLEAN;
 	}
@@ -1263,7 +1255,7 @@ cli_parse_mbox(const char *dir, int desc, cli_ctx *ctx)
 #endif
 			fclose(fd);
 #ifdef	SAVE_TMP
-			unlink(tmpfilename);
+			if (cli_unlink(tmpfilename)) return CL_EIO;
 #endif
 			return CL_EMEM;
 		}
@@ -1324,7 +1316,7 @@ cli_parse_mbox(const char *dir, int desc, cli_ctx *ctx)
 			signal(SIGSEGV, segv);
 #endif
 #ifdef	SAVE_TMP
-			unlink(tmpfilename);
+			if (cli_unlink(tmpfilename)) return CL_EIO;
 #endif
 			return CL_EMEM;
 		}
@@ -1463,6 +1455,8 @@ cli_parse_mbox(const char *dir, int desc, cli_ctx *ctx)
 			}
 		}
 
+		if(body->isTruncated && retcode == CL_SUCCESS)
+			retcode = CL_EMEM;
 		/*
 		 * Tidy up and quit
 		 */
@@ -1482,7 +1476,7 @@ cli_parse_mbox(const char *dir, int desc, cli_ctx *ctx)
 #endif
 
 #ifdef	SAVE_TMP
-	unlink(tmpfilename);
+	if (cli_unlink(tmpfilename)) return CL_EIO;
 #endif
 	return retcode;
 }
@@ -1598,21 +1592,7 @@ parseEmailFile(FILE *fin, const table_t *rfc821, const char *firstLine, const ch
 					 */
 					if(isblank(line[0]))
 						continue;
-#ifdef	BUGFIX647	/* do not define, it slows it all down */
-					/*
-					 * TODO: will this be a performance hog?
-					 * Needed to handle (broken?) email headers like:
-					 * Content-
-					 * Transfer-Encoding:quoted-printable
-					 *
-					 * Content-Transfer-Enco
-					 * ding:quoted-printable
-					 *
-					 * [Otherwise we'll miss the encoding]
-					 * */
-					fullline = cli_strdup(line);
-					fulllinelength = strlen(line) + 1;
-#endif
+
 					/*
 					 * Is this a header we're interested in?
 					 */
@@ -1639,6 +1619,11 @@ parseEmailFile(FILE *fin, const table_t *rfc821, const char *firstLine, const ch
 					}
 					fullline = cli_strdup(line);
 					fulllinelength = strlen(line) + 1;
+					if(!fullline) {
+						if(ret)
+							ret->isTruncated = TRUE;
+						break;
+					}
 				} else if(line != NULL) {
 					fulllinelength += strlen(line);
 					ptr = cli_realloc(fullline, fulllinelength);
@@ -2227,7 +2212,10 @@ parseEmailBody(message *messageIn, text *textIn, mbox_ctx *mctx, unsigned int re
 				aMessage = messages[multiparts] = messageCreate();
 				if(aMessage == NULL) {
 					multiparts--;
-					continue;
+					/* if allocation failed the first time,
+					 * there's no point in retrying, just
+					 * break out */
+					break;
 				}
 				messageSetCTX(aMessage, mctx->ctx);
 
@@ -2486,6 +2474,24 @@ parseEmailBody(message *messageIn, text *textIn, mbox_ctx *mctx, unsigned int re
 						if(rc == VIRUS)
 							infected = TRUE;
 						break;
+
+					case RELATED:
+					case ENCRYPTED:
+					case SIGNED:
+					case PARALLEL:
+						/* all the subtypes that we handle
+						 * (all from the switch(tableFind...) below)
+						 * must be listed here */
+						break;
+					default:
+						/* this is a subtype that we 
+						 * don't handle anyway, 
+						 * don't store */
+						if(messages[multiparts]) {
+							messageDestroy(messages[multiparts]);
+							messages[multiparts] = NULL;
+						}
+						--multiparts;
 				}
 			}
 
@@ -2562,7 +2568,7 @@ parseEmailBody(message *messageIn, text *textIn, mbox_ctx *mctx, unsigned int re
 
 				htmltextPart = getTextPart(messages, multiparts);
 
-				if(htmltextPart >= 0) {
+				if(htmltextPart >= 0 && messages) {
 					if(messageGetBody(messages[htmltextPart]))
 
 						aText = textAddMessage(aText, messages[htmltextPart]);
@@ -2675,11 +2681,12 @@ parseEmailBody(message *messageIn, text *textIn, mbox_ctx *mctx, unsigned int re
 				 * message and we need to dig out the plain
 				 * text part of that alternative
 				 */
-				htmltextPart = getTextPart(messages, multiparts);
-				if(htmltextPart == -1)
-					htmltextPart = 0;
-
-				rc = parseEmailBody(messages[htmltextPart], aText, mctx, recursion_level + 1);
+				if(messages) {
+					htmltextPart = getTextPart(messages, multiparts);
+					if(htmltextPart == -1)
+						htmltextPart = 0;
+					rc = parseEmailBody(messages[htmltextPart], aText, mctx, recursion_level + 1);
+				}
 				break;
 			default:
 				assert(0);
@@ -2749,13 +2756,13 @@ parseEmailBody(message *messageIn, text *textIn, mbox_ctx *mctx, unsigned int re
 				rc = OK;
 				break;
 			} else if(strcasecmp(mimeSubtype, "partial") == 0) {
-#ifdef	PARTIAL_DIR
-				/* RFC1341 message split over many emails */
-				if(rfc1341(mainMessage, mctx->dir) >= 0)
-					rc = OK;
-#else
-				cli_warnmsg("Partial message received from MUA/MTA - message cannot be scanned\n");
-#endif
+				if(mctx->ctx->options&CL_SCAN_PARTIAL_MESSAGE) {
+					/* RFC1341 message split over many emails */
+					if(rfc1341(mainMessage, mctx->dir) >= 0)
+						rc = OK;
+				} else {
+					cli_warnmsg("Partial message received from MUA/MTA - message cannot be scanned\n");
+				}
 			} else if(strcasecmp(mimeSubtype, "external-body") == 0)
 				/* TODO */
 				cli_warnmsg("Attempt to send Content-type message/external-body trapped");
@@ -3293,7 +3300,7 @@ strstrip(char *s)
 	if(s == (char *)NULL)
 		return(0);
 
-	return(strip(s, (int)strlen(s) + 1));
+	return(strip(s, strlen(s) + 1));
 }
 
 /*
@@ -3697,28 +3704,32 @@ rfc2047(const char *in)
 	return out;
 }
 
-#ifdef	PARTIAL_DIR
 /*
  * Handle partial messages
  */
 static int
 rfc1341(message *m, const char *dir)
 {
-	fileblob *fb;
 	char *arg, *id, *number, *total, *oldfilename;
 	const char *tmpdir;
+	int n;
 	char pdir[NAME_MAX + 1];
+	unsigned char md5_val[16];
+	cli_md5_ctx md5;
+	char *md5_hex;
 
 	id = (char *)messageFindArgument(m, "id");
 	if(id == NULL)
 		return -1;
 
+/* do we need this for C_WINDOWS?
 #ifdef  C_CYGWIN
 	if((tmpdir = getenv("TEMP")) == (char *)NULL)
 		if((tmpdir = getenv("TMP")) == (char *)NULL)
 			if((tmpdir = getenv("TMPDIR")) == (char *)NULL)
 				tmpdir = "C:\\";
 #else
+*/
 	if((tmpdir = getenv("TMPDIR")) == (char *)NULL)
 		if((tmpdir = getenv("TMP")) == (char *)NULL)
 			if((tmpdir = getenv("TEMP")) == (char *)NULL)
@@ -3726,7 +3737,6 @@ rfc1341(message *m, const char *dir)
 				tmpdir = P_tmpdir;
 #else
 				tmpdir = "/tmp";
-#endif
 #endif
 
 	snprintf(pdir, sizeof(pdir) - 1, "%s/clamav-partial", tmpdir);
@@ -3744,7 +3754,7 @@ rfc1341(message *m, const char *dir)
 			free(id);
 			return -1;
 		}
-		if(statb.st_mode&(S_IRWXG|S_IRWXO))
+		if(statb.st_mode & 077)
 			cli_warnmsg("Insecure partial directory %s (mode 0%o)\n",
 				pdir,
 #ifdef	ACCESSPERMS
@@ -3775,18 +3785,28 @@ rfc1341(message *m, const char *dir)
 		free(oldfilename);
 	}
 
-	if((fb = messageToFileblob(m, pdir, 0)) == NULL) {
+	n = atoi(number);
+	cli_md5_init(&md5);
+	cli_md5_update(&md5, id, strlen(id));
+	cli_md5_final(md5_val, &md5);
+	md5_hex = cli_str2hex((const char*)md5_val, 16);
+
+	if(!md5_hex) {
+		free(id);
+		free(number);
+		return CL_EMEM;
+	}
+
+	if(messageSavePartial(m, pdir, md5_hex, n) < 0) {
+		free(md5_hex);
 		free(id);
 		free(number);
 		return -1;
 	}
 
-	fileblobDestroy(fb);
-
 	total = (char *)messageFindArgument(m, "total");
 	cli_dbgmsg("rfc1341: %s, %s of %s\n", id, number, (total) ? total : "?");
 	if(total) {
-		int n = atoi(number);
 		int t = atoi(total);
 		DIR *dd = NULL;
 
@@ -3811,6 +3831,7 @@ rfc1341(message *m, const char *dir)
 				cli_errmsg("Can't open '%s' for writing", outname);
 				free(id);
 				free(number);
+				free(md5_hex);
 				closedir(dd);
 				return -1;
 			}
@@ -3826,7 +3847,7 @@ rfc1341(message *m, const char *dir)
 				} result;
 #endif
 
-				snprintf(filename, sizeof(filename), "%s%d", id, n);
+				snprintf(filename, sizeof(filename), "_%s-%u", md5_hex, n);
 
 #ifdef HAVE_READDIR_R_3
 				while((readdir_r(dd, &result.d, &dent) == 0) && dent) {
@@ -3839,23 +3860,36 @@ rfc1341(message *m, const char *dir)
 					char buffer[BUFSIZ], fullname[NAME_MAX + 1];
 					int nblanks;
 					struct stat statb;
-
-#ifndef  C_CYGWIN
+					const char *dentry_idpart;
+#ifndef C_WINDOWS
 					if(dent->d_ino == 0)
 						continue;
 #endif
 
+					if(!strcmp(".",dent->d_name) ||
+							!strcmp("..", dent->d_name))
+						continue;
 					snprintf(fullname, sizeof(fullname) - 1,
 						"%s/%s", pdir, dent->d_name);
+					dentry_idpart = strchr(dent->d_name, '_');
 
-					if(strncmp(filename, dent->d_name, strlen(filename)) != 0) {
+					if(!dentry_idpart ||
+							strcmp(filename, dentry_idpart) != 0) {
 						if(!cli_leavetemps_flag)
 							continue;
 						if(stat(fullname, &statb) < 0)
 							continue;
-						if(now - statb.st_mtime > (time_t)(7 * 24 * 3600))
-							if(unlink(fullname) >= 0)
-								cli_dbgmsg("removed old RFC1341 file %s\n", fullname);
+						if(now - statb.st_mtime > (time_t)(7 * 24 * 3600)) {
+							if (cli_unlink(fullname)) {
+								cli_unlink(outname);
+								fclose(fout);
+								free(md5_hex);
+								free(id);
+								free(number);
+								closedir(dd);
+								return -1;
+							}
+						}
 						continue;
 					}
 
@@ -3863,7 +3897,7 @@ rfc1341(message *m, const char *dir)
 					if(fin == NULL) {
 						cli_errmsg("Can't open '%s' for reading", fullname);
 						fclose(fout);
-						unlink(outname);
+						cli_unlink(outname);
 						free(id);
 						free(number);
 						closedir(dd);
@@ -3879,16 +3913,34 @@ rfc1341(message *m, const char *dir)
 							nblanks++;
 						else {
 							if(nblanks)
-								do
-									putc('\n', fout);
-								while(--nblanks > 0);
-							fputs(buffer, fout);
+								do {
+									if (putc('\n', fout)==EOF) break;
+								} while(--nblanks > 0);
+							if (nblanks || fputs(buffer, fout)==EOF) {
+								fclose(fin);
+								fclose(fout);
+								cli_unlink(outname);
+								free(md5_hex);
+								free(id);
+								free(number);
+								closedir(dd);
+								return -1;
+							}
 						}
 					fclose(fin);
 
 					/* don't unlink if leave temps */
-					if(!cli_leavetemps_flag)
-						unlink(fullname);
+					if(!cli_leavetemps_flag) {
+						if(cli_unlink(fullname)) {
+							fclose(fout);
+							cli_unlink(outname);
+							free(md5_hex);
+							free(id);
+							free(number);
+							closedir(dd);
+							return -1;
+						}
+					}
 					break;
 				}
 				rewinddir(dd);
@@ -3899,10 +3951,10 @@ rfc1341(message *m, const char *dir)
 	}
 	free(number);
 	free(id);
+	free(md5_hex);
 
 	return 0;
 }
-#endif
 
 static void
 hrefs_done(blob *b, tag_arguments_t *hrefs)
@@ -4088,7 +4140,12 @@ do_checkURLs(mbox_ctx *mctx, tag_arguments_t *hrefs)
 			args[n].url = cli_strdup(url);
 			args[n].filename = cli_strdup(name);
 			args[n].depth = 0;
-			pthread_create(&tid[n], NULL, getURL, &args[n]);
+			if(pthread_create(&tid[n], NULL, getURL, &args[n])) {
+				cli_warnmsg("thread creation failed\n");
+				free(args[n].filename);
+				free(args[n].url);
+				break;
+			}
 #else
 			arg.url = cli_strdup(url);
 			arg.dir = dir;
@@ -4309,11 +4366,11 @@ getURL(struct arg *arg)
 	if(via_proxy)
 		snprintf(buf, sizeof(buf) - 1,
 			"GET %s HTTP/1.0\r\nUser-Agent: ClamAV %s\r\n\r\n",
-				url, VERSION);
+				url, cl_retver());
 	else
 		snprintf(buf, sizeof(buf) - 1,
 			"GET /%s HTTP/1.0\r\nUser-Agent: ClamAV %s\r\n\r\n",
-				url, VERSION);
+				url, cl_retver());
 
 	/*cli_dbgmsg("%s", buf);*/
 
@@ -4389,7 +4446,7 @@ getURL(struct arg *arg)
 					if(location) {
 						char *end;
 
-						unlink(fout);
+						if (cli_unlink(fout)) return NULL;
 						location += 11;
 						end = location;
 						while(*end && (*end != '\n'))
@@ -4454,13 +4511,20 @@ getURL(struct arg *arg)
 static int
 my_r_gethostbyname(const char *hostname, struct hostent *hp, char *buf, size_t len)
 {
-#if	defined(HAVE_GETHOSTBYNAME_R_6)
-	/* e.g. Linux */
 	struct hostent *hp2;
 	int ret = -1;
+#if !defined(HAVE_GETHOSTBYNAME_R_6) && !defined(HAVE_GETHOSTBYNAME_R_5) && !defined(HAVE_GETHOSTBYNAME_R_3)
+#ifdef  CL_THREAD_SAFE
+	static pthread_mutex_t hostent_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+#endif
 
 	if((hostname == NULL) || (hp == NULL))
 		return -1;
+	memset(hp, 0, sizeof(struct hostent));
+#if	defined(HAVE_GETHOSTBYNAME_R_6)
+	/* e.g. Linux */
+
 	if(gethostbyname_r(hostname, hp, buf, len, &hp2, &ret) < 0)
 		return ret;
 #elif	defined(HAVE_GETHOSTBYNAME_R_5)
@@ -4470,27 +4534,14 @@ my_r_gethostbyname(const char *hostname, struct hostent *hp, char *buf, size_t l
 	 * doesn't add it, so you need to do something like
 	 *	LIBS=-lnet ./configure --enable-cache --disable-clamav
 	 */
-	int ret = -1;
-
-	if((hostname == NULL) || (hp == NULL))
-		return -1;
 	if(gethostbyname_r(hostname, hp, buf, len, &ret) == NULL)
 		return ret;
 #elif	defined(HAVE_GETHOSTBYNAME_R_3)
 	/* e.g. HP/UX, AIX */
-	if((hostname == NULL) || (hp == NULL))
-		return -1;
 	if(gethostbyname_r(hostname, &hp, (struct hostent_data *)buf) < 0)
 		return h_errno;
 #else
 	/* Single thread the code e.g. VS2005 */
-	struct hostent *hp2;
-#ifdef  CL_THREAD_SAFE
-	static pthread_mutex_t hostent_mutex = PTHREAD_MUTEX_INITIALIZER;
-#endif
-
-	if((hostname == NULL) || (hp == NULL))
-		return -1;
 #ifdef  CL_THREAD_SAFE
 	pthread_mutex_lock(&hostent_mutex);
 #endif

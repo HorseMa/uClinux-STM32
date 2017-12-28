@@ -232,7 +232,7 @@ extern char _image_start[];
 #endif
 
 #if defined(CONFIG_MACH_UC5471DSP)
-#define FIXED_ROMARRAY 0x20000
+#define FIXED_ROMARRAY 0x40000
 #undef FIXUP_ARENAS
 #endif
 

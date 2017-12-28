@@ -25,10 +25,13 @@ static struct crec *new_chain = NULL;
 #ifdef DO_PRELOAD
 static struct crec *dontpurge_chain = NULL;
 static int dontpurge_needed;
-static int dontpurge_chain_matches, dontpurge_chain_inserts, dontpurge_chain_deletes, dontpurge_chain_unresol;
+static int dontpurge_chain_matches = 0, dontpurge_chain_inserts = 0, dontpurge_chain_deletes = 0, dontpurge_chain_count = 0;
+extern int preload_lookups_pending;
 #endif
 #ifdef CONFIG_PROP_STATSD_STATSD
-static int cache_freed = 0;
+static int total_fixed_cache  = 0;
+static int total_cached_hosts = 0;
+static int total_cached_dhcp_hosts = 0;
 #endif
 static int cache_inserted = 0, cache_live_freed = 0, insert_error;
 #ifdef USE_BIGNAMES
@@ -82,11 +85,9 @@ static void cache_unlink(struct crec *crecp);
 static void cache_link(struct crec *crecp);
 static void rehash(int size);
 static void cache_hash(struct crec *crecp);
-
-void incr_unresolved_counter(void)
-{
-  dontpurge_chain_unresol++;
-}
+#ifdef CONFIG_PROP_STATSD_STATSD
+static void cache_stats_send(void);
+#endif
 
 void cache_init(void)
 {
@@ -191,6 +192,8 @@ static void cache_hash(struct crec *crecp)
     }
   crecp->hash_next = *up;
   *up = crecp;
+
+  if (!(crecp->flags & (F_HOSTS|F_DHCP))) total_fixed_cache++;
 }
  
 static void cache_free(struct crec *crecp)
@@ -209,6 +212,8 @@ static void cache_free(struct crec *crecp)
     }
 #endif
 
+  if (!(crecp->flags & (F_HOSTS|F_DHCP))) total_fixed_cache--;
+
   crecp->flags &= ~F_FORWARD;
   crecp->flags &= ~F_REVERSE;
   crecp->uid = uid++; /* invalidate CNAMES pointing to this. */
@@ -220,9 +225,6 @@ static void cache_free(struct crec *crecp)
   crecp->prev = cache_tail;
   crecp->next = NULL;
   cache_tail = crecp;
-#ifdef CONFIG_PROP_STATSD_STATSD
-  cache_freed++; 
-#endif
   
   /* retrieve big name for further use. */
   if (crecp->flags & F_BIGNAME)
@@ -395,7 +397,6 @@ static int free_dontpurge_chain(void)
 
   struct crec *dpc = dontpurge_chain;
   dontpurge_chain = NULL;
-
   while (dpc)
     {
       struct crec *tmp = dpc->next;
@@ -414,18 +415,17 @@ static struct crec *cache_unhash_name_addr_A(char *name, struct all_addr *addr, 
   for (up = hash_bucket(name), crecp = *up; crecp; crecp = next)
     {
       next = crecp->hash_next;
-
       if (!(crecp->flags & F_FORWARD) ||
 	  !hostname_isequal(cache_get_name(crecp), name) ||
 	  (crecp->flags & (F_HOSTS | F_DHCP | F_CNAME)) ||
 	  (crecp->flags & (F_IPV4 | F_IPV6)) != (prot & (F_IPV4 | F_IPV6)) ||
-	  memcmp(addr, &crecp->addr.addr, 
+	  (addr && memcmp(addr, &crecp->addr.addr, 
 #ifdef HAVE_IPV6
                 (crecp->flags & F_IPV6) ? IN6ADDRSZ : INADDRSZ
 #else
 	        INADDRSZ
 #endif
-               ))
+               )))
         {
 	  /* no match. */
  	  up = &crecp->hash_next;
@@ -436,6 +436,8 @@ static struct crec *cache_unhash_name_addr_A(char *name, struct all_addr *addr, 
 	  /* match.  unhash the entry. */
 	  *up = crecp->hash_next;
 	  ans = crecp;
+	  total_fixed_cache--;
+
 	  break;
 	}
     }
@@ -471,7 +473,6 @@ void cache_start_insert(void)
   dontpurge_chain_matches = 0;
   dontpurge_chain_inserts = 0;
   dontpurge_chain_deletes = 0;
-  dontpurge_chain_unresol = 0;
   dontpurge_needed = 0;
   dontpurge_chain = NULL;
 #endif
@@ -523,7 +524,6 @@ struct crec *cache_insert(char *name, struct all_addr *addr,
        cache_unlink(new);
        dontpurge_chain_matches++;
        dontpurge_chain_deletes++;
-       dontpurge_chain_unresol++;
        goto just_ttl;
     }
 #endif
@@ -657,11 +657,15 @@ void cache_end_insert(void)
 #ifdef DO_PRELOAD
       if (dontpurge_needed)
         {
-	  syslog(LOG_ERR, _("Cache not large enough to contain all preloaded entries."));
-	  syslog(LOG_ERR, _("Disabling preload feature."));
-	  preload_disabled = 1;
-	  free_dontpurge_chain();
+          syslog(LOG_ERR, _("Cache not large enough to contain all preloaded entries."));
+          syslog(LOG_ERR, _("Disabling preload feature."));
+          preload_disabled = 1;
+          dontpurge_chain_deletes += free_dontpurge_chain();
+          dontpurge_chain_count -= dontpurge_chain_deletes;
         }
+#endif
+#ifdef CONFIG_PROP_STATSD_STATSD
+	  cache_stats_send();
 #endif
       return;
     }
@@ -733,22 +737,18 @@ void cache_end_insert(void)
 
 #ifdef DO_PRELOAD
   if (dontpurge_chain_inserts != dontpurge_chain_matches ||
-      dontpurge_chain_inserts != dontpurge_chain_deletes)
+      dontpurge_chain_inserts != dontpurge_chain_deletes) {
     preload_addrlist_updated++;
+	dontpurge_chain_count+=dontpurge_chain_inserts;
+	dontpurge_chain_count-=dontpurge_chain_deletes;
+  } else {
+	  // If dontpurge inserts were really just matches or deletes,
+	  // don't count them on the total inserted.
+	  cache_inserted-=dontpurge_chain_inserts;
+  }
 #endif
 #ifdef CONFIG_PROP_STATSD_STATSD
-  {
-  char buf[250];
-  snprintf(buf, sizeof(buf), "statsd -a push dns cache_size %d \\;"
-                                      " push dns cache_unres_fixed_entries %d \\;"
-                                      " push dns cache_tot_entries %d \\;"
-                                      " push dns cache_tot_fixed_entries %d",
-          hash_size,
-          dontpurge_chain_unresol,
-          cache_inserted-cache_freed, 
-          dontpurge_chain_inserts-dontpurge_chain_deletes);
-  system(buf);
-  }
+	  cache_stats_send();
 #endif
 }
 
@@ -942,8 +942,45 @@ static void add_hosts_entry(struct crec *cache, struct all_addr *addr, int addrl
       cache->uid = index;
       memcpy(&cache->addr.addr, addr, addrlen);
       cache_hash(cache);
+#ifdef CONFIG_PROP_STATSD_STATSD
+	  total_cached_hosts++;
+#endif
     }
 }
+
+#ifdef CONFIG_PROP_STATSD_STATSD
+#ifdef DO_PRELOAD
+static void cache_stats_send(void) {
+  char b[300];
+  snprintf(b, sizeof(b), "statsd -a push dns cache_size %d \\;"
+                                  " push dns cache_tot %d \\;"
+                                  " push dns cache_tot_fixed %d \\;"
+                                  " push dns cache_tot_fixed_unres %d \\;"
+                                  " push dns cache_hosts %d \\;"
+                                  " push dns cache_dhcp_hosts %d",
+          daemon->cachesize,
+          total_fixed_cache,
+          dontpurge_chain_count,
+          preload_lookups_pending,
+    	  total_cached_hosts,
+    	  total_cached_dhcp_hosts);
+  system(b);
+}
+#else
+static void cache_stats_send(void) {
+  char b[200];
+  snprintf(b, sizeof(b), "statsd -a push dns cache_size %d \\;"
+                                  " push dns cache_tot %d \\;"
+                                  " push dns cache_hosts %d \\;"
+                                  " push dns cache_dhcp_hosts %d",
+          daemon->cachesize,
+          total_fixed_cache,
+    	  total_cached_hosts,
+    	  total_cached_dhcp_hosts);
+  system(b);
+}
+#endif
+#endif
 
 static int read_hostsfile(char *filename, int opts, char *buff, char *domain_suffix, int index, int cache_size)
 {  
@@ -1054,10 +1091,12 @@ void cache_reload(int opts, char *buff, char *domain_suffix, struct hostsfile *a
   int i, total_size = daemon->cachesize;
 
   cache_inserted = cache_live_freed = 0;
+  total_fixed_cache = total_cached_hosts = 0;
+#ifdef DO_PRELOAD
 #ifdef CONFIG_PROP_STATSD_STATSD
-  cache_freed = 0;
+  dontpurge_chain_count = 0;
 #endif
-  
+#endif  
   for (i=0; i<hash_size; i++)
     for (cache = hash_table[i], up = &hash_table[i]; cache; cache = tmp)
       {
@@ -1118,6 +1157,10 @@ void cache_unhash_dhcp(void)
 	}
       else
 	up = &cache->hash_next;
+
+#ifdef CONFIG_PROP_STATSD_STATSD
+  total_cached_dhcp_hosts = 0;
+#endif
 }
 
 void cache_add_dhcp_entry(char *host_name, 
@@ -1184,20 +1227,49 @@ void cache_add_dhcp_entry(char *host_name,
       crec->addr.addr.addr.addr4 = *host_address;
       crec->name.namep = host_name;
       cache_hash(crec);
+#ifdef CONFIG_PROP_STATSD_STATSD
+      total_cached_dhcp_hosts++;
+#endif
     }
 }
 #endif
 
 #define USE_BROKEN_RTC_DUMP   /* Displays TTL instead of formatted expiry time */
+#define DUMP_CACHE_TO_TMP
 void dump_cache(time_t now)
 {
   struct server *serv, *serv1;
 
+#ifdef DUMP_CACHE_TO_TMP
+  char b[150];
+  int len;
+
+  memset(b, '\0', sizeof(b));
+  int fd = open("/tmp/dns_cache_dump",
+		  O_CREAT|O_WRONLY|O_SYNC|O_TRUNC, S_IRUSR|S_IWUSR);
+
+  if (fd < 0) {
+	  my_syslog(LOG_ERR, "%s:%s failed to create /tmp/dns_cache_dump with err: %m",
+		  __FILE__, __FUNCTION__);
+	  return;
+  }
+
+  len = snprintf(b, sizeof(b), "time %lu%s\n", (unsigned long)now, "");
+  if (len > 0) write(fd, b, len);
+  len = snprintf(b, sizeof(b), "cache size %d, %d/%d cache insertions "
+		  "re-used unexpired cache entries.\n", 
+	    daemon->cachesize, cache_live_freed, cache_inserted);
+  if (len > 0) write(fd, b, len);
+  len = snprintf(b, sizeof(b), "queries forwarded %u, queries answered locally %u\n", 
+	    daemon->queries_forwarded, daemon->local_answer);
+  if (len > 0) write(fd, b, len);
+#else
   my_syslog(LOG_INFO, _("time %lu"), (unsigned long)now);
   my_syslog(LOG_INFO, _("cache size %d, %d/%d cache insertions re-used unexpired cache entries."), 
 	    daemon->cachesize, cache_live_freed, cache_inserted);
   my_syslog(LOG_INFO, _("queries forwarded %u, queries answered locally %u"), 
 	    daemon->queries_forwarded, daemon->local_answer);
+#endif
 
   if (!addrbuff && !(addrbuff = whine_malloc(ADDRSTRLEN)))
     return;
@@ -1219,14 +1291,25 @@ void dump_cache(time_t now)
 	      failed_queries += serv1->failed_queries;
 	    }
 	port = prettyprint_addr(&serv->addr, addrbuff);
+#ifdef DUMP_CACHE_TO_TMP
+	len = snprintf(b, sizeof(b), "server %s#%d: queries sent %u, retried or failed %u\n",
+			addrbuff, port, queries, failed_queries);
+    if (len > 0) write(fd, b, len);
+#else
 	my_syslog(LOG_INFO, _("server %s#%d: queries sent %u, retried or failed %u"), addrbuff, port, queries, failed_queries);
+#endif
       }
   
   if ((daemon->options & (OPT_DEBUG | OPT_LOG)))
     {
       struct crec *cache ;
       int i;
+#ifdef DUMP_CACHE_TO_TMP
+      len = snprintf(b, sizeof(b), "Host                                     Address                        Flags     Expires\n");
+      if (len > 0) write(fd, b, len);
+#else
       my_syslog(LOG_DEBUG, "Host                                     Address                        Flags     Expires");
+#endif
     
       for (i=0; i<hash_size; i++)
 	for (cache = hash_table[i]; cache; cache = cache->hash_next)
@@ -1273,9 +1356,17 @@ void dump_cache(time_t now)
 	    /* ctime includes trailing \n - eat it */
 	    *(p-1) = 0;
 #endif
+#ifdef DUMP_CACHE_TO_TMP
+        write(fd, daemon->namebuff, strlen(daemon->namebuff));
+        write(fd, "\n", 1);
+#else
 	    my_syslog(LOG_DEBUG, daemon->namebuff);
+#endif
 	  }
     }
+#ifdef DUMP_CACHE_TO_TMP
+    close(fd);
+#endif
 }
 
 char *record_source(struct hostsfile *addn_hosts, int index)

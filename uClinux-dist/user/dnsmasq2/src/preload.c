@@ -267,7 +267,6 @@ next_line:
   if (r >= 0)  {
     fline_valid = 0;
   }	else {
-	incr_unresolved_counter();
     fline_valid = 1;
   }
 

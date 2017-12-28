@@ -72,11 +72,11 @@ int cli_scanbuff(const unsigned char *buffer, uint32_t length, cli_ctx *ctx, cli
 
     if(troot) {
 
-	if((ret = cli_ac_initdata(&mdata, troot->ac_partsigs, AC_DEFAULT_TRACKLEN)))
+	if((ret = cli_ac_initdata(&mdata, troot->ac_partsigs, troot->ac_lsigs, AC_DEFAULT_TRACKLEN)))
 	    return ret;
 
 	if(troot->ac_only || (ret = cli_bm_scanbuff(buffer, length, virname, troot, 0, ftype, -1)) != CL_VIRUS)
-	    ret = cli_ac_scanbuff(buffer, length, virname, troot, &mdata, 0, ftype, -1, NULL, AC_SCAN_VIR, NULL);
+	    ret = cli_ac_scanbuff(buffer, length, virname, NULL, NULL, troot, &mdata, 0, ftype, -1, NULL, AC_SCAN_VIR, NULL);
 
 	cli_ac_freedata(&mdata);
 
@@ -84,11 +84,11 @@ int cli_scanbuff(const unsigned char *buffer, uint32_t length, cli_ctx *ctx, cli
 	    return ret;
     }
 
-    if((ret = cli_ac_initdata(&mdata, groot->ac_partsigs, AC_DEFAULT_TRACKLEN)))
+    if((ret = cli_ac_initdata(&mdata, groot->ac_partsigs, groot->ac_lsigs, AC_DEFAULT_TRACKLEN)))
 	return ret;
 
     if(groot->ac_only || (ret = cli_bm_scanbuff(buffer, length, virname, groot, 0, ftype, -1)) != CL_VIRUS)
-	ret = cli_ac_scanbuff(buffer, length, virname, groot, &mdata, 0, ftype, -1, NULL, AC_SCAN_VIR, NULL);
+	ret = cli_ac_scanbuff(buffer, length, virname, NULL, NULL, groot, &mdata, 0, ftype, -1, NULL, AC_SCAN_VIR, NULL);
 
     cli_ac_freedata(&mdata);
 
@@ -251,8 +251,10 @@ int cli_validatesig(cli_file_t ftype, const char *offstr, off_t fileoff, struct 
 int cli_scandesc(int desc, cli_ctx *ctx, cli_file_t ftype, uint8_t ftonly, struct cli_matched_type **ftoffset, unsigned int acmode)
 {
  	unsigned char *buffer, *buff, *endbl, *upt;
-	int ret = CL_CLEAN, type = CL_CLEAN, i, bytes;
+	int ret = CL_CLEAN, type = CL_CLEAN, bytes;
+	unsigned int i, evalcnt;
 	uint32_t buffersize, length, maxpatlen, shift = 0, offset = 0;
+	uint64_t evalids;
 	struct cli_ac_data gdata, tdata;
 	cli_md5_ctx md5ctx;
 	unsigned char digest[16];
@@ -295,11 +297,11 @@ int cli_scandesc(int desc, cli_ctx *ctx, cli_file_t ftype, uint8_t ftonly, struc
 	return CL_EMEM;
     }
 
-    if(!ftonly && (ret = cli_ac_initdata(&gdata, groot->ac_partsigs, AC_DEFAULT_TRACKLEN)))
+    if(!ftonly && (ret = cli_ac_initdata(&gdata, groot->ac_partsigs, groot->ac_lsigs, AC_DEFAULT_TRACKLEN)))
 	return ret;
 
     if(troot) {
-	if((ret = cli_ac_initdata(&tdata, troot->ac_partsigs, AC_DEFAULT_TRACKLEN)))
+	if((ret = cli_ac_initdata(&tdata, troot->ac_partsigs, troot->ac_lsigs, AC_DEFAULT_TRACKLEN)))
 	    return ret;
     }
 
@@ -324,7 +326,7 @@ int cli_scandesc(int desc, cli_ctx *ctx, cli_file_t ftype, uint8_t ftonly, struc
 
 	if(troot) {
 	    if(troot->ac_only || (ret = cli_bm_scanbuff(upt, length, ctx->virname, troot, offset, ftype, desc)) != CL_VIRUS)
-		ret = cli_ac_scanbuff(upt, length, ctx->virname, troot, &tdata, offset, ftype, desc, ftoffset, acmode, NULL);
+		ret = cli_ac_scanbuff(upt, length, ctx->virname, NULL, NULL, troot, &tdata, offset, ftype, desc, ftoffset, acmode, NULL);
 
 	    if(ret == CL_VIRUS) {
 		free(buffer);
@@ -342,7 +344,7 @@ int cli_scandesc(int desc, cli_ctx *ctx, cli_file_t ftype, uint8_t ftonly, struc
 
 	if(!ftonly) {
 	    if(groot->ac_only || (ret = cli_bm_scanbuff(upt, length, ctx->virname, groot, offset, ftype, desc)) != CL_VIRUS)
-		ret = cli_ac_scanbuff(upt, length, ctx->virname, groot, &gdata, offset, ftype, desc, ftoffset, acmode, NULL);
+		ret = cli_ac_scanbuff(upt, length, ctx->virname, NULL, NULL, groot, &gdata, offset, ftype, desc, ftoffset, acmode, NULL);
 
 	    if(ret == CL_VIRUS) {
 		free(buffer);
@@ -378,14 +380,45 @@ int cli_scandesc(int desc, cli_ctx *ctx, cli_file_t ftype, uint8_t ftonly, struc
 	} else {
 	    shift += bytes;
 	}
-
     }
 
     free(buffer);
-    if(!ftonly)
-	cli_ac_freedata(&gdata);
-    if(troot)
+
+    if(troot) {
+	for(i = 0; i < troot->ac_lsigs; i++) {
+	    evalcnt = 0;
+	    evalids = 0;
+	    if(cli_ac_chklsig(troot->ac_lsigtable[i]->logic, troot->ac_lsigtable[i]->logic + strlen(troot->ac_lsigtable[i]->logic), tdata.lsigcnt[i], &evalcnt, &evalids, 0) == 1) {
+		if(ctx->virname)
+		    *ctx->virname = troot->ac_lsigtable[i]->virname;
+		ret = CL_VIRUS;
+		break;
+	    }
+	}
 	cli_ac_freedata(&tdata);
+    }
+
+    if(groot) {
+	if(ret != CL_VIRUS) for(i = 0; i < groot->ac_lsigs; i++) {
+	    evalcnt = 0;
+	    evalids = 0;
+	    if(cli_ac_chklsig(groot->ac_lsigtable[i]->logic, groot->ac_lsigtable[i]->logic + strlen(groot->ac_lsigtable[i]->logic), gdata.lsigcnt[i], &evalcnt, &evalids, 0) == 1) {
+		if(ctx->virname)
+		    *ctx->virname = groot->ac_lsigtable[i]->virname;
+		ret = CL_VIRUS;
+		break;
+	    }
+	}
+	cli_ac_freedata(&gdata);
+    }
+
+    if(ret == CL_VIRUS) {
+	lseek(desc, 0, SEEK_SET);
+	if(cli_checkfp(desc, ctx->engine))
+	    return CL_CLEAN;
+	else
+	    return CL_VIRUS;
+    }
 
     if(!ftonly && ctx->engine->md5_hdb) {
 	cli_md5_final(digest, &md5ctx);

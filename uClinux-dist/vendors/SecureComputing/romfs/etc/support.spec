@@ -33,6 +33,7 @@ include gconfig
 exclude ssh_host_*
 exclude id_*
 exclude identity identity.pub
+exclude *.der
 exclude *.pem
 include wireless*
   replace wep_key_.* (.*)

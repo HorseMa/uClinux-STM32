@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.25-uc0
+# Linux kernel version: 2.6.26-uc0
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -48,6 +48,7 @@ CONFIG_SYSCTL=y
 CONFIG_EMBEDDED=y
 CONFIG_UID16=y
 CONFIG_SYSCTL_SYSCALL=y
+# CONFIG_SYSCTL_SYSCALL_CHECK is not set
 CONFIG_KALLSYMS=y
 # CONFIG_KALLSYMS_EXTRA_PASS is not set
 # CONFIG_HOTPLUG is not set
@@ -71,6 +72,7 @@ CONFIG_SLAB=y
 CONFIG_HAVE_OPROFILE=y
 CONFIG_HAVE_KPROBES=y
 CONFIG_HAVE_KRETPROBES=y
+# CONFIG_HAVE_DMA_ATTRS is not set
 CONFIG_SLABINFO=y
 CONFIG_TINY_SHMEM=y
 CONFIG_BASE_SMALL=0
@@ -122,7 +124,7 @@ CONFIG_ARCH_AT91=y
 # CONFIG_ARCH_KS8695 is not set
 # CONFIG_ARCH_NS9XXX is not set
 # CONFIG_ARCH_MXC is not set
-# CONFIG_ARCH_ORION is not set
+# CONFIG_ARCH_ORION5X is not set
 # CONFIG_ARCH_PNX4008 is not set
 # CONFIG_ARCH_PXA is not set
 # CONFIG_ARCH_RPC is not set
@@ -193,6 +195,7 @@ CONFIG_CPU_ARM7TDMI=y
 # CONFIG_CPU_ARM9TDMI is not set
 CONFIG_CPU_32v4T=y
 CONFIG_CPU_ABRT_LV4T=y
+CONFIG_CPU_PABRT_NOIFAR=y
 CONFIG_CPU_CACHE_V4=y
 
 #
@@ -231,6 +234,7 @@ CONFIG_FLATMEM=y
 CONFIG_FLAT_NODE_MEM_MAP=y
 # CONFIG_SPARSEMEM_STATIC is not set
 # CONFIG_SPARSEMEM_VMEMMAP_ENABLE is not set
+CONFIG_PAGEFLAGS_EXTENDED=y
 CONFIG_SPLIT_PTLOCK_CPUS=4096
 # CONFIG_RESOURCES_64BIT is not set
 CONFIG_ZONE_DMA_FLAG=1
@@ -296,6 +300,7 @@ CONFIG_MTD_PARTITIONS=y
 # CONFIG_MTD_REDBOOT_PARTS is not set
 # CONFIG_MTD_CMDLINE_PARTS is not set
 # CONFIG_MTD_AFS_PARTS is not set
+# CONFIG_MTD_AR7_PARTS is not set
 
 #
 # User Modules And Translation Layers
@@ -377,10 +382,12 @@ CONFIG_BLK_DEV_RAM_SIZE=4096
 # CONFIG_CDROM_PKTCDVD is not set
 CONFIG_MISC_DEVICES=y
 # CONFIG_ATMEL_PWM is not set
+# CONFIG_ATMEL_TCLIB is not set
 # CONFIG_EEPROM_93CX6 is not set
 # CONFIG_ATMEL_SSC is not set
 # CONFIG_ENCLOSURE_SERVICES is not set
-# CONFIG_HAVE_IDE is not set
+CONFIG_HAVE_IDE=y
+# CONFIG_IDE is not set
 
 #
 # SCSI device support
@@ -430,6 +437,7 @@ CONFIG_SERIO_SERPORT=y
 # Character devices
 #
 # CONFIG_VT is not set
+# CONFIG_DEVKMEM is not set
 # CONFIG_SERIAL_NONSTANDARD is not set
 # CONFIG_LEDMAN is not set
 # CONFIG_SNAPDOG is not set
@@ -461,12 +469,7 @@ CONFIG_LEGACY_PTY_COUNT=256
 # CONFIG_TCG_TPM is not set
 # CONFIG_M41T11M6 is not set
 # CONFIG_I2C is not set
-
-#
-# SPI support
-#
 # CONFIG_SPI is not set
-# CONFIG_SPI_MASTER is not set
 # CONFIG_W1 is not set
 # CONFIG_POWER_SUPPLY is not set
 CONFIG_HWMON=y
@@ -495,11 +498,21 @@ CONFIG_SSB_POSSIBLE=y
 #
 # CONFIG_MFD_SM501 is not set
 # CONFIG_MFD_ASIC3 is not set
+# CONFIG_HTC_PASIC3 is not set
 
 #
 # Multimedia devices
 #
+
+#
+# Multimedia core support
+#
 # CONFIG_VIDEO_DEV is not set
+# CONFIG_VIDEO_MEDIA is not set
+
+#
+# Multimedia drivers
+#
 # CONFIG_DAB is not set
 
 #
@@ -526,6 +539,8 @@ CONFIG_USB_ARCH_HAS_HCD=y
 CONFIG_USB_ARCH_HAS_OHCI=y
 # CONFIG_USB_ARCH_HAS_EHCI is not set
 # CONFIG_USB is not set
+# CONFIG_USB_OTG_WHITELIST is not set
+# CONFIG_USB_OTG_BLACKLIST_HUB is not set
 
 #
 # NOTE: USB_STORAGE enables SCSI, and 'SCSI disk support'
@@ -535,6 +550,7 @@ CONFIG_USB_ARCH_HAS_OHCI=y
 # CONFIG_NEW_LEDS is not set
 CONFIG_RTC_LIB=y
 # CONFIG_RTC_CLASS is not set
+# CONFIG_UIO is not set
 
 #
 # File systems
@@ -547,7 +563,6 @@ CONFIG_EXT2_FS=y
 # CONFIG_JFS_FS is not set
 # CONFIG_FS_POSIX_ACL is not set
 # CONFIG_XFS_FS is not set
-# CONFIG_GFS2_FS is not set
 # CONFIG_DNOTIFY is not set
 # CONFIG_INOTIFY is not set
 # CONFIG_QUOTA is not set
@@ -618,6 +633,7 @@ CONFIG_MSDOS_PARTITION=y
 # CONFIG_PRINTK_TIME is not set
 CONFIG_ENABLE_WARN_DEPRECATED=y
 # CONFIG_ENABLE_MUST_CHECK is not set
+CONFIG_FRAME_WARN=1024
 # CONFIG_MAGIC_SYSRQ is not set
 # CONFIG_UNUSED_SYMBOLS is not set
 # CONFIG_DEBUG_FS is not set
@@ -640,6 +656,8 @@ CONFIG_FRAME_POINTER=y
 # Library routines
 #
 CONFIG_BITREVERSE=y
+# CONFIG_GENERIC_FIND_FIRST_BIT is not set
+# CONFIG_GENERIC_FIND_NEXT_BIT is not set
 # CONFIG_CRC_CCITT is not set
 # CONFIG_CRC16 is not set
 # CONFIG_CRC_ITU_T is not set

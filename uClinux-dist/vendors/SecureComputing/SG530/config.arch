@@ -23,7 +23,6 @@ LINUXTARGET	= vmlinux
 CPUFLAGS          = -m4 -ml
 VENDOR_CFLAGS     = -DCONFIG_SNAPGEAR
 GLIBC_TARGET_OPTS = --host=sh4-linux --enable-static-nss
-DISABLE_SHARED_SSL= yes
 
 ############################################################################
 

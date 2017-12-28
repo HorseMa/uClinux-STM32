@@ -21,7 +21,6 @@
  * 	Heavily inspired in loop_AES
  */
 #define CBC_IMPL_BLK16(name, ctx_type, addr_type, enc_func, dec_func) \
-int name(ctx_type *ctx, const u_int8_t * in, u_int8_t * out, int ilen, const u_int8_t * iv, int encrypt); \
 int name(ctx_type *ctx, const u_int8_t * in, u_int8_t * out, int ilen, const u_int8_t * iv, int encrypt) { \
 	int ret=ilen, pos; \
 	const u_int32_t *iv_i; \

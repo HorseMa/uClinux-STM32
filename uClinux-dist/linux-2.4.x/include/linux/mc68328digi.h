@@ -161,19 +161,23 @@
 /* Device is type misc then major=10 */
 #define MC68328DIGI_MAJOR  10
 
-#define TS_PARAMS_GET _IOR(MC68328DIGI_MAJOR, 0, struct ts_drv_params)
-#define TS_PARAMS_SET _IOR(MC68328DIGI_MAJOR, 1, struct ts_drv_params)
+#define TS_PARAMS_GET (0x00000001)
+#define TS_PARAMS_SET (0x00000002)
+#define TS_INFO_ID    (0xaa55aa55)
  
 /*----------------------------------------------------------------------------*/
 
 /* Available info from pen position and status */
 struct ts_pen_info {
+  unsigned int id;
   int x,y;    /* pen position                                      */
   int dx,dy;  /* delta move from last position                     */
   int event;  /* event from pen (DOWN,UP,CLICK,MOVE)               */
   int state;  /* state of pen (DOWN,UP,ERROR)                      */
   int ev_no;  /* no of the event                                   */
   unsigned long ev_time;  /* time of the event (ms) since ts_open  */
+  unsigned int portd;
+  unsigned int portk;
 };
 
 /* Structure that define touch screen parameters */

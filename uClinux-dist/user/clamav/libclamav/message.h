@@ -46,6 +46,7 @@ typedef struct message {
 
 	char	base64_1, base64_2, base64_3;
 	unsigned	int	isInfected : 1;
+	unsigned        int     isTruncated  : 1;
 
 } message;
 
@@ -82,5 +83,6 @@ unsigned char	*decodeLine(message *m, encoding_type enctype, const char *line, u
 int	isuuencodebegin(const char *line);
 void	messageSetCTX(message *m, cli_ctx *ctx);
 int	messageContainsVirus(const message *m);
+int messageSavePartial(message *m, const char *dir, const char *id, unsigned part);
 
 #endif	/*_MESSAGE_H*/

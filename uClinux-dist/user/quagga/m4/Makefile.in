@@ -185,6 +185,7 @@ EXTRA_DIST = ChangeLog Makefile.am README.txt \
 all: all-am
 
 .SUFFIXES:
+ifdef NOTDEF
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -214,6 +215,7 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
+endif
 
 mostlyclean-libtool:
 	-rm -f *.lo

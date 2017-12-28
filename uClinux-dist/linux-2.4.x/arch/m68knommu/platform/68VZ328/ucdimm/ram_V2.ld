@@ -68,6 +68,8 @@ SECTIONS
 	. = ALIGN(0x4) ;
 		*(.rodata)
 	. = ALIGN(0x4) ;
+		*(.rodata.str1.1)
+	. = ALIGN(0x4) ;
         *(.data)
 	. = ALIGN(0x4) ;
         *(.data.*)      

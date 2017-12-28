@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -21,12 +21,6 @@
  *  distribution); if not, write to the Free Software Foundation, Inc.,
  *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
-#ifdef WIN32
-#include "config-win32.h"
-#else
-#include "config.h"
-#endif
 
 #include "syshead.h"
 
@@ -56,6 +50,14 @@ print_opt_route_gateway (const in_addr_t route_gateway, struct gc_arena *gc)
   struct buffer out = alloc_buf_gc (128, gc);
   ASSERT (route_gateway);
   buf_printf (&out, "route-gateway %s", print_in_addr_t (route_gateway, 0, gc));
+  return BSTR (&out);
+}
+
+static const char *
+print_opt_route_gateway_dhcp (struct gc_arena *gc)
+{
+  struct buffer out = alloc_buf_gc (32, gc);
+  buf_printf (&out, "route-gateway dhcp");
   return BSTR (&out);
 }
 
@@ -91,6 +93,14 @@ print_str_int (const char *str, const int i, struct gc_arena *gc)
 {
   struct buffer out = alloc_buf_gc (128, gc);
   buf_printf (&out, "%s %d", str, i);
+  return BSTR (&out);
+}
+
+static const char *
+print_str (const char *str, struct gc_arena *gc)
+{
+  struct buffer out = alloc_buf_gc (128, gc);
+  buf_printf (&out, "%s", str);
   return BSTR (&out);
 }
 
@@ -156,7 +166,6 @@ helper_client_server (struct options *o)
    *
    * if tap OR (tun AND topology == subnet):
    *   ifconfig 10.8.0.1 255.255.255.0
-   *   ifconfig-pool-constraint 10.8.0.0 255.255.255.0
    *   if !nopool: 
    *     ifconfig-pool 10.8.0.2 10.8.0.254 255.255.255.0
    *   push "route-gateway 10.8.0.1"
@@ -176,13 +185,13 @@ helper_client_server (struct options *o)
       if (o->client)
 	msg (M_USAGE, "--server and --client cannot be used together");
 
-      if (o->server_bridge_defined)
+      if (o->server_bridge_defined || o->server_bridge_proxy_dhcp)
 	msg (M_USAGE, "--server and --server-bridge cannot be used together");
 
       if (o->shared_secret_file)
 	msg (M_USAGE, "--server and --secret cannot be used together (you must use SSL/TLS keys)");
 
-      if (o->ifconfig_pool_defined)
+      if (!(o->server_flags & SF_NOPOOL) && o->ifconfig_pool_defined)
 	msg (M_USAGE, "--server already defines an ifconfig-pool, so you can't also specify --ifconfig-pool explicitly");
 
       if (!(dev == DEV_TYPE_TAP || dev == DEV_TYPE_TUN))
@@ -243,9 +252,9 @@ helper_client_server (struct options *o)
 		  o->ifconfig_pool_start = o->server_network + 2;
 		  o->ifconfig_pool_end = (o->server_network | ~o->server_netmask) - 2;
 		  ifconfig_pool_verify_range (M_USAGE, o->ifconfig_pool_start, o->ifconfig_pool_end);
-		  o->ifconfig_pool_netmask = o->server_netmask;
 		}
-
+	      o->ifconfig_pool_netmask = o->server_netmask;
+		  
 	      push_option (o, print_opt_route_gateway (o->server_network + 1, &o->gc), M_USAGE);
 	    }
 	  else
@@ -270,8 +279,8 @@ helper_client_server (struct options *o)
 	      o->ifconfig_pool_start = o->server_network + 2;
 	      o->ifconfig_pool_end = (o->server_network | ~o->server_netmask) - 1;
 	      ifconfig_pool_verify_range (M_USAGE, o->ifconfig_pool_start, o->ifconfig_pool_end);
-	      o->ifconfig_pool_netmask = o->server_netmask;
 	    }
+	  o->ifconfig_pool_netmask = o->server_netmask;
 
 	  push_option (o, print_opt_route_gateway (o->server_network + 1, &o->gc), M_USAGE);
 	}
@@ -287,9 +296,6 @@ helper_client_server (struct options *o)
 	  o->push_ifconfig_constraint_network = o->server_network;
 	  o->push_ifconfig_constraint_netmask = o->server_netmask;
 	}
-
-      if (o->proto == PROTO_TCPv4)
-	o->proto = PROTO_TCPv4_SERVER;
     }
 
   /*
@@ -304,13 +310,24 @@ helper_client_server (struct options *o)
    *
    * ifconfig-pool 10.8.0.128 10.8.0.254 255.255.255.0
    * push "route-gateway 10.8.0.4"
+   *
+   * OR
+   *
+   * server-bridge
+   *
+   * EXPANDS TO:
+   *
+   * mode server
+   * tls-server
+   *
+   * push "route-gateway dhcp"
    */
-  else if (o->server_bridge_defined)
+  else if (o->server_bridge_defined | o->server_bridge_proxy_dhcp)
     {
       if (o->client)
 	msg (M_USAGE, "--server-bridge and --client cannot be used together");
 
-      if (o->ifconfig_pool_defined)
+      if (!(o->server_flags & SF_NOPOOL) && o->ifconfig_pool_defined)
 	msg (M_USAGE, "--server-bridge already defines an ifconfig-pool, so you can't also specify --ifconfig-pool explicitly");
 
       if (o->shared_secret_file)
@@ -319,21 +336,29 @@ helper_client_server (struct options *o)
       if (dev != DEV_TYPE_TAP)
 	msg (M_USAGE, "--server-bridge directive only makes sense with --dev tap");
 
-      verify_common_subnet ("--server-bridge", o->server_bridge_ip, o->server_bridge_pool_start, o->server_bridge_netmask); 
-      verify_common_subnet ("--server-bridge", o->server_bridge_pool_start, o->server_bridge_pool_end, o->server_bridge_netmask); 
-      verify_common_subnet ("--server-bridge", o->server_bridge_ip, o->server_bridge_pool_end, o->server_bridge_netmask); 
+      if (o->server_bridge_defined)
+	{
+	  verify_common_subnet ("--server-bridge", o->server_bridge_ip, o->server_bridge_pool_start, o->server_bridge_netmask); 
+	  verify_common_subnet ("--server-bridge", o->server_bridge_pool_start, o->server_bridge_pool_end, o->server_bridge_netmask); 
+	  verify_common_subnet ("--server-bridge", o->server_bridge_ip, o->server_bridge_pool_end, o->server_bridge_netmask); 
+	}
 
       o->mode = MODE_SERVER;
       o->tls_server = true;
-      o->ifconfig_pool_defined = true;
-      o->ifconfig_pool_start = o->server_bridge_pool_start;
-      o->ifconfig_pool_end = o->server_bridge_pool_end;
-      ifconfig_pool_verify_range (M_USAGE, o->ifconfig_pool_start, o->ifconfig_pool_end);
-      o->ifconfig_pool_netmask = o->server_bridge_netmask;
-      push_option (o, print_opt_route_gateway (o->server_bridge_ip, &o->gc), M_USAGE);
 
-      if (o->proto == PROTO_TCPv4)
-	o->proto = PROTO_TCPv4_SERVER;
+      if (o->server_bridge_defined)
+	{
+	  o->ifconfig_pool_defined = true;
+	  o->ifconfig_pool_start = o->server_bridge_pool_start;
+	  o->ifconfig_pool_end = o->server_bridge_pool_end;
+	  ifconfig_pool_verify_range (M_USAGE, o->ifconfig_pool_start, o->ifconfig_pool_end);
+	  o->ifconfig_pool_netmask = o->server_bridge_netmask;
+	  push_option (o, print_opt_route_gateway (o->server_bridge_ip, &o->gc), M_USAGE);
+	}
+      else if (o->server_bridge_proxy_dhcp)
+	{
+	  push_option (o, print_opt_route_gateway_dhcp (&o->gc), M_USAGE);
+	}
     }
   else
 #endif /* P2MP_SERVER */
@@ -355,15 +380,9 @@ helper_client_server (struct options *o)
 
       o->pull = true;
       o->tls_client = true;
-
-      if (o->proto == PROTO_TCPv4)
-	o->proto = PROTO_TCPv4_CLIENT;
     }
 
 #endif /* P2MP */
-
-  if (o->proto == PROTO_TCPv4)
-    msg (M_USAGE, "--proto tcp is ambiguous in this context.  Please specify --proto tcp-server or --proto tcp-client");
 
   gc_free (&gc);
 }
@@ -426,4 +445,35 @@ helper_keepalive (struct options *o)
 	  ASSERT (0);
 	}
     }
+}
+
+/*
+ *
+ * HELPER DIRECTIVE:
+ *
+ * tcp-nodelay
+ *
+ * EXPANDS TO:
+ *
+ * if mode server:
+ *   socket-flags TCP_NODELAY
+ *   push "socket-flags TCP_NODELAY"
+ */
+void
+helper_tcp_nodelay (struct options *o)
+{
+#if P2MP_SERVER
+  if (o->server_flags & SF_TCP_NODELAY_HELPER)
+    {
+      if (o->mode == MODE_SERVER)
+	{
+	  o->sockflags |= SF_TCP_NODELAY;	  
+	  push_option (o, print_str ("socket-flags TCP_NODELAY", &o->gc), M_USAGE);
+	}
+      else
+	{
+	  ASSERT (0);
+	}
+    }
+#endif
 }

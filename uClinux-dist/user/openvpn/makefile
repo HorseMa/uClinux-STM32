@@ -1,4 +1,4 @@
-CONFOPTS=
+CONFOPTS=--enable-password-save
 
 all: build/build
 	$(MAKE) -C build

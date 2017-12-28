@@ -105,7 +105,11 @@
 	.endm
 
 	.macro	setup_c0_status_pri
-#ifdef CONFIG_64BIT
+#if defined(CONFIG_64BIT) || defined(CONFIG_CPU_CAVIUM_OCTEON)
+	/*
+	 * Note: We always set ST0_KX on Octeon since IO addresses are at
+	 * 64bit addresses. Keep in mind this also moves the TLB handler.
+	 */
 	setup_c0_status ST0_KX 0
 #else
 	setup_c0_status 0 0
@@ -113,7 +117,11 @@
 	.endm
 
 	.macro	setup_c0_status_sec
-#ifdef CONFIG_64BIT
+#if defined(CONFIG_64BIT) || defined(CONFIG_CPU_CAVIUM_OCTEON)
+	/*
+	 * Note: We always set ST0_KX on Octeon since IO addresses are at
+	 * 64bit addresses. Keep in mind this also moves the TLB handler.
+	 */
 	setup_c0_status ST0_KX ST0_BEV
 #else
 	setup_c0_status 0 ST0_BEV

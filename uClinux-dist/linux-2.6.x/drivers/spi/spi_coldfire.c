@@ -501,9 +501,9 @@ static void pump_transfers(unsigned long data)
 }
 
 
-static void pump_messages(void * data)
+static void pump_messages(struct work_struct *work)
 {
-	struct driver_data *drv_data = data;
+	struct driver_data *drv_data = container_of(work, struct driver_data, pump_messages);
 	unsigned long flags;
 
 	/* Lock queue and check for queue work */
@@ -646,9 +646,10 @@ static int init_queue(struct driver_data *drv_data)
 	tasklet_init(&drv_data->pump_transfers,
 			pump_transfers,	(unsigned long)drv_data);
 
-	INIT_WORK(&drv_data->pump_messages, pump_messages, drv_data);
+	INIT_WORK(&drv_data->pump_messages, pump_messages);
+
 	drv_data->workqueue = create_singlethread_workqueue(
-					drv_data->master->cdev.dev->bus_id);
+					drv_data->master->dev.bus_id);
 	if (drv_data->workqueue == NULL)
 		return -EBUSY;
 
@@ -742,7 +743,6 @@ static int coldfire_spi_probe(struct platform_device *pdev)
  	struct spi_master *master;
  	struct driver_data *drv_data = 0;
  	struct resource *memory_resource;
-	int irq;
 	int status = 0;
 	int i;
 
@@ -752,7 +752,7 @@ static int coldfire_spi_probe(struct platform_device *pdev)
   	if (!master)
  		return -ENOMEM;
 
- 	drv_data = class_get_devdata(&master->cdev);
+ 	drv_data = spi_master_get_devdata(master);
  	drv_data->master = master;
 
 	INIT_LIST_HEAD(&drv_data->queue);
@@ -811,8 +811,8 @@ static int coldfire_spi_probe(struct platform_device *pdev)
  	}
 
  	drv_data->int_mr = (void *)memory_resource->start;
-
-	status = request_irq(platform_info->irq_vector, qspi_interrupt, SA_INTERRUPT, dev->bus_id, drv_data);
+	
+	status = request_irq(platform_info->irq_vector, qspi_interrupt, IRQF_DISABLED, dev->bus_id, drv_data);
 	if (status < 0) {
 		dev_err(&pdev->dev, "unable to attach ColdFire QSPI interrupt\n");
 		goto out_error_master_alloc;
@@ -852,7 +852,7 @@ out_error_queue_alloc:
 	destroy_queue(drv_data);
 	
 out_error_irq_alloc:
-	free_irq(irq, drv_data);
+	free_irq(platform_info->irq_vector, drv_data);
 	
 out_error_master_alloc:
 	spi_master_put(master);

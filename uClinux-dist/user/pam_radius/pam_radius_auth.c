@@ -621,8 +621,8 @@ initialize(radius_conf_t *conf, int accounting)
 {
   struct sockaddr salocal;
   u_short local_port;
-  char hostname[BUFFER_SIZE];
-  char secret[BUFFER_SIZE];
+  char *hostname;
+  char *secret;
   
   char buffer[BUFFER_SIZE];
   char *p;
@@ -660,11 +660,18 @@ initialize(radius_conf_t *conf, int accounting)
     }
     
     timeout = 3;
-    if (sscanf(p, "%s %s %d", hostname, secret, &timeout) < 2) {
-      _pam_log(LOG_ERR, "ERROR reading %s, line %d: Could not read hostname or secret\n",
+    /* Tokenize the line - we're going to be tokenizing on tabs and newlines */
+    if ((hostname = strtok(p, "\t\n")) == NULL) {
+      _pam_log(LOG_ERR, "ERROR reading %s, line %d: Could not read hostname\n",
 	       conf_file, line);
       continue; /* invalid line */
-    } else {			/* read it in and save the data */
+    }
+
+    if ((secret = strtok(NULL, "\t\n")) == NULL) {
+      _pam_log(LOG_ERR, "ERROR reading %s, line %d: Could not read secret\n",
+	       conf_file, line);
+      continue; /* invalid line */
+    } else {
       radius_server_t *tmp;
       
       tmp = malloc(sizeof(radius_server_t));

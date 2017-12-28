@@ -135,7 +135,7 @@ int is_tar(unsigned char *buf, unsigned int nbytes);
 
 cli_file_t cli_filetype2(int desc, const struct cl_engine *engine)
 {
-	unsigned char smallbuff[MAGIC_BUFFER_SIZE + 1], *decoded, *bigbuff;
+	unsigned char buff[MAGIC_BUFFER_SIZE + 1], *decoded;
 	int bread, sret;
 	cli_file_t ret = CL_TYPE_BINARY_DATA;
 	struct cli_matcher *root;
@@ -147,12 +147,13 @@ cli_file_t cli_filetype2(int desc, const struct cl_engine *engine)
 	return CL_TYPE_ERROR;
     }
 
-    memset(smallbuff, 0, sizeof(smallbuff));
-    bread = cli_readn(desc, smallbuff, MAGIC_BUFFER_SIZE);
+    memset(buff, 0, sizeof(buff));
+    bread = cli_readn(desc, buff, MAGIC_BUFFER_SIZE);
     if(bread == -1)
 	return CL_TYPE_ERROR;
+    buff[bread] = 0;
 
-    ret = cli_filetype(smallbuff, bread, engine);
+    ret = cli_filetype(buff, bread, engine);
 
     if(ret >= CL_TYPE_TEXT_ASCII && ret <= CL_TYPE_BINARY_DATA) {
 	/* HTML files may contain special characters and could be
@@ -162,22 +163,22 @@ cli_file_t cli_filetype2(int desc, const struct cl_engine *engine)
 	if(!root)
 	    return ret;
 
-	if(cli_ac_initdata(&mdata, root->ac_partsigs, AC_DEFAULT_TRACKLEN))
+	if(cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, AC_DEFAULT_TRACKLEN))
 	    return ret;
 
-	sret = cli_ac_scanbuff(smallbuff, bread, NULL, engine->root[0], &mdata, 0, ret, desc, NULL, AC_SCAN_FT, NULL);
+	sret = cli_ac_scanbuff(buff, bread, NULL, NULL, NULL, engine->root[0], &mdata, 0, ret, desc, NULL, AC_SCAN_FT, NULL);
 
 	cli_ac_freedata(&mdata);
 
 	if(sret >= CL_TYPENO) {
 	    ret = sret;
 	} else {
-	    if(cli_ac_initdata(&mdata, root->ac_partsigs, AC_DEFAULT_TRACKLEN))
+	    if(cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, AC_DEFAULT_TRACKLEN))
 		return ret;
 
-	    decoded = (unsigned char *) cli_utf16toascii((char *) smallbuff, bread);
+	    decoded = (unsigned char *) cli_utf16toascii((char *) buff, bread);
 	    if(decoded) {
-		sret = cli_ac_scanbuff(decoded, strlen((char *) decoded), NULL, engine->root[0], &mdata, 0, CL_TYPE_TEXT_ASCII, desc, NULL, AC_SCAN_FT, NULL);
+		sret = cli_ac_scanbuff(decoded, strlen((char *) decoded), NULL, NULL, NULL,  engine->root[0], &mdata, 0, CL_TYPE_TEXT_ASCII, desc, NULL, AC_SCAN_FT, NULL);
 		free(decoded);
 		if(sret == CL_TYPE_HTML)
 		    ret = CL_TYPE_HTML_UTF16;
@@ -190,11 +191,11 @@ cli_file_t cli_filetype2(int desc, const struct cl_engine *engine)
 		    /* check if we can autodetect this encoding.
 		     * If we can't don't try to detect HTML sig, since
 		     * we just tried that above, and failed */
-		    if((encoding = encoding_detect_bom(smallbuff, bread))) {
-			    unsigned char decodedbuff[sizeof(smallbuff)*2];
+		    if((encoding = encoding_detect_bom(buff, bread))) {
+			    unsigned char decodedbuff[sizeof(buff)*2];
 			    m_area_t in_area, out_area;
 
-			    in_area.buffer = (unsigned char *) smallbuff;
+			    in_area.buffer = (unsigned char *) buff;
 			    in_area.length = bread;
 			    in_area.offset = 0;
 			    out_area.buffer = decodedbuff;
@@ -207,11 +208,11 @@ cli_file_t cli_filetype2(int desc, const struct cl_engine *engine)
 			     * (just eliminating zeros and matching would introduce false positives */
 			    if(encoding_normalize_toascii(&in_area, encoding, &out_area) >= 0 && out_area.length > 0) {
 				    out_area.buffer[out_area.length] = '\0';
-				    if(cli_ac_initdata(&mdata, root->ac_partsigs, AC_DEFAULT_TRACKLEN))
+				    if(cli_ac_initdata(&mdata, root->ac_partsigs, root->ac_lsigs, AC_DEFAULT_TRACKLEN))
 					    return ret;
 
 				    if(out_area.length > 0) {
-					    sret = cli_ac_scanbuff(decodedbuff, out_area.length, NULL, engine->root[0], &mdata, 0, 0, desc, NULL, AC_SCAN_FT, NULL); /* FIXME: can we use CL_TYPE_TEXT_ASCII instead of 0? */
+					    sret = cli_ac_scanbuff(decodedbuff, out_area.length, NULL, NULL, NULL, engine->root[0], &mdata, 0, 0, desc, NULL, AC_SCAN_FT, NULL); /* FIXME: can we use CL_TYPE_TEXT_ASCII instead of 0? */
 					    if(sret == CL_TYPE_HTML) {
 						    cli_dbgmsg("cli_filetype2: detected HTML signature in Unicode file\n");
 						    /* htmlnorm is able to handle any unicode now, since it skips null chars */
@@ -227,38 +228,16 @@ cli_file_t cli_filetype2(int desc, const struct cl_engine *engine)
     }
 
     if(ret == CL_TYPE_BINARY_DATA) {
-
-	if(!(bigbuff = (unsigned char *) cli_calloc(37638 + 1, sizeof(unsigned char))))
-	    return ret;
-
-	lseek(desc, 0, SEEK_SET);
-	if((bread = cli_readn(desc, bigbuff, 37638)) > 0) {
-
-	    bigbuff[bread] = 0;
-
-	    switch(is_tar(bigbuff, bread)) {
-		case 1:
-		    ret = CL_TYPE_OLD_TAR;
-		    cli_dbgmsg("Recognized old fashioned tar file\n");
-		    break;
-		case 2:
-		    ret = CL_TYPE_POSIX_TAR;
-		    cli_dbgmsg("Recognized POSIX tar file\n");
-		    break;
-	    }
+	switch(is_tar(buff, bread)) {
+	    case 1:
+		ret = CL_TYPE_OLD_TAR;
+		cli_dbgmsg("Recognized old fashioned tar file\n");
+		break;
+	    case 2:
+		ret = CL_TYPE_POSIX_TAR;
+		cli_dbgmsg("Recognized POSIX tar file\n");
+		break;
 	}
-
-	if(ret == CL_TYPE_BINARY_DATA) {
-	    if(!memcmp(bigbuff + 32769, "CD001" , 5) || !memcmp(bigbuff + 37633, "CD001" , 5)) {
-		cli_dbgmsg("Recognized ISO 9660 CD-ROM data\n");
-		ret = CL_TYPE_IGNORED;
-	    } else if(!memcmp(bigbuff + 32776, "CDROM" , 5)) {
-		cli_dbgmsg("Recognized High Sierra CD-ROM data\n");
-		ret = CL_TYPE_IGNORED;
-	    }
-	}
-
-	free(bigbuff);
     }
 
     return ret;

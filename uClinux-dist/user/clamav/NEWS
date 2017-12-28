@@ -1,41 +1,53 @@
-0.93
+0.94
 ----
 
-This release introduces many new features and engine enhancements, please
-see the notes below for the list of major changes. The most visible one
-is the new logic in scan limits which affects some command line and config
-options of clamscan and clamd. Please see clamscan(1) and clamd.conf(5)
-and the example config file for more information on the new options.
+Sourcefire and the ClamAV team are pleased to announce the release of
+ClamAV 0.94. The following are the key features and improvements of this
+version:
 
-Most important changes include:
+  - Logical Signatures: The logical signature technology uses operators
+    such as AND, OR and NOT to allow the combination of more than one
+    signature into one entry in the signature database resulting in
+    more detailed and flexible pattern matching.
 
-  * libclamav:
-    - New logic in scan limits: provides much more efficient protection against
-      DoS attacks but also results in different command line and config options
-      to clamscan and clamd (see below)
-    - New/improved modules: unzip, SIS, cabinet, CHM, SZDD, text normalisator,
-      entity converter
-    - Improved filetype detection; filetype definitions can be remotely updated
-    - Support for .cld containers (which replace .inc directories)
-    - Improved pattern matcher and signature formats
-    - More efficient scanning of HTML files
-    - Many other improvements
+  - Anti-phishing Technology: Users can now change the priority and reporting
+    of ClamAV's heuristic anti-phishing scanner within the detection engine
+    process. They can choose whether, when scanning a supicious file, ClamAV
+    should stop scanning and report the phish, or continue to scan in case the
+    file contains other malware (clamd: HeuristicScanPrecedence,
+    clamscan: --heuristic-scan-precedence)
 
-  * clamd:
-    - NEW CONFIG FILE OPTIONS: MaxScanSize, MaxFileSize, MaxRecursion, MaxFiles
-    - ** THE FOLLOWING OPTIONS ARE NO LONGER SUPPORTED **: MailMaxRecursion,
-      ArchiveMaxFileSize, ArchiveMaxRecursion, ArchiveMaxFiles,
-      ArchiveMaxCompressionRatio, ArchiveBlockMax
+  - Disassembly Engine: The initial version of the disassembly engine improves
+    ClamAV's detection abilities.
 
-  * clamscan:
-    - NEW CMDLINE OPTIONS: --max-filesize, --max-scansize
-    - REMOVED OPTIONS: --block-max, --max-space, --max-ratio
+  - PUA Detection: Users can now decide which PUA signatures should be loaded
+    (clamd: ExcludePUA, IncludePUA; clamscan: --exclude-pua, --include-pua)
 
-  * freshclam:
-    - NEW CONFIG OPTION CompressLocalDatabase
-    - NEW CMDLINE SWITCH --no-warnings
-    - main.inc and daily.inc directories are no longer used by ClamAV; please
-      remove them manually from your database directory
+  - Data Loss Prevention (DLP): This version includes a new module that, when
+    enabled, scans data for the inclusion of US formated Social Security
+    Numbers and credit card numbers (clamd: StructuredDataDetection,
+    clamscan: --detect-structured; additional fine-tuning options are available)
+
+  - IPv6 Support: Freshclam now supports IPv6
+
+  - Improved Scanning of Scripts: The normalization of scripts now covers
+    JavaScript
+
+  - Improved QA and Unit Testing: The improved QA process now includes
+    API testing and new library of test files in various formats that are
+    tested on a wide variety of systems (try running 'make check' in the source
+    directory)
+
+For more details, please refer to http://www.clamav.net/press/0.94-WhatsNew.pdf
+and to the ChangeLog.
+
+You may need to run 'ldconfig' after installing this version.
+
+** This version drops the special support for Cygwin. Our QA process showed
+** serious problems with ClamAV builds under Cygwin due to some low-level
+** incompatibilities in the POSIX compatibility layer, resulting in unreliable
+** ClamAV behaviour.
 
 --
 The ClamAV team (http://www.clamav.net/team)
+

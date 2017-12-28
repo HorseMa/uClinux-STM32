@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -26,12 +26,6 @@
  * Support routines for adding/deleting network routes.
  */
 
-#ifdef WIN32
-#include "config-win32.h"
-#else
-#include "config.h"
-#endif
-
 #include "syshead.h"
 
 #include "common.h"
@@ -40,11 +34,11 @@
 #include "misc.h"
 #include "socket.h"
 #include "manage.h"
+#include "win32.h"
 
 #include "memdbg.h"
 
 static void delete_route (const struct route *r, const struct tuntap *tt, unsigned int flags, const struct env_set *es);
-static bool get_default_gateway (in_addr_t *ret);
 static void get_bypass_addresses (struct route_bypass *rb, const unsigned int flags);
 
 #ifdef ENABLE_DEBUG
@@ -144,41 +138,63 @@ get_special_addr (const struct route_special_addr *spec,
 		  in_addr_t *out,
 		  bool *status)
 {
-  *status = true;
+  if (status)
+    *status = true;
   if (!strcmp (string, "vpn_gateway"))
     {
-      if (spec->remote_endpoint_defined)
-	*out = spec->remote_endpoint;
-      else
+      if (spec)
 	{
-	  msg (M_INFO, PACKAGE_NAME " ROUTE: vpn_gateway undefined");
-	  *status = false;
+	  if (spec->remote_endpoint_defined)
+	    *out = spec->remote_endpoint;
+	  else
+	    {
+	      msg (M_INFO, PACKAGE_NAME " ROUTE: vpn_gateway undefined");
+	      if (status)
+		*status = false;
+	    }
 	}
       return true;
     }
   else if (!strcmp (string, "net_gateway"))
     {
-      if (spec->net_gateway_defined)
-	*out = spec->net_gateway;
-      else
+      if (spec)
 	{
-	  msg (M_INFO, PACKAGE_NAME " ROUTE: net_gateway undefined -- unable to get default gateway from system");
-	  *status = false;
+	  if (spec->net_gateway_defined)
+	    *out = spec->net_gateway;
+	  else
+	    {
+	      msg (M_INFO, PACKAGE_NAME " ROUTE: net_gateway undefined -- unable to get default gateway from system");
+	      if (status)
+		*status = false;
+	    }
 	}
       return true;
     }
   else if (!strcmp (string, "remote_host"))
     {
-      if (spec->remote_host_defined)
-	*out = spec->remote_host;
-      else
+      if (spec)
 	{
-	  msg (M_INFO, PACKAGE_NAME " ROUTE: remote_host undefined");
-	  *status = false;
+	  if (spec->remote_host_defined)
+	    *out = spec->remote_host;
+	  else
+	    {
+	      msg (M_INFO, PACKAGE_NAME " ROUTE: remote_host undefined");
+	      if (status)
+		*status = false;
+	    }
 	}
       return true;
     }
   return false;
+}
+
+bool
+is_special_addr (const char *addr_str)
+{
+  if (addr_str)
+    return get_special_addr (NULL, addr_str, NULL, NULL);
+  else
+    return false;
 }
 
 static bool
@@ -318,6 +334,16 @@ clear_route_list (struct route_list *rl)
   CLEAR (*rl);
 }
 
+void
+route_list_add_default_gateway (struct route_list *rl,
+				struct env_set *es,
+				const in_addr_t addr)
+{
+  rl->spec.remote_endpoint = addr;
+  rl->spec.remote_endpoint_defined = true;
+  setenv_route_addr (es, "vpn_gateway", rl->spec.remote_endpoint, -1);
+}
+
 bool
 init_route_list (struct route_list *rl,
 		 const struct route_option_list *opt,
@@ -345,11 +371,11 @@ init_route_list (struct route_list *rl,
       rl->spec.default_metric_defined = true;
     }
 
-  rl->spec.net_gateway_defined = get_default_gateway (&rl->spec.net_gateway);
+  rl->spec.net_gateway_defined = get_default_gateway (&rl->spec.net_gateway, NULL);
   if (rl->spec.net_gateway_defined)
     {
       setenv_route_addr (es, "net_gateway", rl->spec.net_gateway, -1);
-      dmsg (D_ROUTE_DEBUG, "ROUTE DEBUG: default_gateway=%s", print_in_addr_t (rl->spec.net_gateway, 0, &gc));
+      dmsg (D_ROUTE, "ROUTE default_gateway=%s", print_in_addr_t (rl->spec.net_gateway, 0, &gc));
     }
   else
     {
@@ -639,9 +665,11 @@ add_routes (struct route_list *rl, const struct tuntap *tt, unsigned int flags, 
       
       for (i = 0; i < rl->n; ++i)
 	{
+	  struct route *r = &rl->routes[i];
+	  check_subnet_conflict (r->network, r->netmask, "route");
 	  if (flags & ROUTE_DELETE_FIRST)
-	    delete_route (&rl->routes[i], tt, flags, es);
-	  add_route (&rl->routes[i], tt, flags, es);
+	    delete_route (r, tt, flags, es);
+	  add_route (r, tt, flags, es);
 	}
       rl->routes_added = true;
     }
@@ -749,7 +777,7 @@ void
 add_route (struct route *r, const struct tuntap *tt, unsigned int flags, const struct env_set *es)
 {
   struct gc_arena gc;
-  struct buffer buf;
+  struct argv argv;
   const char *network;
   const char *netmask;
   const char *gateway;
@@ -759,7 +787,7 @@ add_route (struct route *r, const struct tuntap *tt, unsigned int flags, const s
     return;
 
   gc_init (&gc);
-  buf = alloc_buf_gc (256, &gc);
+  argv_init (&argv);
 
   network = print_in_addr_t (r->network, 0, &gc);
   netmask = print_in_addr_t (r->netmask, 0, &gc);
@@ -777,35 +805,38 @@ add_route (struct route *r, const struct tuntap *tt, unsigned int flags, const s
 
 #if defined(TARGET_LINUX)
 #ifdef CONFIG_FEATURE_IPROUTE
-  buf_printf (&buf, "%s route add %s/%d via %s",
+  argv_printf (&argv, "%s route add %s/%d via %s",
   	      iproute_path,
 	      network,
 	      count_netmask_bits(netmask),
 	      gateway);
   if (r->metric_defined)
-    buf_printf (&buf, " metric %d", r->metric);
+    argv_printf_cat (&argv, "metric %d", r->metric);
 
 #else
-  buf_printf (&buf, ROUTE_PATH " add -net %s netmask %s gw %s",
+  argv_printf (&argv, "%s add -net %s netmask %s gw %s",
+		ROUTE_PATH,
 	      network,
 	      netmask,
 	      gateway);
   if (r->metric_defined)
-    buf_printf (&buf, " metric %d", r->metric);
+    argv_printf_cat (&argv, "metric %d", r->metric);
 #endif  /*CONFIG_FEATURE_IPROUTE*/
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  status = system_check (BSTR (&buf), es, 0, "ERROR: Linux route add command failed");
+  argv_msg (D_ROUTE, &argv);
+  status = openvpn_execve_check (&argv, es, 0, "ERROR: Linux route add command failed");
 
 #elif defined (WIN32)
 
-  buf_printf (&buf, ROUTE_PATH " ADD %s MASK %s %s",
-	      network,
-	      netmask,
-	      gateway);
+  argv_printf (&argv, "%s%sc ADD %s MASK %s %s",
+	       get_win_sys_path(),
+	       WIN_ROUTE_PATH_SUFFIX,
+	       network,
+	       netmask,
+	       gateway);
   if (r->metric_defined)
-    buf_printf (&buf, " METRIC %d", r->metric);
+    argv_printf_cat (&argv, "METRIC %d", r->metric);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
+  argv_msg (D_ROUTE, &argv);
 
   if ((flags & ROUTE_METHOD_MASK) == ROUTE_METHOD_IPAPI)
     {
@@ -815,7 +846,7 @@ add_route (struct route *r, const struct tuntap *tt, unsigned int flags, const s
   else if ((flags & ROUTE_METHOD_MASK) == ROUTE_METHOD_EXE)
     {
       netcmd_semaphore_lock ();
-      status = system_check (BSTR (&buf), es, 0, "ERROR: Windows route add command failed");
+      status = openvpn_execve_check (&argv, es, 0, "ERROR: Windows route add command failed");
       netcmd_semaphore_release ();
     }
   else if ((flags & ROUTE_METHOD_MASK) == ROUTE_METHOD_ADAPTIVE)
@@ -826,7 +857,7 @@ add_route (struct route *r, const struct tuntap *tt, unsigned int flags, const s
 	{
 	  msg (D_ROUTE, "Route addition fallback to route.exe");
 	  netcmd_semaphore_lock ();
-	  status = system_check (BSTR (&buf), es, 0, "ERROR: Windows route add command failed [adaptive]");
+	  status = openvpn_execve_check (&argv, es, 0, "ERROR: Windows route add command failed [adaptive]");
 	  netcmd_semaphore_release ();
 	}
     }
@@ -839,71 +870,93 @@ add_route (struct route *r, const struct tuntap *tt, unsigned int flags, const s
 
   /* example: route add 192.0.2.32 -netmask 255.255.255.224 somegateway */
 
-  buf_printf (&buf, ROUTE_PATH " add");
+  argv_printf (&argv, "%s add",
+		ROUTE_PATH);
 
 #if 0
   if (r->metric_defined)
-    buf_printf (&buf, " -rtt %d", r->metric);
+    argv_printf_cat (&argv, "-rtt %d", r->metric);
 #endif
 
-  buf_printf (&buf, " %s -netmask %s %s",
+  argv_printf_cat (&argv, "%s -netmask %s %s",
 	      network,
 	      netmask,
 	      gateway);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  status = system_check (BSTR (&buf), es, 0, "ERROR: Solaris route add command failed");
+  argv_msg (D_ROUTE, &argv);
+  status = openvpn_execve_check (&argv, es, 0, "ERROR: Solaris route add command failed");
 
 #elif defined(TARGET_FREEBSD)
 
-  buf_printf (&buf, ROUTE_PATH " add");
+  argv_printf (&argv, "%s add",
+		ROUTE_PATH);
 
 #if 0
   if (r->metric_defined)
-    buf_printf (&buf, " -rtt %d", r->metric);
+    argv_printf_cat (&argv, "-rtt %d", r->metric);
 #endif
 
-  buf_printf (&buf, " -net %s %s %s",
+  argv_printf_cat (&argv, "-net %s %s %s",
 	      network,
 	      gateway,
 	      netmask);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  status = system_check (BSTR (&buf), es, 0, "ERROR: FreeBSD route add command failed");
+  argv_msg (D_ROUTE, &argv);
+  status = openvpn_execve_check (&argv, es, 0, "ERROR: FreeBSD route add command failed");
 
-#elif defined(TARGET_DARWIN)
+#elif defined(TARGET_DRAGONFLY)
 
-  buf_printf (&buf, ROUTE_PATH " add");
+  argv_printf (&argv, "%s add",
+		ROUTE_PATH);
 
 #if 0
   if (r->metric_defined)
-    buf_printf (&buf, " -rtt %d", r->metric);
+    argv_printf_cat (&argv, "-rtt %d", r->metric);
 #endif
 
-  buf_printf (&buf, " -net %s %s %s",
+  argv_printf_cat (&argv, "-net %s %s %s",
+	      network,
+	      gateway,
+	      netmask);
+
+  argv_msg (D_ROUTE, &argv);
+  status = openvpn_execve_check (&argv, es, 0, "ERROR: DragonFly route add command failed");
+
+#elif defined(TARGET_DARWIN)
+
+  argv_printf (&argv, "%s add",
+		ROUTE_PATH);
+
+#if 0
+  if (r->metric_defined)
+    argv_printf_cat (&argv, "-rtt %d", r->metric);
+#endif
+
+  argv_printf_cat (&argv, "-net %s %s %s",
               network,
               gateway,
               netmask);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  status = system_check (BSTR (&buf), es, 0, "ERROR: OS X route add command failed");
+  argv_msg (D_ROUTE, &argv);
+  status = openvpn_execve_check (&argv, es, 0, "ERROR: OS X route add command failed");
 
 #elif defined(TARGET_OPENBSD) || defined(TARGET_NETBSD)
 
-  buf_printf (&buf, ROUTE_PATH " add");
+  argv_printf (&argv, "%s add",
+		ROUTE_PATH);
 
 #if 0
   if (r->metric_defined)
-    buf_printf (&buf, " -rtt %d", r->metric);
+    argv_printf_cat (&argv, "-rtt %d", r->metric);
 #endif
 
-  buf_printf (&buf, " -net %s %s -netmask %s",
+  argv_printf_cat (&argv, "-net %s %s -netmask %s",
 	      network,
 	      gateway,
 	      netmask);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  status = system_check (BSTR (&buf), es, 0, "ERROR: OpenBSD/NetBSD route add command failed");
+  argv_msg (D_ROUTE, &argv);
+  status = openvpn_execve_check (&argv, es, 0, "ERROR: OpenBSD/NetBSD route add command failed");
 
 #else
   msg (M_FATAL, "Sorry, but I don't know how to do 'route' commands on this operating system.  Try putting your routes in a --route-up script");
@@ -911,6 +964,7 @@ add_route (struct route *r, const struct tuntap *tt, unsigned int flags, const s
 
  done:
   r->defined = status;
+  argv_reset (&argv);
   gc_free (&gc);
 }
 
@@ -918,7 +972,7 @@ static void
 delete_route (const struct route *r, const struct tuntap *tt, unsigned int flags, const struct env_set *es)
 {
   struct gc_arena gc;
-  struct buffer buf;
+  struct argv argv;
   const char *network;
   const char *netmask;
   const char *gateway;
@@ -927,37 +981,40 @@ delete_route (const struct route *r, const struct tuntap *tt, unsigned int flags
     return;
 
   gc_init (&gc);
+  argv_init (&argv);
 
-  buf = alloc_buf_gc (256, &gc);
   network = print_in_addr_t (r->network, 0, &gc);
   netmask = print_in_addr_t (r->netmask, 0, &gc);
   gateway = print_in_addr_t (r->gateway, 0, &gc);
 
 #if defined(TARGET_LINUX)
 #ifdef CONFIG_FEATURE_IPROUTE
-  buf_printf (&buf, "%s route del %s/%d",
+  argv_printf (&argv, "%s route del %s/%d",
   	      iproute_path,
 	      network,
 	      count_netmask_bits(netmask));
 #else
 
-  buf_printf (&buf, ROUTE_PATH " del -net %s netmask %s",
+  argv_printf (&argv, "%s del -net %s netmask %s",
+		ROUTE_PATH,
 	      network,
 	      netmask);
 #endif /*CONFIG_FEATURE_IPROUTE*/
   if (r->metric_defined)
-    buf_printf (&buf, " metric %d", r->metric);
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  system_check (BSTR (&buf), es, 0, "ERROR: Linux route delete command failed");
+    argv_printf_cat (&argv, "metric %d", r->metric);
+  argv_msg (D_ROUTE, &argv);
+  openvpn_execve_check (&argv, es, 0, "ERROR: Linux route delete command failed");
 
 #elif defined (WIN32)
   
-  buf_printf (&buf, ROUTE_PATH " DELETE %s MASK %s %s",
-	      network,
-              netmask,
-              gateway);
+  argv_printf (&argv, "%s%sc DELETE %s MASK %s %s",
+	       get_win_sys_path(),
+	       WIN_ROUTE_PATH_SUFFIX,
+	       network,
+	       netmask,
+	       gateway);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
+  argv_msg (D_ROUTE, &argv);
 
   if ((flags & ROUTE_METHOD_MASK) == ROUTE_METHOD_IPAPI)
     {
@@ -967,7 +1024,7 @@ delete_route (const struct route *r, const struct tuntap *tt, unsigned int flags
   else if ((flags & ROUTE_METHOD_MASK) == ROUTE_METHOD_EXE)
     {
       netcmd_semaphore_lock ();
-      system_check (BSTR (&buf), es, 0, "ERROR: Windows route delete command failed");
+      openvpn_execve_check (&argv, es, 0, "ERROR: Windows route delete command failed");
       netcmd_semaphore_release ();
     }
   else if ((flags & ROUTE_METHOD_MASK) == ROUTE_METHOD_ADAPTIVE)
@@ -978,7 +1035,7 @@ delete_route (const struct route *r, const struct tuntap *tt, unsigned int flags
 	{
 	  msg (D_ROUTE, "Route deletion fallback to route.exe");
 	  netcmd_semaphore_lock ();
-	  system_check (BSTR (&buf), es, 0, "ERROR: Windows route delete command failed [adaptive]");
+	  openvpn_execve_check (&argv, es, 0, "ERROR: Windows route delete command failed [adaptive]");
 	  netcmd_semaphore_release ();
 	}
     }
@@ -989,48 +1046,64 @@ delete_route (const struct route *r, const struct tuntap *tt, unsigned int flags
 
 #elif defined (TARGET_SOLARIS)
 
-  buf_printf (&buf, ROUTE_PATH " delete %s -netmask %s %s",
+  argv_printf (&argv, "%s delete %s -netmask %s %s",
+		ROUTE_PATH,
 	      network,
 	      netmask,
 	      gateway);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  system_check (BSTR (&buf), es, 0, "ERROR: Solaris route delete command failed");
+  argv_msg (D_ROUTE, &argv);
+  openvpn_execve_check (&argv, es, 0, "ERROR: Solaris route delete command failed");
 
 #elif defined(TARGET_FREEBSD)
 
-  buf_printf (&buf, ROUTE_PATH " delete -net %s %s %s",
+  argv_printf (&argv, "%s delete -net %s %s %s",
+		ROUTE_PATH,
 	      network,
 	      gateway,
 	      netmask);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  system_check (BSTR (&buf), es, 0, "ERROR: FreeBSD route delete command failed");
+  argv_msg (D_ROUTE, &argv);
+  openvpn_execve_check (&argv, es, 0, "ERROR: FreeBSD route delete command failed");
+
+#elif defined(TARGET_DRAGONFLY)
+
+  argv_printf (&argv, "%s delete -net %s %s %s",
+		ROUTE_PATH,
+	      network,
+	      gateway,
+	      netmask);
+
+  argv_msg (D_ROUTE, &argv);
+  openvpn_execve_check (&argv, es, 0, "ERROR: DragonFly route delete command failed");
 
 #elif defined(TARGET_DARWIN)
 
-  buf_printf (&buf, ROUTE_PATH " delete -net %s %s %s",
+  argv_printf (&argv, "%s delete -net %s %s %s",
+		ROUTE_PATH,
               network,
               gateway,
               netmask);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  system_check (BSTR (&buf), es, 0, "ERROR: OS X route delete command failed");
+  argv_msg (D_ROUTE, &argv);
+  openvpn_execve_check (&argv, es, 0, "ERROR: OS X route delete command failed");
 
 #elif defined(TARGET_OPENBSD) || defined(TARGET_NETBSD)
 
-  buf_printf (&buf, ROUTE_PATH " delete -net %s %s -netmask %s",
+  argv_printf (&argv, "%s delete -net %s %s -netmask %s",
+		ROUTE_PATH,
 	      network,
 	      gateway,
 	      netmask);
 
-  msg (D_ROUTE, "%s", BSTR (&buf));
-  system_check (BSTR (&buf), es, 0, "ERROR: OpenBSD/NetBSD route delete command failed");
+  argv_msg (D_ROUTE, &argv);
+  openvpn_execve_check (&argv, es, 0, "ERROR: OpenBSD/NetBSD route delete command failed");
 
 #else
   msg (M_FATAL, "Sorry, but I don't know how to do 'route' commands on this operating system.  Try putting your routes in a --route-up script");
 #endif
 
+  argv_reset (&argv);
   gc_free (&gc);
 }
 
@@ -1070,7 +1143,7 @@ test_route (const IP_ADAPTER_INFO *adapters,
 	    DWORD *index)
 {
   int count = 0;
-  DWORD i = adapter_index_of_ip (adapters, gateway, &count);
+  DWORD i = adapter_index_of_ip (adapters, gateway, &count, NULL);
   if (index)
     *index = i;
   return count;
@@ -1179,18 +1252,24 @@ get_default_gateway_row (const MIB_IPFORWARDTABLE *routes)
   return ret;
 }
 
-static bool
-get_default_gateway (in_addr_t *ret)
+bool
+get_default_gateway (in_addr_t *gw, in_addr_t *netmask)
 {
   struct gc_arena gc = gc_new ();
   bool ret_bool = false;
 
+  const IP_ADAPTER_INFO *adapters = get_adapter_info_list (&gc);
   const MIB_IPFORWARDTABLE *routes = get_windows_routing_table (&gc);
   const MIB_IPFORWARDROW *row = get_default_gateway_row (routes);
 
   if (row)
     {
-      *ret = ntohl (row->dwForwardNextHop);
+      *gw = ntohl (row->dwForwardNextHop);
+      if (netmask)
+	{
+	  if (adapter_index_of_ip (adapters, *gw, NULL, netmask) == ~0)
+	    *netmask = ~0;
+	}
       ret_bool = true;
     }
 
@@ -1395,8 +1474,8 @@ show_routes (int msglev)
 
 #elif defined(TARGET_LINUX)
 
-static bool
-get_default_gateway (in_addr_t *gateway)
+bool
+get_default_gateway (in_addr_t *gateway, in_addr_t *netmask)
 {
   struct gc_arena gc = gc_new ();
   bool ret = false;
@@ -1449,6 +1528,10 @@ get_default_gateway (in_addr_t *gateway)
       if (best_gw)
 	{
 	  *gateway = best_gw;
+	  if (netmask)
+	    {
+	      *netmask = 0xFFFFFF00; // FIXME -- get the real netmask of the adapter containing the default gateway
+	    }
 	  ret = true;
 	}
 
@@ -1462,7 +1545,7 @@ get_default_gateway (in_addr_t *gateway)
   return ret;
 }
 
-#elif defined(TARGET_FREEBSD)
+#elif defined(TARGET_FREEBSD)||defined(TARGET_DRAGONFLY)
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -1523,8 +1606,8 @@ struct {
 #define ROUNDUP(a) \
         ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 
-static bool
-get_default_gateway (in_addr_t *ret)
+bool
+get_default_gateway (in_addr_t *ret, in_addr_t *netmask)
 {
   struct gc_arena gc = gc_new ();
   int s, seq, l, pid, rtm_addrs, i;
@@ -1604,10 +1687,15 @@ get_default_gateway (in_addr_t *ret)
   if (gate != NULL )
     {
       *ret = ntohl(((struct sockaddr_in *)gate)->sin_addr.s_addr);
-#if 1
+#if 0
       msg (M_INFO, "gw %s",
 	   print_in_addr_t ((in_addr_t) *ret, 0, &gc));
 #endif
+
+      if (netmask)
+	{
+	  *netmask = 0xFFFFFF00; // FIXME -- get the real netmask of the adapter containing the default gateway
+	}
 
       gc_free (&gc);
       return true;
@@ -1680,8 +1768,8 @@ struct {
 #define ROUNDUP(a) \
         ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 
-static bool
-get_default_gateway (in_addr_t *ret)
+bool
+get_default_gateway (in_addr_t *ret, in_addr_t *netmask)
 {
   struct gc_arena gc = gc_new ();
   int s, seq, l, pid, rtm_addrs, i;
@@ -1761,10 +1849,15 @@ get_default_gateway (in_addr_t *ret)
   if (gate != NULL )
     {
       *ret = ntohl(((struct sockaddr_in *)gate)->sin_addr.s_addr);
-#if 1
+#if 0
       msg (M_INFO, "gw %s",
 	   print_in_addr_t ((in_addr_t) *ret, 0, &gc));
 #endif
+
+      if (netmask)
+	{
+	  *netmask = 0xFFFFFF00; // FIXME -- get the real netmask of the adapter containing the default gateway
+	}
 
       gc_free (&gc);
       return true;
@@ -1836,8 +1929,8 @@ struct {
 #define ROUNDUP(a) \
         ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 
-static bool
-get_default_gateway (in_addr_t *ret)
+bool
+get_default_gateway (in_addr_t *ret, in_addr_t *netmask)
 {
   struct gc_arena gc = gc_new ();
   int s, seq, l, rtm_addrs, i;
@@ -1918,10 +2011,15 @@ get_default_gateway (in_addr_t *ret)
   if (gate != NULL )
     {
       *ret = ntohl(((struct sockaddr_in *)gate)->sin_addr.s_addr);
-#if 1
+#if 0
       msg (M_INFO, "gw %s",
 	   print_in_addr_t ((in_addr_t) *ret, 0, &gc));
 #endif
+
+      if (netmask)
+	{
+	  *netmask = 0xFFFFFF00; // FIXME -- get the real netmask of the adapter containing the default gateway
+	}
 
       gc_free (&gc);
       return true;
@@ -1935,8 +2033,8 @@ get_default_gateway (in_addr_t *ret)
 
 #else
 
-static bool
-get_default_gateway (in_addr_t *ret)
+bool
+get_default_gateway (in_addr_t *ret, in_addr_t *netmask)
 {
   return false;
 }
@@ -1978,7 +2076,7 @@ netmask_to_netbits (const in_addr_t network, const in_addr_t netmask, int *netbi
 static void
 add_host_route_if_nonlocal (struct route_bypass *rb, const in_addr_t addr, const IP_ADAPTER_INFO *dgi)
 {
-  if (!is_ip_in_adapter_subnet (dgi, addr, NULL))
+  if (!is_ip_in_adapter_subnet (dgi, addr, NULL) && addr != 0 && addr != ~0)
     add_bypass_address (rb, addr);
 }
 
@@ -2001,7 +2099,7 @@ static void
 get_bypass_addresses (struct route_bypass *rb, const unsigned int flags)
 {
   struct gc_arena gc = gc_new ();
-  bool ret_bool = false;
+  /*bool ret_bool = false;*/
 
   /* get full routing table */
   const MIB_IPFORWARDTABLE *routes = get_windows_routing_table (&gc);
@@ -2054,7 +2152,7 @@ get_default_gateway_mac_addr (unsigned char *macaddr)
   in_addr_t gwip = 0;
   bool ret = false;
 
-  if (!get_default_gateway (&gwip))
+  if (!get_default_gateway (&gwip, NULL))
     {
       msg (M_WARN, "GDGMA: get_default_gateway failed");
       goto err;
@@ -2151,13 +2249,13 @@ get_default_gateway_mac_addr (unsigned char *macaddr)
   DWORD a_index;
   const IP_ADAPTER_INFO *ai;
 
-  if (!get_default_gateway (&gwip))
+  if (!get_default_gateway (&gwip, NULL))
     {
       msg (M_WARN, "GDGMA: get_default_gateway failed");
       goto err;
     }
 
-  a_index = adapter_index_of_ip (adapters, gwip, NULL);
+  a_index = adapter_index_of_ip (adapters, gwip, NULL, NULL);
   ai = get_adapter (adapters, a_index);
 
   if (!ai)

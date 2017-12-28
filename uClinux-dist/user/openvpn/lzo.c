@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -22,15 +22,9 @@
  *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifdef WIN32
-#include "config-win32.h"
-#else
-#include "config.h"
-#endif
+#include "syshead.h"
 
 #ifdef USE_LZO
-
-#include "syshead.h"
 
 #include "lzo.h"
 #include "error.h"
@@ -162,7 +156,13 @@ lzo_compress (struct buffer *buf, struct buffer work,
     {
       ASSERT (buf_init (&work, FRAME_HEADROOM (frame)));
       ASSERT (buf_safe (&work, LZO_EXTRA_BUFFER (PAYLOAD_SIZE (frame))));
-      ASSERT (buf->len <= PAYLOAD_SIZE (frame));
+
+      if (!(buf->len <= PAYLOAD_SIZE (frame)))
+	{
+	  dmsg (D_COMP_ERRORS, "LZO compression buffer overflow");
+	  buf->len = 0;
+	  return;
+	}
 
       err = LZO_COMPRESS (BPTR (buf), BLEN (buf), BPTR (&work), &zlen, lzowork->wmem);
       if (err != LZO_E_OK)

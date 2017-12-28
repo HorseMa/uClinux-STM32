@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -30,15 +30,9 @@
  * over the same TCP/UDP port.
  */
 
-#ifdef WIN32
-#include "config-win32.h"
-#else
-#include "config.h"
-#endif
+#include "syshead.h"
 
 #if defined(USE_CRYPTO) && defined(USE_SSL)
-
-#include "syshead.h"
 
 #include "ssl.h"
 #include "error.h"
@@ -53,6 +47,7 @@
 #include "status.h"
 #include "gremlin.h"
 #include "pkcs11.h"
+#include "list.h"
 
 #ifdef WIN32
 #include "cryptoapi.h"
@@ -349,78 +344,103 @@ tmp_rsa_cb (SSL * s, int is_export, int keylength)
  *
  * Example:
  *
- * /C=US/ST=CO/L=Denver/O=ORG/CN=Test-CA/Email=jim@yonan.net
- *
- * The common name is 'Test-CA'
- */
-static void
-extract_x509_field (const char *x509, const char *field_name, char *out, int size)
-{
-  char field_buf[256];
-  struct buffer x509_buf;
-
-  ASSERT (size > 0);
-  *out = '\0';
-  buf_set_read (&x509_buf, (uint8_t *)x509, strlen (x509));
-  while (buf_parse (&x509_buf, '/', field_buf, sizeof (field_buf)))
-    {
-      struct buffer component_buf;
-      char field_name_buf[64];
-      char field_value_buf[256];
-      buf_set_read (&component_buf, (const uint8_t *) field_buf, strlen (field_buf));
-      buf_parse (&component_buf, '=', field_name_buf, sizeof (field_name_buf));
-      buf_parse (&component_buf, '=', field_value_buf, sizeof (field_value_buf));
-      if (!strcmp (field_name_buf, field_name))
-	{
-	  strncpynt (out, field_value_buf, size);
-	  break;
-	}
-    }
-}
-
-/*
- * Extract a field from an X509 subject name.
- *
- * Example:
- *
  * /C=US/ST=CO/L=Denver/O=ORG/CN=First-CN/CN=Test-CA/Email=jim@yonan.net
  *
  * The common name is 'Test-CA'
+ *
+ * Return true on success, false on error (insufficient buffer size in 'out'
+ * to contain result is grounds for error).
  */
-static void
+static bool
 extract_x509_field_ssl (X509_NAME *x509, const char *field_name, char *out, int size)
 {
   int lastpos = -1;
   int tmp = -1;
   X509_NAME_ENTRY *x509ne = 0;
   ASN1_STRING *asn1 = 0;
-  unsigned char *buf = 0;
-  int nid = OBJ_txt2nid(field_name);
+  unsigned char *buf = (unsigned char *)1; /* bug in OpenSSL 0.9.6b ASN1_STRING_to_UTF8 requires this workaround */
+  int nid = OBJ_txt2nid((char *)field_name);
 
   ASSERT (size > 0);
   *out = '\0';
   do {
     lastpos = tmp;
     tmp = X509_NAME_get_index_by_NID(x509, nid, lastpos);
-  } while (tmp > 0);
+  } while (tmp > -1);
 
   /* Nothing found */
   if (lastpos == -1)
-    return;
+    return false;
 
   x509ne = X509_NAME_get_entry(x509, lastpos);
   if (!x509ne)
-    return;
+    return false;
 
   asn1 = X509_NAME_ENTRY_get_data(x509ne);
   if (!asn1)
-    return;
+    return false;
   tmp = ASN1_STRING_to_UTF8(&buf, asn1);
   if (tmp <= 0)
-    return;
+    return false;
 
   strncpynt(out, (char *)buf, size);
-  OPENSSL_free(buf);
+
+  {
+    const bool ret = (strlen ((char *)buf) < size);
+    OPENSSL_free (buf);
+    return ret;
+  }
+}
+
+/*
+ * Save X509 fields to environment, using the naming convention:
+ *
+ *  X509_{cert_depth}_{name}={value}
+ */
+static void
+setenv_x509 (struct env_set *es, const int error_depth, X509_NAME *x509)
+{
+  int i, n;
+  int fn_nid;
+  ASN1_OBJECT *fn;
+  ASN1_STRING *val;
+  X509_NAME_ENTRY *ent;
+  const char *objbuf;
+  unsigned char *buf;
+  char *name_expand;
+  size_t name_expand_size;
+
+  n = X509_NAME_entry_count (x509);
+  for (i = 0; i < n; ++i)
+    {
+      ent = X509_NAME_get_entry (x509, i);
+      if (!ent)
+	continue;
+      fn = X509_NAME_ENTRY_get_object (ent);
+      if (!fn)
+	continue;
+      val = X509_NAME_ENTRY_get_data (ent);
+      if (!val)
+	continue;
+      fn_nid = OBJ_obj2nid (fn);
+      if (fn_nid == NID_undef)
+	continue;
+      objbuf = OBJ_nid2sn (fn_nid);
+      if (!objbuf)
+	continue;
+      buf = (unsigned char *)1; /* bug in OpenSSL 0.9.6b ASN1_STRING_to_UTF8 requires this workaround */
+      if (ASN1_STRING_to_UTF8 (&buf, val) <= 0)
+	continue;
+      name_expand_size = 64 + strlen (objbuf);
+      name_expand = (char *) malloc (name_expand_size);
+      check_malloc_return (name_expand);
+      openvpn_snprintf (name_expand, name_expand_size, "X509_%d_%s", error_depth, objbuf);
+      string_mod (name_expand, CC_PRINT, CC_CRLF, '_');
+      string_mod ((char*)buf, CC_PRINT, CC_CRLF, '_');
+      setenv_str (es, name_expand, (char*)buf);
+      free (name_expand);
+      OPENSSL_free (buf);
+    }
 }
 
 static void
@@ -436,10 +456,22 @@ set_common_name (struct tls_session *session, const char *common_name)
     {
       free (session->common_name);
       session->common_name = NULL;
+#ifdef ENABLE_PF
+      session->common_name_hashval = 0;
+#endif
     }
   if (common_name)
     {
       session->common_name = string_alloc (common_name, NULL);
+#ifdef ENABLE_PF
+      {
+	const uint32_t len = (uint32_t) strlen (common_name);
+	if (len)
+	  session->common_name_hashval = hash_func ((const uint8_t*)common_name, len+1, 0);
+	else
+	  session->common_name_hashval = 0;
+      }
+#endif
     }
 }
 
@@ -548,6 +580,15 @@ print_nsCertType (int type)
     }
 }
 
+static void
+string_mod_sslname (char *str, const unsigned int restrictive_flags, const unsigned int ssl_flags)
+{
+  if (ssl_flags & SSLF_NO_NAME_REMAPPING)
+    string_mod (str, CC_PRINT, CC_CRLF, '_');
+  else
+    string_mod (str, restrictive_flags, 0, '_');
+}
+
 /*
  * Our verify callback function -- check
  * that an incoming peer certificate is good.
@@ -556,13 +597,14 @@ print_nsCertType (int type)
 static int
 verify_callback (int preverify_ok, X509_STORE_CTX * ctx)
 {
-  char subject[256];
+  char *subject = NULL;
   char envname[64];
   char common_name[TLS_CN_LEN];
   SSL *ssl;
   struct tls_session *session;
   const struct tls_options *opt;
   const int max_depth = 8;
+  struct argv argv = argv_new ();
 
   /* get the tls_session pointer */
   ssl = X509_STORE_CTX_get_ex_data (ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
@@ -575,17 +617,33 @@ verify_callback (int preverify_ok, X509_STORE_CTX * ctx)
   session->verified = false;
 
   /* get the X509 name */
-  X509_NAME_oneline (X509_get_subject_name (ctx->current_cert), subject,
-		     sizeof (subject));
-  subject[sizeof (subject) - 1] = '\0';
+  subject = X509_NAME_oneline (X509_get_subject_name (ctx->current_cert), NULL, 0);
+  if (!subject)
+    {
+      msg (D_TLS_ERRORS, "VERIFY ERROR: depth=%d, could not extract X509 subject string from certificate", ctx->error_depth);
+      goto err;
+    }
+
+  /* Save X509 fields in environment */
+  setenv_x509 (opt->es, ctx->error_depth, X509_get_subject_name (ctx->current_cert));
 
   /* enforce character class restrictions in X509 name */
-  string_mod (subject, X509_NAME_CHAR_CLASS, 0, '_');
+  string_mod_sslname (subject, X509_NAME_CHAR_CLASS, opt->ssl_flags);
+  string_replace_leading (subject, '-', '_');
 
   /* extract the common name */
-  extract_x509_field_ssl (X509_get_subject_name (ctx->current_cert), "CN", common_name, TLS_CN_LEN);
-  //extract_x509_field (subject, "CN", common_name, TLS_CN_LEN);
-  string_mod (common_name, COMMON_NAME_CHAR_CLASS, 0, '_');
+  if (!extract_x509_field_ssl (X509_get_subject_name (ctx->current_cert), "CN", common_name, TLS_CN_LEN))
+    {
+      if (!ctx->error_depth)
+	{
+	  msg (D_TLS_ERRORS, "VERIFY ERROR: could not extract Common Name from X509 subject string ('%s') -- note that the Common Name length is limited to %d characters",
+	       subject,
+	       TLS_CN_LEN);
+	  goto err;
+	}
+    }
+
+  string_mod_sslname (common_name, COMMON_NAME_CHAR_CLASS, opt->ssl_flags);
 
 #if 0 /* print some debugging info */
   msg (D_LOW, "LOCAL OPT: %s", opt->local_options);
@@ -695,18 +753,15 @@ verify_callback (int preverify_ok, X509_STORE_CTX * ctx)
   /* call --tls-verify plug-in(s) */
   if (plugin_defined (opt->plugins, OPENVPN_PLUGIN_TLS_VERIFY))
     {
-      char command[256];
-      struct buffer out;
       int ret;
 
-      buf_set_write (&out, (uint8_t*)command, sizeof (command));
-      buf_printf (&out, "%d %s",
-		  ctx->error_depth,
-		  subject);
+      argv_printf (&argv, "%d %s",
+		   ctx->error_depth,
+		   subject);
 
-      ret = plugin_call (opt->plugins, OPENVPN_PLUGIN_TLS_VERIFY, command, NULL, opt->es);
+      ret = plugin_call (opt->plugins, OPENVPN_PLUGIN_TLS_VERIFY, &argv, NULL, opt->es);
 
-      if (!ret)
+      if (ret == OPENVPN_PLUGIN_FUNC_SUCCESS)
 	{
 	  msg (D_HANDSHAKE, "VERIFY PLUGIN OK: depth=%d, %s",
 	       ctx->error_depth, subject);
@@ -722,19 +777,16 @@ verify_callback (int preverify_ok, X509_STORE_CTX * ctx)
   /* run --tls-verify script */
   if (opt->verify_command)
     {
-      char command[256];
-      struct buffer out;
       int ret;
 
       setenv_str (opt->es, "script_type", "tls-verify");
 
-      buf_set_write (&out, (uint8_t*)command, sizeof (command));
-      buf_printf (&out, "%s %d %s",
-		  opt->verify_command,
-		  ctx->error_depth,
-		  subject);
-      dmsg (D_TLS_DEBUG, "TLS: executing verify command: %s", command);
-      ret = openvpn_system (command, opt->es, S_SCRIPT);
+      argv_printf (&argv, "%sc %d %s",
+		   opt->verify_command,
+		   ctx->error_depth,
+		   subject);
+      argv_msg_prefix (D_TLS_DEBUG, &argv, "TLS: executing verify command");
+      ret = openvpn_execve (&argv, opt->es, S_SCRIPT);
 
       if (system_ok (ret))
 	{
@@ -744,7 +796,7 @@ verify_callback (int preverify_ok, X509_STORE_CTX * ctx)
       else
 	{
 	  if (!system_executed (ret))
-	    msg (M_ERR, "Verify command failed to execute: %s", command);
+	    argv_msg_prefix (M_ERR, &argv, "Verify command failed to execute");
 	  msg (D_HANDSHAKE, "VERIFY SCRIPT ERROR: depth=%d, %s",
 	       ctx->error_depth, subject);
 	  goto err;		/* Reject connection */
@@ -806,10 +858,14 @@ verify_callback (int preverify_ok, X509_STORE_CTX * ctx)
   msg (D_HANDSHAKE, "VERIFY OK: depth=%d, %s", ctx->error_depth, subject);
 
   session->verified = true;
+  free (subject);
+  argv_reset (&argv);
   return 1;			/* Accept connection */
 
  err:
   ERR_clear_error ();
+  free (subject);
+  argv_reset (&argv);
   return 0;                     /* Reject connection */
 }
 
@@ -821,7 +877,7 @@ tls_set_common_name (struct tls_multi *multi, const char *common_name)
 }
 
 const char *
-tls_common_name (struct tls_multi *multi, bool null)
+tls_common_name (const struct tls_multi *multi, const bool null)
 {
   const char *ret = NULL;
   if (multi)
@@ -842,35 +898,204 @@ tls_lock_common_name (struct tls_multi *multi)
     multi->locked_cn = string_alloc (cn, NULL);
 }
 
-/*
- * Return true if at least one valid key state exists
- * which has passed authentication.  If we are using
- * username/password authentication, and the authentication
- * failed, we may have a live S_ACTIVE/S_NORMAL key state
- * even though the 'authenticated' var might be false.
- *
- * This is so that we can return an AUTH_FAILED error
- * message to the client over the TLS channel.
- *
- * If 'authenticated' is false, tunnel traffic forwarding
- * is disabled but TLS channel data can still be sent
- * or received.
- */
-bool
-tls_authenticated (struct tls_multi *multi)
+#ifdef ENABLE_DEF_AUTH
+/* key_state_test_auth_control_file return values,
+   NOTE: acf_merge indexing depends on these values */
+#define ACF_UNDEFINED 0
+#define ACF_SUCCEEDED 1
+#define ACF_DISABLED  2
+#define ACF_FAILED    3
+#endif
+
+#ifdef MANAGEMENT_DEF_AUTH
+static inline unsigned int
+man_def_auth_test (const struct key_state *ks)
 {
+  if (management_enable_def_auth (management))
+    return ks->mda_status;
+  else
+    return ACF_DISABLED;
+}
+#endif
+
+#ifdef PLUGIN_DEF_AUTH
+
+/*
+ * auth_control_file functions
+ */
+
+static void
+key_state_rm_auth_control_file (struct key_state *ks)
+{
+  if (ks && ks->auth_control_file)
+    {
+      delete_file (ks->auth_control_file);
+      free (ks->auth_control_file);
+      ks->auth_control_file = NULL;
+    }
+}
+
+static void
+key_state_gen_auth_control_file (struct key_state *ks, const struct tls_options *opt)
+{
+  struct gc_arena gc = gc_new ();
+  const char *acf;
+
+  key_state_rm_auth_control_file (ks);
+  acf = create_temp_filename (opt->tmp_dir, "acf", &gc);
+  ks->auth_control_file = string_alloc (acf, NULL);
+  setenv_str (opt->es, "auth_control_file", ks->auth_control_file);
+
+  gc_free (&gc);					  
+}
+
+static unsigned int
+key_state_test_auth_control_file (struct key_state *ks)
+{
+  if (ks && ks->auth_control_file)
+    {
+      unsigned int ret = ks->auth_control_status;
+      if (ret == ACF_UNDEFINED)
+	{
+	  FILE *fp = fopen (ks->auth_control_file, "r");
+	  if (fp)
+	    {
+	      const int c = fgetc (fp);
+	      if (c == '1')
+		ret = ACF_SUCCEEDED;
+	      else if (c == '0')
+		ret = ACF_FAILED;
+	      fclose (fp);
+	      ks->auth_control_status = ret;
+	    }
+	}
+      return ret;
+    }
+  return ACF_DISABLED;
+}
+
+#endif
+
+/*
+ * Return current session authentication state.  Return
+ * value is TLS_AUTHENTICATION_x.
+ */
+
+int
+tls_authentication_status (struct tls_multi *multi, const int latency)
+{
+  bool deferred = false;
+  bool success = false;
+  bool active = false;
+
+#ifdef ENABLE_DEF_AUTH
+  static const unsigned char acf_merge[] =
+    {
+      ACF_UNDEFINED, /* s1=ACF_UNDEFINED s2=ACF_UNDEFINED */
+      ACF_UNDEFINED, /* s1=ACF_UNDEFINED s2=ACF_SUCCEEDED */
+      ACF_UNDEFINED, /* s1=ACF_UNDEFINED s2=ACF_DISABLED */
+      ACF_FAILED,    /* s1=ACF_UNDEFINED s2=ACF_FAILED */
+      ACF_UNDEFINED, /* s1=ACF_SUCCEEDED s2=ACF_UNDEFINED */
+      ACF_SUCCEEDED, /* s1=ACF_SUCCEEDED s2=ACF_SUCCEEDED */
+      ACF_SUCCEEDED, /* s1=ACF_SUCCEEDED s2=ACF_DISABLED */
+      ACF_FAILED,    /* s1=ACF_SUCCEEDED s2=ACF_FAILED */
+      ACF_UNDEFINED, /* s1=ACF_DISABLED  s2=ACF_UNDEFINED */
+      ACF_SUCCEEDED, /* s1=ACF_DISABLED  s2=ACF_SUCCEEDED */
+      ACF_DISABLED,  /* s1=ACF_DISABLED  s2=ACF_DISABLED */
+      ACF_FAILED,    /* s1=ACF_DISABLED  s2=ACF_FAILED */
+      ACF_FAILED,    /* s1=ACF_FAILED    s2=ACF_UNDEFINED */
+      ACF_FAILED,    /* s1=ACF_FAILED    s2=ACF_SUCCEEDED */
+      ACF_FAILED,    /* s1=ACF_FAILED    s2=ACF_DISABLED */
+      ACF_FAILED     /* s1=ACF_FAILED    s2=ACF_FAILED */
+    };
+#endif
+
+  if (multi)
+    {
+      int i;
+
+#ifdef ENABLE_DEF_AUTH
+      if (latency && multi->tas_last && multi->tas_last + latency >= now)
+	return TLS_AUTHENTICATION_UNDEFINED;
+      multi->tas_last = now;
+#endif
+
+      for (i = 0; i < KEY_SCAN_SIZE; ++i)
+	{
+	  struct key_state *ks = multi->key_scan[i];
+	  if (DECRYPT_KEY_ENABLED (multi, ks))
+	    {
+	      active = true;
+	      if (ks->authenticated)
+		{
+#ifdef ENABLE_DEF_AUTH
+		  unsigned int s1 = ACF_DISABLED;
+		  unsigned int s2 = ACF_DISABLED;
+#ifdef PLUGIN_DEF_AUTH
+		  s1 = key_state_test_auth_control_file (ks); 
+#endif
+#ifdef MANAGEMENT_DEF_AUTH
+		  s2 = man_def_auth_test (ks);
+#endif
+		  ASSERT (s1 < 4 && s2 < 4);
+		  switch (acf_merge[(s1<<2) + s2])
+		    {
+		    case ACF_SUCCEEDED:
+		    case ACF_DISABLED:
+		      success = true;
+		      ks->auth_deferred = false;
+		      break;
+		    case ACF_UNDEFINED:
+		      if (now < ks->auth_deferred_expire)
+			deferred = true;
+		      break;
+		    case ACF_FAILED:
+		      ks->authenticated = false;
+		      break;
+		    default:
+		      ASSERT (0);
+		    }
+#else
+		  success = true;
+#endif
+		}
+	    }
+	}
+    }
+
+#if 0
+  dmsg (D_TLS_ERRORS, "TAS: a=%d s=%d d=%d", active, success, deferred);
+#endif
+
+  if (success)
+    return TLS_AUTHENTICATION_SUCCEEDED;
+  else if (!active || deferred)
+    return TLS_AUTHENTICATION_DEFERRED;
+  else
+    return TLS_AUTHENTICATION_FAILED;
+}
+
+#ifdef MANAGEMENT_DEF_AUTH
+bool
+tls_authenticate_key (struct tls_multi *multi, const unsigned int mda_key_id, const bool auth)
+{
+  bool ret = false;
   if (multi)
     {
       int i;
       for (i = 0; i < KEY_SCAN_SIZE; ++i)
 	{
-	  const struct key_state *ks = multi->key_scan[i];
-	  if (DECRYPT_KEY_ENABLED (multi, ks) && ks->authenticated)
-	    return true;
+	  struct key_state *ks = multi->key_scan[i];
+	  if (ks->mda_key_id == mda_key_id)
+	    {
+	      ks->mda_status = auth ? ACF_SUCCEEDED : ACF_FAILED;
+	      ret = true;
+	    }
 	}
     }
-  return false;
+  return ret;
 }
+#endif
 
 void
 tls_deauthenticate (struct tls_multi *multi)
@@ -1200,7 +1425,7 @@ init_ssl (const struct options *options)
       if (options->pkcs11_providers[0])
         {
          /* Load Certificate and Private Key */
-	 if (!SSL_CTX_use_pkcs11 (ctx, options->pkcs11_id))
+	 if (!SSL_CTX_use_pkcs11 (ctx, options->pkcs11_id_management, options->pkcs11_id))
 	   {
 	     msg (M_WARN, "Cannot load certificate \"%s\" using PKCS#11 interface", options->pkcs11_id);
 	     goto err;
@@ -1339,9 +1564,9 @@ init_ssl (const struct options *options)
 
   /* Require peer certificate verification */
 #if P2MP_SERVER
-  if (options->client_cert_not_required)
+  if (options->ssl_flags & SSLF_CLIENT_CERT_NOT_REQUIRED)
     {
-      msg (M_WARN, "WARNING: This configuration may accept clients which do not present a certificate");
+      msg (M_WARN, "WARNING: POTENTIALLY DANGEROUS OPTION --client-cert-not-required may accept clients which do not present a certificate");
     }
   else
 #endif
@@ -1859,6 +2084,10 @@ key_state_init (struct tls_session *session, struct key_state *ks)
   packet_id_init (&ks->packet_id,
 		  session->opt->replay_window,
 		  session->opt->replay_time);
+
+#ifdef MANAGEMENT_DEF_AUTH
+  ks->mda_key_id = session->opt->mda_context->mda_key_id_counter++;
+#endif
 }
 
 static void
@@ -1900,6 +2129,10 @@ key_state_free (struct key_state *ks, bool clear)
     free (ks->key_src);
 
   packet_id_free (&ks->packet_id);
+
+#ifdef PLUGIN_DEF_AUTH
+  key_state_rm_auth_control_file (ks);
+#endif
 
   if (clear)
     CLEAR (*ks);
@@ -2728,13 +2961,13 @@ static bool
 verify_user_pass_script (struct tls_session *session, const struct user_pass *up)
 {
   struct gc_arena gc = gc_new ();
-  struct buffer cmd = alloc_buf_gc (256, &gc);
+  struct argv argv = argv_new ();
   const char *tmp_file = "";
   int retval;
   bool ret = false;
 
   /* Is username defined? */
-  if (strlen (up->username))
+  if ((session->opt->ssl_flags & SSLF_AUTH_USER_PASS_OPTIONAL) || strlen (up->username))
     {
       /* Set environmental variables prior to calling script */
       setenv_str (session->opt->es, "script_type", "user-pass-verify");
@@ -2743,7 +2976,7 @@ verify_user_pass_script (struct tls_session *session, const struct user_pass *up
 	{
 	  struct status_output *so;
 
-	  tmp_file = create_temp_filename (session->opt->tmp_dir, &gc);
+	  tmp_file = create_temp_filename (session->opt->tmp_dir, "up", &gc);
 	  so = status_open (tmp_file, 0, -1, NULL, STATUS_OUTPUT_WRITE);
 	  status_printf (so, "%s", up->username);
 	  status_printf (so, "%s", up->password);
@@ -2767,16 +3000,16 @@ verify_user_pass_script (struct tls_session *session, const struct user_pass *up
       setenv_untrusted (session);
 
       /* format command line */
-      buf_printf (&cmd, "%s %s", session->opt->auth_user_pass_verify_script, tmp_file);
+      argv_printf (&argv, "%sc %s", session->opt->auth_user_pass_verify_script, tmp_file);
       
       /* call command */
-      retval = openvpn_system (BSTR (&cmd), session->opt->es, S_SCRIPT);
+      retval = openvpn_execve (&argv, session->opt->es, S_SCRIPT);
 
       /* test return status of command */
       if (system_ok (retval))
 	ret = true;
       else if (!system_executed (retval))
-	msg (D_TLS_ERRORS, "TLS Auth Error: user-pass-verify script failed to execute: %s", BSTR (&cmd));
+	argv_msg_prefix (D_TLS_ERRORS, &argv, "TLS Auth Error: user-pass-verify script failed to execute");
 	  
       if (!session->opt->auth_user_pass_verify_script_via_file)
 	setenv_del (session->opt->es, "password");
@@ -2790,18 +3023,18 @@ verify_user_pass_script (struct tls_session *session, const struct user_pass *up
   if (strlen (tmp_file) > 0)
     delete_file (tmp_file);
 
+  argv_reset (&argv);
   gc_free (&gc);
   return ret;
 }
 
-static bool
+static int
 verify_user_pass_plugin (struct tls_session *session, const struct user_pass *up, const char *raw_username)
 {
-  int retval;
-  bool ret = false;
+  int retval = OPENVPN_PLUGIN_FUNC_ERROR;
 
   /* Is username defined? */
-  if (strlen (up->username))
+  if ((session->opt->ssl_flags & SSLF_AUTH_USER_PASS_OPTIONAL) || strlen (up->username))
     {
       /* set username/password in private env space */
       setenv_str (session->opt->es, "username", raw_username);
@@ -2813,22 +3046,74 @@ verify_user_pass_plugin (struct tls_session *session, const struct user_pass *up
       /* setenv client real IP address */
       setenv_untrusted (session);
 
+#ifdef PLUGIN_DEF_AUTH
+      /* generate filename for deferred auth control file */
+      key_state_gen_auth_control_file (ks, session->opt);
+#endif
+
       /* call command */
       retval = plugin_call (session->opt->plugins, OPENVPN_PLUGIN_AUTH_USER_PASS_VERIFY, NULL, NULL, session->opt->es);
 
-      if (!retval)
-	ret = true;
+#ifdef PLUGIN_DEF_AUTH
+      /* purge auth control filename (and file itself) for non-deferred returns */
+      if (retval != OPENVPN_PLUGIN_FUNC_DEFERRED)
+	key_state_rm_auth_control_file (ks);
+#endif
 
       setenv_del (session->opt->es, "password");
       setenv_str (session->opt->es, "username", up->username);
     }
   else
     {
-      msg (D_TLS_ERRORS, "TLS Auth Error: peer provided a blank username");
+      msg (D_TLS_ERRORS, "TLS Auth Error (verify_user_pass_plugin): peer provided a blank username");
     }
 
-  return ret;
+  return retval;
 }
+
+/*
+ * MANAGEMENT_DEF_AUTH internal ssl.c status codes
+ */
+#define KMDA_ERROR   0
+#define KMDA_SUCCESS 1
+#define KMDA_UNDEF   2
+#define KMDA_DEF     3
+
+#ifdef MANAGEMENT_DEF_AUTH
+static int
+verify_user_pass_management (struct tls_session *session, const struct user_pass *up, const char *raw_username)
+{
+  int retval = KMDA_ERROR;
+
+  /* Is username defined? */
+  if ((session->opt->ssl_flags & SSLF_AUTH_USER_PASS_OPTIONAL) || strlen (up->username))
+    {
+      /* set username/password in private env space */
+      setenv_str (session->opt->es, "username", raw_username);
+      setenv_str (session->opt->es, "password", up->password);
+
+      /* setenv incoming cert common name for script */
+      setenv_str (session->opt->es, "common_name", session->common_name);
+
+      /* setenv client real IP address */
+      setenv_untrusted (session);
+
+      if (management)
+	management_notify_client_needing_auth (management, ks->mda_key_id, session->opt->mda_context, session->opt->es);
+
+      setenv_del (session->opt->es, "password");
+      setenv_str (session->opt->es, "username", up->username);
+
+      retval = KMDA_SUCCESS;
+    }
+  else
+    {
+      msg (D_TLS_ERRORS, "TLS Auth Error (verify_user_pass_management): peer provided a blank username");
+    }
+
+  return retval;
+}
+#endif
 
 /*
  * Handle the reading and writing of key data to and from
@@ -3006,6 +3291,13 @@ key_method_2_read (struct buffer *buf, struct tls_multi *multi, struct tls_sessi
   char *options;
   struct user_pass *up;
 
+  bool man_def_auth = KMDA_UNDEF;
+
+#ifdef MANAGEMENT_DEF_AUTH
+  if (management_enable_def_auth (management))
+    man_def_auth = KMDA_DEF;
+#endif
+
   ASSERT (session->opt->key_method == 2);
 
   /* allocate temporary objects */
@@ -3041,9 +3333,10 @@ key_method_2_read (struct buffer *buf, struct tls_multi *multi, struct tls_sessi
   /* should we check username/password? */
   ks->authenticated = false;
   if (session->opt->auth_user_pass_verify_script
-      || plugin_defined (session->opt->plugins, OPENVPN_PLUGIN_AUTH_USER_PASS_VERIFY))
+      || plugin_defined (session->opt->plugins, OPENVPN_PLUGIN_AUTH_USER_PASS_VERIFY)
+      || man_def_auth == KMDA_DEF)
     {
-      bool s1 = true;
+      int s1 = OPENVPN_PLUGIN_FUNC_SUCCESS;
       bool s2 = true;
       char *raw_username;
 
@@ -3052,9 +3345,12 @@ key_method_2_read (struct buffer *buf, struct tls_multi *multi, struct tls_sessi
       if (!read_string (buf, up->username, USER_PASS_LEN)
 	  || !read_string (buf, up->password, USER_PASS_LEN))
 	{
-	  msg (D_TLS_ERRORS, "TLS Error: Auth Username/Password was not provided by peer");
 	  CLEAR (*up);
-	  goto error;
+	  if (!(session->opt->ssl_flags & SSLF_AUTH_USER_PASS_OPTIONAL))
+	    {
+	      msg (D_TLS_ERRORS, "TLS Error: Auth Username/Password was not provided by peer");
+	      goto error;
+	    }
 	}
 
       /* preserve raw username before string_mod remapping, for plugins */
@@ -3063,24 +3359,53 @@ key_method_2_read (struct buffer *buf, struct tls_multi *multi, struct tls_sessi
       string_mod (raw_username, CC_PRINT, CC_CRLF, '_');
 
       /* enforce character class restrictions in username/password */
-      string_mod (up->username, COMMON_NAME_CHAR_CLASS, 0, '_');
+      string_mod_sslname (up->username, COMMON_NAME_CHAR_CLASS, session->opt->ssl_flags);
       string_mod (up->password, CC_PRINT, CC_CRLF, '_');
 
       /* call plugin(s) and/or script */
+#ifdef MANAGEMENT_DEF_AUTH
+      if (man_def_auth == KMDA_DEF)
+	man_def_auth = verify_user_pass_management (session, up, raw_username);
+#endif
       if (plugin_defined (session->opt->plugins, OPENVPN_PLUGIN_AUTH_USER_PASS_VERIFY))
 	s1 = verify_user_pass_plugin (session, up, raw_username);
       if (session->opt->auth_user_pass_verify_script)
 	s2 = verify_user_pass_script (session, up);
-      
+
+      /* check sizing of username if it will become our common name */
+      if ((session->opt->ssl_flags & SSLF_USERNAME_AS_COMMON_NAME) && strlen (up->username) >= TLS_CN_LEN)
+	{
+	  msg (D_TLS_ERRORS, "TLS Auth Error: --username-as-common name specified and username is longer than the maximum permitted Common Name length of %d characters", TLS_CN_LEN);
+	  s1 = OPENVPN_PLUGIN_FUNC_ERROR;
+	}
+
       /* auth succeeded? */
-      if (s1 && s2)
+      if ((s1 == OPENVPN_PLUGIN_FUNC_SUCCESS
+#ifdef PLUGIN_DEF_AUTH
+	   || s1 == OPENVPN_PLUGIN_FUNC_DEFERRED
+#endif
+	   ) && s2 && man_def_auth != KMDA_ERROR)
 	{
 	  ks->authenticated = true;
-	  if (session->opt->username_as_common_name)
+#ifdef PLUGIN_DEF_AUTH
+	  if (s1 == OPENVPN_PLUGIN_FUNC_DEFERRED)
+	    ks->auth_deferred = true;
+#endif
+#ifdef MANAGEMENT_DEF_AUTH
+	  if (man_def_auth != KMDA_UNDEF)
+	    ks->auth_deferred = true;
+#endif
+	    
+	  if ((session->opt->ssl_flags & SSLF_USERNAME_AS_COMMON_NAME))
 	    set_common_name (session, up->username);
-	  msg (D_HANDSHAKE, "TLS: Username/Password authentication succeeded for username '%s' %s",
+	  msg (D_HANDSHAKE, "TLS: Username/Password authentication %s for username '%s' %s",
+#ifdef ENABLE_DEF_AUTH
+	       ks->auth_deferred ? "deferred" : "succeeded",
+#else
+	       "succeeded",
+#endif
 	       up->username,
-	       session->opt->username_as_common_name ? "[CN SET]" : "");
+	       (session->opt->ssl_flags & SSLF_USERNAME_AS_COMMON_NAME) ? "[CN SET]" : "");
 	}
       else
 	{
@@ -3140,6 +3465,11 @@ key_method_2_read (struct buffer *buf, struct tls_multi *multi, struct tls_sessi
       !options_cmp_equal (options, session->opt->remote_options))
     {
       options_warning (options, session->opt->remote_options);
+      if (session->opt->ssl_flags & SSLF_OPT_VERIFY)
+	{
+	  msg (D_TLS_ERRORS, "Option inconsistency warnings triggering disconnect due to --opt-verify");
+	  ks->authenticated = false;
+	}
     }
 #endif
 
@@ -3151,7 +3481,7 @@ key_method_2_read (struct buffer *buf, struct tls_multi *multi, struct tls_sessi
    */
   if (ks->authenticated && plugin_defined (session->opt->plugins, OPENVPN_PLUGIN_TLS_FINAL))
     {
-      if (plugin_call (session->opt->plugins, OPENVPN_PLUGIN_TLS_FINAL, NULL, NULL, session->opt->es))
+      if (plugin_call (session->opt->plugins, OPENVPN_PLUGIN_TLS_FINAL, NULL, NULL, session->opt->es) != OPENVPN_PLUGIN_FUNC_SUCCESS)
 	ks->authenticated = false;
     }
 
@@ -3182,6 +3512,14 @@ key_method_2_read (struct buffer *buf, struct tls_multi *multi, struct tls_sessi
   buf_clear (buf);
   gc_free (&gc);
   return false;
+}
+
+static int
+auth_deferred_expire_window (const struct tls_options *o)
+{
+  const int hw = o->handshake_window;
+  const int r2 = o->renegotiate_seconds / 2;
+  return min_int (hw, r2);
 }
 
 /*
@@ -3265,6 +3603,7 @@ tls_process (struct tls_multi *multi,
 	      if (buf)
 		{
 		  ks->must_negotiate = now + session->opt->handshake_window;
+		  ks->auth_deferred_expire = now + auth_deferred_expire_window (session->opt);
 
 		  /* null buffer */
 		  reliable_mark_active_outgoing (ks->send_reliable, buf, ks->initial_opcode);
@@ -3589,7 +3928,7 @@ error:
  * the active or untrusted sessions.
  */
 
-bool
+int
 tls_multi_process (struct tls_multi *multi,
 		   struct buffer *to_link,
 		   struct link_socket_actual **to_link_addr,
@@ -3598,8 +3937,9 @@ tls_multi_process (struct tls_multi *multi,
 {
   struct gc_arena gc = gc_new ();
   int i;
-  bool active = false;
+  int active = TLSMP_INACTIVE;
   bool error = false;
+  int tas;
 
   perf_push (PERF_TLS_MULTI_PROCESS);
 
@@ -3637,7 +3977,7 @@ tls_multi_process (struct tls_multi *multi,
 
 	  if (tls_process (multi, session, to_link, &tla,
 			   to_link_socket_info, wakeup))
-	    active = true;
+	    active = TLSMP_ACTIVE;
 
 	  /*
 	   * If tls_process produced an outgoing packet,
@@ -3676,6 +4016,8 @@ tls_multi_process (struct tls_multi *multi,
 
   update_time ();
 
+  tas = tls_authentication_status (multi, TLS_MULTI_AUTH_STATUS_INTERVAL);
+
   /*
    * If lame duck session expires, kill it.
    */
@@ -3696,7 +4038,7 @@ tls_multi_process (struct tls_multi *multi,
   if (DECRYPT_KEY_ENABLED (multi, &multi->session[TM_UNTRUSTED].key[KS_PRIMARY])) {
     move_session (multi, TM_ACTIVE, TM_UNTRUSTED, true);
     msg (D_TLS_DEBUG_LOW, "TLS: tls_multi_process: untrusted session promoted to %strusted",
-	 tls_authenticated (multi) ? "" : "semi-");
+	 tas == TLS_AUTHENTICATION_SUCCEEDED ? "" : "semi-");
   }
 
   /*
@@ -3734,7 +4076,8 @@ tls_multi_process (struct tls_multi *multi,
 
   perf_pop ();
   gc_free (&gc);
-  return active;
+
+  return (tas == TLS_AUTHENTICATION_FAILED) ? TLSMP_KILL : active;
 }
 
 /*
@@ -3811,6 +4154,9 @@ tls_pre_decrypt (struct tls_multi *multi,
 	      if (DECRYPT_KEY_ENABLED (multi, ks)
 		  && key_id == ks->key_id
 		  && ks->authenticated
+#ifdef ENABLE_DEF_AUTH
+		  && !ks->auth_deferred
+#endif
 		  && link_socket_actual_match (from, &ks->remote_addr))
 		{
 		  /* return appropriate data channel decrypt key in opt */
@@ -3822,8 +4168,8 @@ tls_pre_decrypt (struct tls_multi *multi,
 		  ASSERT (buf_advance (buf, 1));
 		  ++ks->n_packets;
 		  ks->n_bytes += buf->len;
-		  dmsg (D_TLS_DEBUG,
-		       "TLS: data channel, key_id=%d, IP=%s",
+		  dmsg (D_TLS_KEYSELECT,
+		       "TLS: tls_pre_decrypt, key_id=%d, IP=%s",
 		       key_id, print_link_socket_actual (from, &gc));
 		  gc_free (&gc);
 		  return ret;
@@ -3831,13 +4177,18 @@ tls_pre_decrypt (struct tls_multi *multi,
 #if 0 /* keys out of sync? */
 	      else
 		{
-		  dmsg (D_TLS_DEBUG, "TLS_PRE_DECRYPT: [%d] dken=%d rkid=%d lkid=%d auth=%d match=%d",
-		       i,
-		       DECRYPT_KEY_ENABLED (multi, ks),
-		       key_id,
-		       ks->key_id,
-		       ks->authenticated,
-		       link_socket_actual_match (from, &ks->remote_addr));
+		  dmsg (D_TLS_ERRORS, "TLS_PRE_DECRYPT: [%d] dken=%d rkid=%d lkid=%d auth=%d def=%d match=%d",
+			i,
+			DECRYPT_KEY_ENABLED (multi, ks),
+			key_id,
+			ks->key_id,
+			ks->authenticated,
+#ifdef ENABLE_DEF_AUTH
+			ks->auth_deferred,
+#else
+			-1,
+#endif
+			link_socket_actual_match (from, &ks->remote_addr));
 		}
 #endif
 	    }
@@ -3845,7 +4196,7 @@ tls_pre_decrypt (struct tls_multi *multi,
 	  msg (D_TLS_ERRORS,
 	       "TLS Error: local/remote TLS keys are out of sync: %s [%d]",
 	       print_link_socket_actual (from, &gc), key_id);
-	  goto error;
+	  goto error_lite;
 	}
       else			  /* control channel packet */
 	{
@@ -4198,8 +4549,9 @@ tls_pre_decrypt (struct tls_multi *multi,
   return ret;
 
  error:
-  ERR_clear_error ();
   ++multi->n_soft_errors;
+ error_lite:
+  ERR_clear_error ();
   goto done;
 }
 
@@ -4324,28 +4676,45 @@ tls_pre_encrypt (struct tls_multi *multi,
   if (buf->len > 0)
     {
       int i;
+      struct key_state *ks_select = NULL;
       for (i = 0; i < KEY_SCAN_SIZE; ++i)
 	{
 	  struct key_state *ks = multi->key_scan[i];
-	  if (ks->state >= S_ACTIVE && ks->authenticated)
+	  if (ks->state >= S_ACTIVE
+	      && ks->authenticated
+#ifdef ENABLE_DEF_AUTH
+	      && !ks->auth_deferred
+#endif
+	      )
 	    {
-	      opt->key_ctx_bi = &ks->key;
-	      opt->packet_id = multi->opt.replay ? &ks->packet_id : NULL;
-	      opt->pid_persist = NULL;
-	      opt->flags &= multi->opt.crypto_flags_and;
-	      opt->flags |= multi->opt.crypto_flags_or;
-	      multi->save_ks = ks;
-	      dmsg (D_TLS_DEBUG, "TLS: tls_pre_encrypt: key_id=%d", ks->key_id);
-	      return;
+	      if (!ks_select)
+		ks_select = ks;
+	      if (now >= ks->auth_deferred_expire)
+		{
+		  ks_select = ks;
+		  break;
+		}
 	    }
 	}
 
-      {
-	struct gc_arena gc = gc_new ();
-	dmsg (D_TLS_NO_SEND_KEY, "TLS Warning: no data channel send key available: %s",
-	     print_key_id (multi, &gc));
-	gc_free (&gc);
-      }
+      if (ks_select)
+	{
+	  opt->key_ctx_bi = &ks_select->key;
+	  opt->packet_id = multi->opt.replay ? &ks_select->packet_id : NULL;
+	  opt->pid_persist = NULL;
+	  opt->flags &= multi->opt.crypto_flags_and;
+	  opt->flags |= multi->opt.crypto_flags_or;
+	  multi->save_ks = ks_select;
+	  dmsg (D_TLS_KEYSELECT, "TLS: tls_pre_encrypt: key_id=%d", ks_select->key_id);
+	  return;
+	}
+      else
+	{
+	  struct gc_arena gc = gc_new ();
+	  dmsg (D_TLS_KEYSELECT, "TLS Warning: no data channel send key available: %s",
+		print_key_id (multi, &gc));
+	  gc_free (&gc);
+	}
     }
 
   buf->len = 0;
@@ -4530,25 +4899,6 @@ print_data:
 done:
   return BSTR (&out);
 }
-
-#ifdef EXTRACT_X509_FIELD_TEST
-
-void
-extract_x509_field_test (void)
-{
-  char line[8];
-  char field[4];
-  static const char field_name[] = "CN";
-
-  while (fgets (line, sizeof (line), stdin))
-    {
-      chomp (line);
-      extract_x509_field (line, field_name, field, sizeof (field));
-      printf ("CN: '%s'\n", field);
-    }
-}
-
-#endif
 
 #else
 static void dummy(void) {}

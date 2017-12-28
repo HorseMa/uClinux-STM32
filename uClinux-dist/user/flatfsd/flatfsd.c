@@ -106,6 +106,7 @@ static int stopped;
 static int exit_flatfsd;	/* SIGINT, SIGTERM, SIGQUIT */
 static int nowrite;
 static char *configdir = DSTDIR;
+static char *filefs;
 
 static void sigusr1(int signr)
 {
@@ -334,8 +335,10 @@ static pid_t save_config_to_flash(void)
 	return 0;
 #else
 	struct stat st_buf;
-	char fsveropt[64];
+	char fsveropt[16];
+	char *argv[16];
 	pid_t pid;
+	int i = 0;
 
 	if (nowrite)
 		return 0;
@@ -347,10 +350,20 @@ static pid_t save_config_to_flash(void)
 	}
 
 	snprintf(fsveropt, sizeof(fsveropt), "-%d", fsver);
+	argv[i++] = "flatfs";
+	argv[i++] = "-s";
+	argv[i++] = fsveropt;
+	argv[i++] = "-d";
+	argv[i++] = configdir;
+	if (filefs) {
+		argv[i++] = "-f";
+		argv[i++] = filefs;
+	}
+	argv[i++] = (char *) NULL;
+
 	pid = vfork();
 	if (pid == 0) {
-		execlp("flatfs", "flatfs", "-s",
-				fsveropt, "-d", configdir, NULL);
+		execvp(argv[0], argv);
 		_exit(1);
 	}
 	return pid;
@@ -365,6 +378,13 @@ static pid_t save_config_to_flash(void)
 
 static int read_config_from_flash(void)
 {
+#ifdef HAS_RTC
+	time_t bst = BUILD_START_UNIX;
+
+	if (time(NULL) < bst) {
+		stime(&bst);
+	}
+#endif
 #ifdef USING_FLASH_FILESYSTEM
 	return 0;
 #else
@@ -545,13 +565,15 @@ skip_out:
 
 static void usage(int rc)
 {
-	printf("usage: flatfsd [-a|-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-dn1234]\n"
+	printf("usage: flatfsd [-a|-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-n1234] "
+		"[-d <dir>] [-f <file>]\n"
 		"\t-a <action> send a command to the running flatfsd\n"
 		"\t-b safely reboot the system\n"
 		"\t-H safely halt the system\n"
 		"\t-c check that the saved flatfs is valid\n"
 		"\t-d <dir> with -r to read from flash to an alternate filesystem\n"
 		"\t   and -s to save an alternate config to flash\n"
+		"\t-f <file> file or device node for flatfs storage\n"
 		"\t-r read from flash, write to config filesystem\n"
 		"\t-w read from default, write to config filesystem\n"
 		"\t-n with -r or -w, do not write to flash\n"
@@ -653,7 +675,7 @@ int main(int argc, char *argv[])
 	openlog("flatfsd", LOG_PERROR|LOG_PID, LOG_DAEMON);
 
 	action = 0;
-	while ((rc = getopt(argc, argv, "a:vcd:nribwH1234hsS?")) != EOF) {
+	while ((rc = getopt(argc, argv, "a:vcd:f:nribwH1234hsS?")) != EOF) {
 		switch (rc) {
 		case 'a':
 			action = rc;
@@ -667,6 +689,14 @@ int main(int argc, char *argv[])
 			if (access(configdir, R_OK | W_OK) < 0) {
 				printf("%s: directory does not exist or "
 					"is not writeable\n", configdir);
+				exit(1);
+			}
+			break;
+		case 'f':
+			filefs = optarg;
+			if (access(filefs, R_OK | W_OK) < 0) {
+				printf("%s: storage file does not exist or "
+					"is not writeable\n", filefs);
 				exit(1);
 			}
 			break;

@@ -15,13 +15,14 @@
  * WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: getrrset2.c,v 1.2 2004-09-20 18:00:35 mcr Exp $ */
+/* $Id: getrrset2.c,v 1.3 2005/08/05 01:18:29 mcr Exp $ */
 
 #include <config.h>
 
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
 #include <lwres/lwres.h>
 #include <lwres/net.h>
@@ -29,7 +30,7 @@
 
 #include <lwres/async.h>
 
-#include "os_select.h"
+#include "osw_select.h"
 #include "assert_p.h"
 
 int
@@ -42,7 +43,7 @@ lwres_getrrsetbyname_async(const char *hostname, unsigned int rdclass,
 	struct lwres_async_state las;
 	struct lwres_async_state *plas;
 	struct timeval timeout;
-	os_fd_set readfds;
+	osw_fd_set readfds;
 	int    sock;
 
 	ret = lwres_async_init(&ctx);
@@ -64,9 +65,9 @@ lwres_getrrsetbyname_async(const char *hostname, unsigned int rdclass,
 	timeout.tv_sec = lwres_async_timeout(ctx);
 	sock = lwres_async_fd(ctx);
 
-	OS_FD_ZERO(&readfds);
-	OS_FD_SET(sock, &readfds);
-	ret2 = os_select(sock + 1, &readfds, NULL, NULL, &timeout);
+	OSW_FD_ZERO(&readfds);
+	OSW_FD_SET(sock, &readfds);
+	ret2 = osw_select(sock + 1, &readfds, NULL, NULL, &timeout);
 	
 	/*
 	 * What happened with select?

@@ -129,7 +129,12 @@ extern pmd_t empty_bad_pmd_table[PTRS_PER_PMD];
  */
 static inline int pmd_none(pmd_t pmd)
 {
+#ifdef CONFIG_CPU_CAVIUM_OCTEON
+	return (pmd_val(pmd) == (unsigned long) invalid_pte_table) ||
+				(!pmd_val(pmd));
+#else
 	return pmd_val(pmd) == (unsigned long) invalid_pte_table;
+#endif
 }
 
 #define pmd_bad(pmd)		(pmd_val(pmd) & ~PAGE_MASK)

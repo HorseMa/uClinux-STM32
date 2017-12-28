@@ -173,8 +173,6 @@ SECTIONS
 	}
 	__bss_stop = .;
 
-	_end = . ;
-
 	/* Sections to be discarded */
 	/DISCARD/ : {
 		*(.exitcall.exit)
@@ -185,6 +183,8 @@ SECTIONS
 		*(.pdr)
 		*(.reginfo)
 	}
+
+	_end = . ;
 
 	/* These mark the ABI of the kernel for debuggers.  */
 	.mdebug.abi32 : {

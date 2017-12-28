@@ -23,9 +23,6 @@
 
 #undef CONFIG_DEBUG
 
-/* define starting location of user flash on uC5471DSP: */
-char *_image_start = (char *)(0x00020000);
-
 #if defined(CONFIG_UCBOOTSTRAP)
 int	ConTTY = 0;
 static int errno;

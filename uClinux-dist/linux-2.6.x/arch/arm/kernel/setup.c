@@ -117,6 +117,9 @@ static const char *machine_name;
 static char __initdata command_line[COMMAND_LINE_SIZE];
 
 static char default_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
+#ifdef CONFIG_CMDLINE_FORCE
+static char temp_command_line[COMMAND_LINE_SIZE] __initdata;
+#endif
 static union { char c[4]; unsigned long l; } endian_test __initdata = { { 'l', '?', '?', 'b' } };
 #define ENDIANNESS ((char)endian_test.l)
 
@@ -719,7 +722,64 @@ __tagtable(ATAG_REVISION, parse_tag_revision);
 
 static int __init parse_tag_cmdline(const struct tag *tag)
 {
-#ifndef CONFIG_CMDLINE_FORCE
+#ifdef CONFIG_CMDLINE_FORCE
+	char *tc, *tw, *dc, *dw;
+	int append_console = 0;
+
+	/*
+	 * Always allow the "bootload" option to pass through.
+	 */
+	if (strnlen(tag->u.cmdline.cmdline, COMMAND_LINE_SIZE) < COMMAND_LINE_SIZE && strnlen(default_command_line, COMMAND_LINE_SIZE) < COMMAND_LINE_SIZE) {
+
+		if (strstr(tag->u.cmdline.cmdline, "bootload")) {
+
+			/* overwrite hardcoded console with console
+			 * from bootargs if it's present */
+
+			tc = strstr(tag->u.cmdline.cmdline, "console=");
+			dc = strstr(default_command_line, "console=");
+
+			if (tc != NULL) {
+				/* find where the console=blah arg finishes */
+				tw = tc;
+				dw = dc;
+				while (tw && *tw != ' ' && *tw != '\0') tw++;
+				while (dw && *dw != ' ' && *dw != '\0') dw++;
+
+				/* we have console in bootargs 
+				 * want to replace default console setting */
+				if (dc != NULL) {
+					/* find the start of the next arg */
+					while (*dw == ' ' && *dw != '\0') dw++;
+					strlcpy(temp_command_line, dw, 
+						COMMAND_LINE_SIZE);
+					*dc = '\0';
+					strlcat(default_command_line, 
+						temp_command_line, COMMAND_LINE_SIZE);
+				}
+
+				/* setup temp_command_line with the console
+				 * from bootargs */
+				temp_command_line[0] = ' ';
+				strncpy(temp_command_line + 1, tc, tw-tc);
+				(temp_command_line + 1)[tw-tc] = '\0';
+
+				/* and delay adding the console till after
+				 * the bootload argument */
+				append_console = 1;
+
+			}
+
+			strlcat(default_command_line, " bootload", 
+				COMMAND_LINE_SIZE);
+
+			if (append_console) {
+				strlcat(default_command_line, 
+					temp_command_line, COMMAND_LINE_SIZE);
+			}
+		}
+	}
+#else
 	strlcpy(default_command_line, tag->u.cmdline.cmdline, COMMAND_LINE_SIZE);
 #endif
 	return 0;

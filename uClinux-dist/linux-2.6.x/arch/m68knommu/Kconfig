@@ -692,7 +692,9 @@ endchoice
 if COLDFIRE
 source "kernel/Kconfig.preempt"
 endif
+
 source "kernel/time/Kconfig"
+
 source "mm/Kconfig"
 
 endmenu

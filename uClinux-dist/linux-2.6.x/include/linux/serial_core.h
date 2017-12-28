@@ -40,7 +40,8 @@
 #define PORT_NS16550A	14
 #define PORT_XSCALE	15
 #define PORT_RM9000	16	/* PMC-Sierra RM9xxx internal UART */
-#define PORT_MAX_8250	16	/* max port ID */
+#define PORT_OCTEON	17	/* Cavium OCTEON internal UART */
+#define PORT_MAX_8250	17	/* max port ID */
 
 /*
  * ARM specific type numbers.  These are not currently guaranteed
@@ -149,25 +150,28 @@
 /* Freescale ColdFire */
 #define PORT_MCF	78
 
-#define PORT_SC26XX	79
+/* Blackfin SPORT */
+#define PORT_BFIN_SPORT		79
 
 /* MN10300 on-chip UART numbers */
 #define PORT_MN10300		80
 #define PORT_MN10300_CTS	81
 
+#define PORT_SC26XX	82
+
 /* DCC(JTAG) emulation port types */
-#define PORT_DCC_JTAG1	82
+#define PORT_DCC_JTAG1	83
 
 /* Samsung S3C4510B */
-#define PORT_S3C4510B   83
+#define PORT_S3C4510B   84
 
-#define PORT_P2001	84
+#define PORT_P2001	85
 
 /* TI TMS320DM270 */
-#define PORT_DM270      85
+#define PORT_DM270      86
 
 /* Alter Nios II UART */
-#define PORT_JTAG_UART	86
+#define PORT_JTAG_UART	87
 
 #ifdef __KERNEL__
 
@@ -203,6 +207,7 @@ struct uart_ops {
 	void		(*shutdown)(struct uart_port *);
 	void		(*set_termios)(struct uart_port *, struct ktermios *new,
 				       struct ktermios *old);
+	void		(*set_ldisc)(struct uart_port *);
 	void		(*pm)(struct uart_port *, unsigned int state,
 			      unsigned int oldstate);
 	int		(*set_wake)(struct uart_port *, unsigned int state);
@@ -226,6 +231,10 @@ struct uart_ops {
 	void		(*config_port)(struct uart_port *, int);
 	int		(*verify_port)(struct uart_port *, struct serial_struct *);
 	int		(*ioctl)(struct uart_port *, unsigned int, unsigned long);
+#ifdef CONFIG_CONSOLE_POLL
+	void	(*poll_put_char)(struct uart_port *, unsigned char);
+	int		(*poll_get_char)(struct uart_port *);
+#endif
 };
 
 #define UART_CONFIG_TYPE	(1 << 0)
@@ -251,6 +260,8 @@ struct uart_port {
 	spinlock_t		lock;			/* port lock */
 	unsigned int		iobase;			/* in/out[bwl] */
 	unsigned char __iomem	*membase;		/* read/write[bwl] */
+	unsigned int		(*serial_in)(struct uart_port *, int);
+	void			(*serial_out)(struct uart_port *, int, int);
 	unsigned int		irq;			/* irq number */
 	unsigned int		uartclk;		/* base uart clock */
 	unsigned int		fifosize;		/* tx fifo size */
@@ -296,6 +307,8 @@ struct uart_port {
 #define UPF_MAGIC_MULTIPLIER	((__force upf_t) (1 << 16))
 #define UPF_CONS_FLOW		((__force upf_t) (1 << 23))
 #define UPF_SHARE_IRQ		((__force upf_t) (1 << 24))
+/* The exact UART type is known and should not be probed.  */
+#define UPF_FIXED_TYPE		((__force upf_t) (1 << 27))
 #define UPF_BOOT_AUTOCONF	((__force upf_t) (1 << 28))
 #define UPF_FIXED_PORT		((__force upf_t) (1 << 29))
 #define UPF_DEAD		((__force upf_t) (1 << 30))

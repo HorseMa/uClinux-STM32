@@ -24,8 +24,8 @@ MPPE=$(CONFIG_USER_PPPD_WITH_MPPE)
 
 ifeq ($(MPPE),y)
   OBJS += md4.o chap_ms.o cbcp.o mppe.o sha1dgst.o extra_crypto.o
-  CFLAGS += -DCHAPMS=1 -DMSLANMAN=1 -DMPPE=1
-  EXTRALIBS += $(LIBDES)
+  CFLAGS += -DCHAPMS=1 -DMSLANMAN=1 -DMPPE=1 -DUSE_CRYPT=1
+  EXTRALIBS += -lcrypt
   ifdef DYNAMIC
     CFLAGS += -DDYNAMIC=1
   endif

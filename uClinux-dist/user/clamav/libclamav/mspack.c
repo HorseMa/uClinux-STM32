@@ -104,7 +104,7 @@ static const unsigned short mszip_bit_mask_tab[17] = {
       if (mszip_read_input(zip)) return zip->error;                      \
       i_ptr = zip->i_ptr;                                               \
       i_end = zip->i_end;                                               \
-      if(i_ptr == i_end) return CL_EFORMAT;				\
+      if(i_ptr == i_end) break;						\
     }                                                                   \
     bit_buffer |= *i_ptr++ << bits_left; bits_left  += 8;               \
   }                                                                     \
@@ -125,7 +125,12 @@ static const unsigned short mszip_bit_mask_tab[17] = {
 
 static int mszip_read_input(struct mszip_stream *zip) {
   int nread = zip->read_cb ? zip->read_cb(zip->file, zip->inbuf, (int)zip->inbuf_size) : cli_readn(zip->fd, zip->inbuf, (int)zip->inbuf_size);
-  if (nread < 0) return zip->error = CL_EIO;
+  if (nread < 0) {
+    if (zip->file->error == CL_BREAK)
+      return zip->error = CL_BREAK;
+    else
+      return zip->error = CL_EFORMAT;
+  }
 
   zip->i_ptr = &zip->inbuf[0];
   zip->i_end = &zip->inbuf[nread];
@@ -749,7 +754,12 @@ void mszip_free(struct mszip_stream *zip) {
 
 static int lzx_read_input(struct lzx_stream *lzx) {
   int bread = lzx->read_cb ? lzx->read_cb(lzx->file, &lzx->inbuf[0], (int)lzx->inbuf_size) : cli_readn(lzx->fd, &lzx->inbuf[0], (int)lzx->inbuf_size);
-  if (bread < 0) return lzx->error = CL_EIO;
+  if (bread < 0) {
+    if (lzx->file->error == CL_BREAK)
+      return lzx->error = CL_BREAK;
+    else
+      return lzx->error = CL_EFORMAT;
+  }
 
   /* huff decode's ENSURE_BYTES(16) might overrun the input stream, even
    * if those bits aren't used, so fake 2 more bytes */
@@ -1276,6 +1286,8 @@ int lzx_decompress(struct lzx_stream *lzx, off_t out_bytes) {
 	    }
 	    else {
 	      runsrc = rundest - match_offset;
+	      if(i > (int) lzx->window_size - window_posn)
+	        i = lzx->window_size - window_posn;
 	      while (i-- > 0) *rundest++ = *runsrc++;
 	    }
 
@@ -1421,7 +1433,7 @@ int lzx_decompress(struct lzx_stream *lzx, off_t out_bytes) {
 
     /* check that we've used all of the previous frame first */
     if (lzx->o_ptr != lzx->o_end) {
-      cli_dbgmsg("lzx_decompress: %d avail bytes, new %d frame\n", lzx->o_end-lzx->o_ptr, frame_size);
+      cli_dbgmsg("lzx_decompress: %ld avail bytes, new %d frame\n", lzx->o_end-lzx->o_ptr, frame_size);
       return lzx->error = CL_EFORMAT;
     }
 
@@ -1577,7 +1589,12 @@ void lzx_free(struct lzx_stream *lzx) {
 
 static int qtm_read_input(struct qtm_stream *qtm) {
   int nread = qtm->read_cb ? qtm->read_cb(qtm->file, &qtm->inbuf[0], (int)qtm->inbuf_size) : cli_readn(qtm->fd, &qtm->inbuf[0], (int)qtm->inbuf_size);
-  if (nread < 0) return qtm->error = CL_EIO;
+  if (nread < 0) {
+    if (qtm->file->error == CL_BREAK)
+      return qtm->error = CL_BREAK;
+    else
+      return qtm->error = CL_EFORMAT;
+  }
 
   qtm->i_ptr = &qtm->inbuf[0];
   qtm->i_end = &qtm->inbuf[nread];
@@ -1885,6 +1902,8 @@ int qtm_decompress(struct qtm_stream *qtm, off_t out_bytes) {
 	}
 	else {
 	  runsrc = rundest - match_offset;
+	  if(i > (int) qtm->window_size - window_posn)
+	    i = qtm->window_size - window_posn;
 	  while (i-- > 0) *rundest++ = *runsrc++;
 	}
 	window_posn += match_length;

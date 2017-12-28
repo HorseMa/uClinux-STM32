@@ -28,6 +28,9 @@ struct plat_serial8250_port {
 	unsigned char	iotype;		/* UPIO_* */
 	unsigned char	hub6;
 	upf_t		flags;		/* UPF_* flags */
+	unsigned int	type;		/* If UPF_FIXED_TYPE */
+	unsigned int	(*serial_in)(struct uart_port *, int);
+	void		(*serial_out)(struct uart_port *, int, int);
 };
 
 /*
@@ -46,6 +49,7 @@ enum {
 	PLAT8250_DEV_HUB6,
 	PLAT8250_DEV_MCA,
 	PLAT8250_DEV_AU1X00,
+	PLAT8250_DEV_SM501,
 };
 
 /*

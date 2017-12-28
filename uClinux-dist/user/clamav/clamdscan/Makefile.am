@@ -31,6 +31,9 @@ clamdscan_SOURCES = \
     $(top_srcdir)/shared/getopt.h \
     $(top_srcdir)/shared/options.c \
     $(top_srcdir)/shared/options.h \
+    $(top_srcdir)/libclamav/regex/strlcpy.c\
+    clamd_fdscan.c \
+    clamd_fdscan.h \
     clamdscan.c \
     client.c \
     client.h \
@@ -41,3 +44,6 @@ endif
 DEFS = @DEFS@ -DCL_NOTHREADS -DCL_NOLIBCLAMAV
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/clamscan -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav
 LIBS = $(top_builddir)/libclamav/libclamav_internal_utils.la @FRESHCLAM_LIBS@
+
+AM_INSTALLCHECK_STD_OPTIONS_EXEMPT=clamdscan$(EXEEXT)
+CLEANFILES=*.gcda *.gcno

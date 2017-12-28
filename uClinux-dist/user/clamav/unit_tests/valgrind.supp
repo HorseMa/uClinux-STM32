@@ -1,0 +1,14 @@
+{
+	glibc-freeres-dbg
+	Memcheck:Free
+	fun:free
+	fun:free_mem
+	fun:__libc_freeres
+}
+{
+	glibc-freeres
+	Memcheck:Free
+	fun:free
+	obj:/lib*/libc-*.so
+	fun:__libc_freeres
+}

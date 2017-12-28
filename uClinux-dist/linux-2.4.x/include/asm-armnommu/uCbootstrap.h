@@ -171,12 +171,14 @@ type name(atype a, btype b, ctype c, dtype d, etype e) \
 #define PGM_DEBUG       0x0010
 
 /* an mnode points at 4k pages of data through an offset table. */
+#ifndef _memnode_struct_
+#define _memnode_struct_
+
 typedef struct _memnode {
   int len;
   int *offset;
 } mnode_t;
-
-
+#endif
 
 /*
  * uCbootstrap header specification

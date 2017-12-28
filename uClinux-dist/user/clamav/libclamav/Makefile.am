@@ -21,9 +21,9 @@ SUBDIRS = lzma .
 AM_CPPFLAGS = -I$(top_srcdir) -I@srcdir@/nsis -I@srcdir@/lzma
 
 if ENABLE_UNRAR
-libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ lzma/liblzma.la $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la
+libclamav_la_LIBADD = $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la lzma/liblzma.la @LIBCLAMAV_LIBS@ @THREAD_LIBS@
 else
-libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ lzma/liblzma.la
+libclamav_la_LIBADD = lzma/liblzma.la @LIBCLAMAV_LIBS@ @THREAD_LIBS@
 endif
 
 libclamav_la_LDFLAGS = @TH_SAFE@ -version-info @LIBCLAMAV_VERSION@ -no-undefined
@@ -82,6 +82,9 @@ libclamav_la_SOURCES = \
 	msexpand.h \
 	pe.c \
 	pe.h \
+	disasm.c \
+	disasm.h \
+	disasmpriv.h \
 	upx.c \
 	upx.h \
 	htmlnorm.c \
@@ -166,9 +169,12 @@ libclamav_la_SOURCES = \
 	phish_domaincheck_db.h \
 	phish_whitelist.c \
 	phish_whitelist.h \
+	iana_cctld.h \
 	iana_tld.h \
 	regex_list.c \
 	regex_list.h \
+	regex_suffix.c \
+	regex_suffix.h \
 	mspack.c \
 	mspack.h \
 	cab.c \
@@ -186,7 +192,42 @@ libclamav_la_SOURCES = \
 	explode.c \
 	explode.h \
 	textnorm.c \
-	textnorm.h
+	textnorm.h \
+	dlp.c \
+	dlp.h \
+	jsparse/js-norm.c \
+	jsparse/js-norm.h \
+	jsparse/lexglobal.h \
+	jsparse/textbuf.h \
+	uniq.c \
+	uniq.h \
+	version.c\
+	version.h
+
+.PHONY: version.h.tmp
+version.lo: version.h
+version.h: version.h.tmp
+	@if test -f version.h.static; then\
+		cp version.h.static version.h;\
+	elif ! diff $@ version.h.tmp >/dev/null 2>/dev/null; then\
+		cp version.h.tmp $@;\
+	fi
+
+version.h.tmp:
+	@test -f version.h || touch version.h;\
+	rm -f $@;\
+	REVISION="$$(LANG=C svnversion "$(top_srcdir)" 2>/dev/null || echo exported)";\
+	if test $$REVISION = "exported"; then\
+		REVISION="$$(LANG=C cd "$(top_srcdir)"; git-svn info configure 2>/dev/null| awk '/Revision:/ { print $$2 }' || echo)";\
+		if test -n "$$REVISION"; then\
+			REVISION="$$REVISION-$$(LANG=C cd "$(top_srcdir)"; git-describe --always 2>/dev/null)";\
+		fi;\
+	fi;\
+	if test -n "$$REVISION"; then\
+		echo "#define REPO_VERSION \"devel-r$$REVISION\"" >> $@;\
+	else\
+		touch version.h.tmp;\
+	fi
 
 libclamav_internal_utils_la_SOURCES=str.c \
 				    str.h \
@@ -197,4 +238,35 @@ libclamav_internal_utils_la_LDFLAGS=-static
 libclamav_internal_utils_la_CFLAGS=-DCLI_MEMFUNSONLY
 lib_LTLIBRARIES = libclamav.la
 noinst_LTLIBRARIES = libclamav_internal_utils.la
-EXTRA_DIST = regex/engine.c libclamav.map
+EXTRA_DIST = regex/engine.c libclamav.map \
+	     jsparse/generated/operators.h jsparse/generated/keywords.h jsparse/future_reserved_words.list\
+	     jsparse/keywords.list jsparse/special_keywords.list jsparse/operators.gperf
+COMMON_CLEANFILES=version.h version.h.tmp *.gcda *.gcno lzma/*.gcda lzma/*.gcno
+if MAINTAINER_MODE
+BUILT_SOURCES=jsparse/generated/operators.h jsparse/generated/keywords.h jsparse-keywords.gperf
+
+GPERF_FLAGS=-E -t -L ANSI-C -C -F ', TOK_ERROR' -c
+
+jsparse-keywords.gperf: jsparse/keywords.list jsparse/future_reserved_words.list jsparse/special_keywords.list
+	echo -e "struct keyword { const char *name; int val; };\n%%" >keywords-g-tmp
+	for i in `cat @srcdir@/jsparse/keywords.list`; do j=`echo $$i |tr \[a-z\] \[A-Z\]`; echo "$$i, TOK_$$j" >>keywords-g-tmp; done
+	for i in `cat @srcdir@/jsparse/future_reserved_words.list`; do echo "$$i, TOK_FUTURE_RESERVED_WORD" >>keywords-g-tmp; done
+	cat @srcdir@/jsparse/special_keywords.list >>keywords-g-tmp
+	mv keywords-g-tmp $@
+
+jsparse/generated/operators.h: jsparse/operators.gperf
+	$(GPERF) $(GPERF_FLAGS) -H op_hash -N in_op_set -W oplist $< >operators-tmp-g
+	grep -v '^#line' <operators-tmp-g | sed -e 's/^const struct/static const struct/' -e 's/register //g' >operators-tmp
+	rm operators-tmp-g
+	mv operators-tmp @srcdir@/jsparse/generated/operators.h
+
+jsparse/generated/keywords.h: jsparse-keywords.gperf
+	$(GPERF) $(GPERF_FLAGS) $< >keywords-tmp-g
+	grep -v '^#line' <keywords-tmp-g |  sed -e 's/^const struct/static const struct/' -e 's/register //g' >keywords-tmp
+	rm keywords-tmp-g
+	mv keywords-tmp @srcdir@/jsparse/generated/keywords.h
+
+CLEANFILES=$(COMMON_CLEANFILES) @srcdir@/jsparse/generated/operators.h @srcdir@/jsparse/generated/keywords.h
+else
+CLEANFILES=$(COMMON_CLEANFILES)
+endif

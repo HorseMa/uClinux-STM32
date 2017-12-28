@@ -10,17 +10,17 @@ FLASH     = $(IMAGEDIR)/flash.bin
 
 SQUASH_ENDIAN = -be
 
-ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
+ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS) sda1
 
 DEVICES += $(DEVICE_PTY_64)
 
 FLASH_DEVICES = \
 	boot,c,90,0 \
-	config,c,90,2 \
-	image,c,90,4 \
-	all,c,90,6 \
-	tags,c,90,8 \
-	log,c,90,10
+	tags,c,90,2 \
+	log0,c,90,4 \
+	log1,c,90,6 \
+	kboot,c,90,8 \
+	all,c,90,10
 
 all:
 

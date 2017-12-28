@@ -44,6 +44,18 @@ int numfiles;
 int numbytes;
 int numdropped;
 
+/*
+ *  The name of the file (normally a device) to store the flatfs contents.
+ */
+char *filefs;
+
+/*****************************************************************************/
+
+static void getfilefs(void)
+{
+	filefs = FILEFS;
+}
+
 /*****************************************************************************/
 
 /*
@@ -86,7 +98,7 @@ static int flat_check(void)
 	if (chdir(DSTDIR) < 0)
 		return ERROR_CODE();
 
-	if ((rc = flat_open(FILEFS, "r")) < 0)
+	if ((rc = flat_open(filefs, "r")) < 0)
 		return rc;
 
 	switch (rc = flat_version()) {
@@ -126,7 +138,7 @@ static int flat_restorefs(const char *configdir)
 		return ERROR_CODE();
 	}
 
-	if ((rc = flat_open(FILEFS, "r")) < 0) {
+	if ((rc = flat_open(filefs, "r")) < 0) {
 		return ERROR_CODE();
 	}
 
@@ -187,7 +199,7 @@ static int flat_savefs(int version, const char *configdir)
 	}
 #endif
 
-	rc = flat_open(FILEFS, "w");
+	rc = flat_open(filefs, "w");
 	if (rc < 0)
 		goto cleanup;
 
@@ -199,7 +211,7 @@ static int flat_savefs(int version, const char *configdir)
 		rc = flat3_savefs(0, &total);
 		if ((rc < 0) || (total > flat_part_length())) { 
 			syslog(LOG_ERR, "config will not fit in flash partition");
-			goto cleanup;
+			goto cleanup_and_close;
 		}
 		break;
 #endif
@@ -209,7 +221,7 @@ static int flat_savefs(int version, const char *configdir)
 		rc = flat1_savefs(0, &total);
 		if ((rc < 0) || (total > flat_dev_length())) { 
 			syslog(LOG_ERR, "config will not fit in flash");
-			goto cleanup;
+			goto cleanup_and_close;
 		}
 		break;
 	}
@@ -228,7 +240,7 @@ static int flat_savefs(int version, const char *configdir)
 		break;
 	}
 	if (rc < 0)
-		goto cleanup;
+		goto cleanup_and_close;
 
 	unlink(FLATFSD_CONFIG);
 	rc = flat_close(0, total);
@@ -249,9 +261,10 @@ static int flat_savefs(int version, const char *configdir)
 
 	return rc;
 
+cleanup_and_close:
+	flat_close(1, 0);
 cleanup:
 	unlink(FLATFSD_CONFIG);
-	flat_close(1, 0);
 	return rc;
 }
 
@@ -260,6 +273,37 @@ cleanup:
 /*
  * Simple wrappers that also do logging
  */
+
+#ifndef HAS_RTC
+void parseconfig(char *buf)
+{
+	char *confline, *confdata;
+	time_t bst = BUILD_START_UNIX;
+
+	confline = strtok(buf, "\n");
+	while (confline) {
+		confdata = strchr(confline, ' ');
+		if (confdata) {
+			*confdata = '\0';
+			confdata++;
+			if (!strcmp(confline, "time")) {
+				time_t t;
+				t = atol(confdata);
+				if ((t > time(NULL)) && (t > bst))
+					stime(&t);
+				else
+					stime(&bst);
+				bst = 0;
+			}
+		}
+		confline = strtok(NULL, "\n");
+	}
+
+	if (bst) {
+		stime(&bst);
+	}
+}
+#endif
 
 static int checkconfig(void)
 {
@@ -336,10 +380,10 @@ static void lockpidfile(void)
 
 static void usage(int rc)
 {
-	printf("usage: flatfs [-c|-r|-s|-h|-?] [-dn123]\n"
+	printf("usage: flatfs [-c|-r|-s|-h|-?] [-n123] [-d <dirk>] [-f <file>]\n"
 		"\t-c check that the saved flatfs is valid\n"
 		"\t-d <dir> with -r to read from flash to an alternate filesystem\n"
-		"\t   and -s to save an alternate config to flash\n"
+		"\t-f <file> file or device to use for persistent flatfs storage\n"
 		"\t-r read from flash, write to config filesystem\n"
 		"\t-s save config filesystem to flash\n"
 		"\t-1 force use of version 1 flash layout\n"
@@ -363,7 +407,7 @@ int main(int argc, char *argv[])
 
 	openlog("flatfs", LOG_PERROR|LOG_PID, LOG_DAEMON);
 
-	while ((rc = getopt(argc, argv, "crsd:1234h?")) != EOF) {
+	while ((rc = getopt(argc, argv, "crsd:f:1234h?")) != EOF) {
 		switch (rc) {
 		case 'c':
 		case 'r':
@@ -373,8 +417,16 @@ int main(int argc, char *argv[])
 		case 'd':
 			configdir = optarg;
 			if (access(configdir, R_OK | W_OK) < 0) {
-				printf("%s: directory does not exist or is not writeable\n",
-					   configdir);
+				printf("%s: directory does not exist or is "
+					"not writeable\n", configdir);
+				exit(1);
+			}
+			break;
+		case 'f':
+			filefs = optarg;
+			if (access(filefs, R_OK | W_OK) < 0) {
+				printf("%s: storage file does not exists or"
+					"is not writable\n", filefs);
 				exit(1);
 			}
 			break;
@@ -400,6 +452,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (filefs == (char *) NULL)
+		getfilefs();
+	syslog(LOG_INFO, "using storage at %s", filefs);
+
 	/* Make sure only one flatfs process accesses flash at a time */
 	lockpidfile();
 
@@ -424,3 +480,5 @@ int main(int argc, char *argv[])
 
 	return 1;
 }
+
+/*****************************************************************************/

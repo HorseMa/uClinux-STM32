@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -22,12 +22,6 @@
  *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifdef WIN32
-#include "config-win32.h"
-#else
-#include "config.h"
-#endif
-
 #include "syshead.h"
 
 #include "forward.h"
@@ -37,6 +31,7 @@
 #include "mss.h"
 #include "event.h"
 #include "ps.h"
+#include "dhcp.h"
 
 #include "memdbg.h"
 
@@ -89,12 +84,18 @@ check_tls_dowork (struct context *c)
 
   if (interval_test (&c->c2.tmp_int))
     {
-      if (tls_multi_process
-	  (c->c2.tls_multi, &c->c2.to_link, &c->c2.to_link_addr,
-	   get_link_socket_info (c), &wakeup))
+      const int tmp_status = tls_multi_process
+	(c->c2.tls_multi, &c->c2.to_link, &c->c2.to_link_addr,
+	 get_link_socket_info (c), &wakeup);
+      if (tmp_status == TLSMP_ACTIVE)
 	{
 	  update_time ();
 	  interval_action (&c->c2.tmp_int);
+	}
+      else if (tmp_status == TLSMP_KILL)
+	{
+	  c->sig->signal_received = SIGTERM;
+	  c->sig->signal_text = "auth-control-exit";
 	}
 
       interval_future_trigger (&c->c2.tmp_int, wakeup);
@@ -356,7 +357,7 @@ check_fragment_dowork (struct context *c)
   if (lsi->mtu_changed && c->c2.ipv4_tun)
     {
       frame_adjust_path_mtu (&c->c2.frame_fragment, c->c2.link_socket->mtu,
-			     c->options.proto);
+			     c->options.ce.proto);
       lsi->mtu_changed = false;
     }
 
@@ -490,6 +491,10 @@ process_coarse_timers (struct context *c)
 #if P2MP
   /* see if we should send a push_request in response to --pull */
   check_push_request (c);
+#endif
+
+#ifdef PLUGIN_PF
+  pf_check_reload (c);
 #endif
 
   /* process --route options */
@@ -702,12 +707,17 @@ process_incoming_link (struct context *c)
       c->c2.original_recv_size = c->c2.buf.len;
 #ifdef ENABLE_MANAGEMENT
       if (management)
-	management_bytes_in (management, c->c2.buf.len);
+	{
+	  management_bytes_in (management, c->c2.buf.len);
+#ifdef MANAGEMENT_DEF_AUTH
+	  management_bytes_server (management, &c->c2.link_read_bytes, &c->c2.link_write_bytes, &c->c2.mda_context);
+#endif
+	}
 #endif
     }
   else
     c->c2.original_recv_size = 0;
-
+  
 #ifdef ENABLE_DEBUG
   /* take action to corrupt packet if we are in gremlin test mode */
   if (c->options.gremlin) {
@@ -972,6 +982,8 @@ process_ipv4_header (struct context *c, unsigned int flags, struct buffer *buf)
   if (!c->options.passtos)
     flags &= ~PIPV4_PASSTOS;
 #endif
+  if (!c->options.route_gateway_via_dhcp || !route_list_default_gateway_needed (c->c1.route_list))
+    flags &= ~PIPV4_EXTRACT_DHCP_ROUTER;
 
   if (buf->len > 0)
     {
@@ -997,6 +1009,13 @@ process_ipv4_header (struct context *c, unsigned int flags, struct buffer *buf)
 	      /* possibly alter the TCP MSS */
 	      if (flags & PIPV4_MSSFIX)
 		mss_fixup (&ipbuf, MTU_TO_MSS (TUN_MTU_SIZE_DYNAMIC (&c->c2.frame)));
+
+	      /* possibly extract a DHCP router message */
+	      if (flags & PIPV4_EXTRACT_DHCP_ROUTER)
+		{
+		  const in_addr_t dhcp_router = dhcp_extract_router_msg (&ipbuf);
+		  route_list_add_default_gateway (c->c1.route_list, c->c2.es, dhcp_router);
+		}
 	    }
 	}
     }
@@ -1034,7 +1053,7 @@ process_outgoing_link (struct context *c)
 #ifdef HAVE_GETTIMEOFDAY
 	  if (c->options.shaper)
 	    shaper_wrote_bytes (&c->c2.shaper, BLEN (&c->c2.to_link)
-				+ datagram_overhead (c->options.proto));
+				+ datagram_overhead (c->options.ce.proto));
 #endif
 	  /*
 	   * Let the pinger know that we sent a packet.
@@ -1086,7 +1105,12 @@ process_outgoing_link (struct context *c)
 	      c->c2.link_write_bytes += size;
 #ifdef ENABLE_MANAGEMENT
 	      if (management)
-		management_bytes_out (management, size);
+		{
+		  management_bytes_out (management, size);
+#ifdef MANAGEMENT_DEF_AUTH
+		  management_bytes_server (management, &c->c2.link_read_bytes, &c->c2.link_write_bytes, &c->c2.mda_context);
+#endif
+		}
 #endif
 	    }
 	}
@@ -1145,7 +1169,7 @@ process_outgoing_tun (struct context *c)
    * The --mssfix option requires
    * us to examine the IPv4 header.
    */
-  process_ipv4_header (c, PIPV4_MSSFIX|PIPV4_OUTGOING, &c->c2.to_tun);
+  process_ipv4_header (c, PIPV4_MSSFIX|PIPV4_EXTRACT_DHCP_ROUTER|PIPV4_OUTGOING, &c->c2.to_tun);
 
   if (c->c2.to_tun.len <= MAX_RW_SIZE_TUN (&c->c2.frame))
     {
@@ -1276,11 +1300,11 @@ io_wait_dowork (struct context *c, const unsigned int flags)
   struct event_set_return esr[4];
 
   /* These shifts all depend on EVENT_READ and EVENT_WRITE */
-  static const int socket_shift = 0;     /* depends on SOCKET_READ and SOCKET_WRITE */
-  static const int tun_shift = 2;        /* depends on TUN_READ and TUN_WRITE */
-  static const int err_shift = 4;        /* depends on ES_ERROR */
+  static int socket_shift = 0;     /* depends on SOCKET_READ and SOCKET_WRITE */
+  static int tun_shift = 2;        /* depends on TUN_READ and TUN_WRITE */
+  static int err_shift = 4;        /* depends on ES_ERROR */
 #ifdef ENABLE_MANAGEMENT
-  static const int management_shift = 6; /* depends on MANAGEMENT_READ and MANAGEMENT_WRITE */
+  static int management_shift = 6; /* depends on MANAGEMENT_READ and MANAGEMENT_WRITE */
 #endif
 
   /*

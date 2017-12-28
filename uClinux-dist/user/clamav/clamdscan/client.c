@@ -26,6 +26,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#ifdef HAVE_SYS_LIMITS_H
+#include <sys/limits.h>
+#endif
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -45,6 +48,7 @@
 #include "misc.h"
 #include "str.h"
 #include "client.h"
+#include "clamd_fdscan.h"
 
 #ifdef PF_INET
 # define SOCKET_INET	PF_INET
@@ -230,32 +234,32 @@ static int dsstream(int sockd, const struct optstruct *opt)
     return infected;
 }
 
+#ifndef PATH_MAX
+#define PATH_MAX 1024
+#endif
+
 static char *abpath(const char *filename)
 {
 	struct stat foo;
-	char *fullpath, cwd[200];
+	char *fullpath, cwd[PATH_MAX + 1];
 
     if(stat(filename, &foo) == -1) {
 	logg("^Can't access file %s\n", filename);
 	perror(filename);
 	return NULL;
     } else {
-	fullpath = malloc(200 + strlen(filename) + 10);
-#ifdef C_CYGWIN
-	sprintf(fullpath, "%s", filename);
-#else
-	if(!getcwd(cwd, 200)) {
+	fullpath = malloc(PATH_MAX + strlen(filename) + 10);
+	if(!getcwd(cwd, PATH_MAX)) {
 	    logg("^Can't get absolute pathname of current working directory.\n");
 	    return NULL;
 	}
 	sprintf(fullpath, "%s/%s", cwd, filename);
-#endif
     }
 
     return fullpath;
 }
 
-static int dconnect(const struct optstruct *opt)
+static int dconnect(const struct optstruct *opt, int *is_unix)
 {
 	struct sockaddr_un server;
 	struct sockaddr_in server2;
@@ -265,7 +269,8 @@ static int dconnect(const struct optstruct *opt)
 	const char *clamav_conf = opt_arg(opt, "config-file");
 	int sockd;
 
-
+    if(is_unix)
+	    *is_unix = 0;
     if(!clamav_conf)
 	clamav_conf = DEFAULT_CFG;
 
@@ -284,6 +289,7 @@ static int dconnect(const struct optstruct *opt)
 
 	server.sun_family = AF_UNIX;
 	strncpy(server.sun_path, cpt->strarg, sizeof(server.sun_path));
+	server.sun_path[sizeof(server.sun_path)-1]='\0';
 
 	if((sockd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
 	    perror("socket()");
@@ -299,7 +305,8 @@ static int dconnect(const struct optstruct *opt)
 	    freecfg(copt);
 	    return -1;
 	}
-
+	if(is_unix)
+		*is_unix = 1;
     } else if((cpt = cfgopt(copt, "TCPSocket"))->enabled) {
 
 	if((sockd = socket(SOCKET_INET, SOCK_STREAM, 0)) < 0) {
@@ -348,7 +355,7 @@ int get_clamd_version(const struct optstruct *opt)
 	int bread, sockd;
 
 
-    if((sockd = dconnect(opt)) < 0)
+    if((sockd = dconnect(opt, NULL)) < 0)
 	return 2;
 
     if(write(sockd, "VERSION", 7) <= 0) {
@@ -367,7 +374,7 @@ int get_clamd_version(const struct optstruct *opt)
 
 int client(const struct optstruct *opt, int *infected)
 {
-	char cwd[200], *fullpath;
+	char cwd[PATH_MAX+1], *fullpath;
 	int sockd, ret, errors = 0;
 	struct stat sb;
 	const char *scantype = "CONTSCAN";
@@ -381,12 +388,12 @@ int client(const struct optstruct *opt, int *infected)
     /* parse argument list */
     if(opt->filename == NULL || strlen(opt->filename) == 0) {
 	/* scan current directory */
-	if(!getcwd(cwd, 200)) {
+	if(!getcwd(cwd, PATH_MAX)) {
 	    logg("^Can't get absolute pathname of current working directory.\n");
 	    return 2;
 	}
 
-	if((sockd = dconnect(opt)) < 0)
+	if((sockd = dconnect(opt, NULL)) < 0)
 	    return 2;
 
 	if((ret = dsfile(sockd, scantype, cwd, opt)) >= 0)
@@ -397,10 +404,29 @@ int client(const struct optstruct *opt, int *infected)
 	close(sockd);
 
     } else if(!strcmp(opt->filename, "-")) { /* scan data from stdin */
-	if((sockd = dconnect(opt)) < 0)
+        int is_unix;
+	if((sockd = dconnect(opt, &is_unix)) < 0)
 	    return 2;
 
-	if((ret = dsstream(sockd, opt)) >= 0)
+	if(opt_check(opt,"fdpass")) {
+#ifndef HAVE_FD_PASSING
+		logg("^File descriptor pass support not compiled in, falling back to stream scan\n");
+		ret = dsstream(sockd, opt);
+#else
+		if(!is_unix) {
+			logg("^File descriptor passing can only work on local (unix) sockets! Falling back to stream scan\n");
+			/* fall back to stream */
+			ret = dsstream(sockd, opt);
+		} else {
+			char buff[4096];
+			memset(buff, 0, sizeof(buff));
+			ret = clamd_fdscan(sockd, 0, buff, sizeof(buff));
+			logg("fd: %s%s",buff, ret == 1 ? " FOUND" : ret == -1 ? " ERROR" : "OK");
+		}
+#endif
+	} else
+		ret = dsstream(sockd, opt);
+	if(ret >= 0)
 	    *infected += ret;
 	else
 	    errors++;
@@ -431,7 +457,7 @@ int client(const struct optstruct *opt, int *infected)
 		switch(sb.st_mode & S_IFMT) {
 		    case S_IFREG:
 		    case S_IFDIR:
-			if((sockd = dconnect(opt)) < 0)
+			if((sockd = dconnect(opt, NULL)) < 0)
 			    return 2;
 
 			if((ret = dsfile(sockd, scantype, fullpath, opt)) >= 0)

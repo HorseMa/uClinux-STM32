@@ -72,6 +72,24 @@ Copy infected files into DIRECTORY. Directory must be writable for the '@CLAMAVU
 \fB\-\-detect\-pua\fR
 Detect Possibly Unwanted Applications.
 .TP 
+\fB\-\-exclude\-pua=CATEGORY\fR
+Exclude a specific PUA category. This option can be used multiple times. See http://www.clamav.net/support/pua for the complete list of PUA
+.TP 
+\fB\-\-include\-pua=CATEGORY\fR
+Only include a specific PUA category. This option can be used multiple times. See http://www.clamav.net/support/pua for the complete list of PUA
+.TP 
+\fB\-\-detect\-structured\fR
+Enable the DLP (Data Loss Prevention) module which provides detection of SSN and Credit Card numbers.
+.TP 
+\fB\-\-structured\-ssn\-format=X\fR
+X=0: search for valid SSNs formatted as xxx-yy-zzzz (normal); X=1: search for valid SSNs formatted as xxxyyzzzz (stripped); X=2: search for both formats. Default is 0.
+.TP 
+\fB\-\-structured\-ssn\-count=#n\fR
+This option sets the lowest number of Social Security Numbers found in a file to generate a detect (default: 3).
+.TP 
+\fB\-\-structured\-cc\-count=#n\fR
+This option sets the lowest number of Credit Card numbers found in a file to generate a detect (default: 3).
+.TP 
 \fB\-\-no\-mail\fR
 Disable scanning of mail files.
 .TP 
@@ -81,8 +99,8 @@ Disable signature-based phishing detection.
 \fB\-\-no\-phishing\-scan\-urls\fR
 Disable url-based heuristic phishing detection. This disables Phishing.Heuristics.Email.*
 .TP
-\fB\-\-no\-phishing\-restrictedscan\fR
-Enable url-based heuristic phishing detection for all domains (might lead to false positives!).
+\fB\-\-heuristic\-scan\-precedence\fR
+Allow heuristic match to take precedence. When enabled, if a heuristic scan (such as phishingScan) detects a possible virus/phish it will stop scan immediately. Recommended, saves CPU scan-time. When disabled, virus/phish detected by heuristic scans will be reported only at the end of a scan. If an archive contains both a heuristically detected  virus/phish, and a real malware, the real malware will be reported Keep this disabled if you intend to handle "*.Heuristics.*" viruses  differently from "real" malware. If a non-heuristically-detected virus (signature-based) is found first,  the scan is interrupted immediately, regardless of this config option.
 .TP
 \fB\-\-phishing\-ssl\fR
 Always block SSL mismatches in URLs (might lead to false positives!).
@@ -134,33 +152,6 @@ Set archive recursion level limit. This option protects your system against DoS 
 .TP 
 \fB\-\-max\-dir\-recursion=#n\fR
 Maximum depth directories are scanned at (default: 15).
-.TP 
-\fB\-\-unzip[=FULLPATH]\fR
-In most cases you don't need this option \- the built\-in unarchiver will extract Zip archives. Howvere, this option may be used as a backup for internal unpacker \- see the full documentation for more information. When enabled without an argument, unzip program will be searched in $PATH. If unzip cannot be found in $PATH, you must force it with =pathname. Remember about '=' between the option and the argument.
-.TP 
-\fB\-\-unrar[=FULLPATH]\fR
-Scan .rar files. In most cases the unpacker built into libclamav is enough.
-.TP 
-\fB\-\-arj[=FULLPATH]\fR
-Scan .arj files.
-.TP 
-\fB\-\-unzoo[=FULLPATH]\fR
-Scan .zoo files.
-.TP 
-\fB\-\-lha[=FULLPATH]\fR
-Scan .lzh files.
-.TP 
-\fB\-\-jar[=FULLPATH]\fR
-clamscan uses unzip for .jar files, so in some cases you may need to pass a full path to unzip. In most cases the unpacker built into libclamav is enough.
-.TP 
-\fB\-\-deb[=FULLPATH]\fR
-This option supports debian binary packages. Implies \-\-tgz, but doesn't conflict with \-\-tgz=FULLPATH. It requires ar utility.
-.TP 
-\fB\-\-tar[=FULLPATH]\fR
-This option supports non\-compressed tar archives. In most cases the unpacker built into libclamav is enough.
-.TP 
-\fB\-\-tgz[=FULLPATH]\fR
-This option supports tar.gz and .tgz files. You need GNU tar, on non\-Linux system you probably have it installed as gtar. If it's in $PATH, please use \-\-tgz=gtar in other case please pass a full path. In most cases the unpacker built into libclamav is enough.
 .SH "EXAMPLES"
 .LP 
 .TP 
@@ -212,12 +203,6 @@ Note: some return codes may only appear in a single file mode (when clamscan is 
 57: Can't get absolute path name of current working directory.
 .TP 
 58: I/O error, please check your file system.
-.TP 
-59: Can't get information about current user from /etc/passwd.
-.TP 
-60: Can't get information about user '@CLAMAVUSER@' from /etc/passwd.
-.TP 
-61: Can't fork.
 .TP 
 62: Can't initialize logger.
 .TP 

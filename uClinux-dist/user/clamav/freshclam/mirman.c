@@ -16,6 +16,10 @@
  *  MA 02110-1301, USA.
  */
 
+#ifdef	_MSC_VER
+#include <winsock.h>
+#endif
+
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
 #endif
@@ -35,6 +39,12 @@
 #include <fcntl.h>
 #include <time.h>
 
+#ifndef C_WINDOWS
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#endif
+
 #include "mirman.h"
 
 #include "libclamav/cltypes.h"
@@ -44,6 +54,12 @@
 
 #ifndef O_BINARY
 #define O_BINARY    0
+#endif
+
+#ifndef SUPPORT_IPv6
+#ifndef AF_INET6
+#define AF_INET6    0xbeef  /* foo */
+#endif
 #endif
 
 #define IGNTIME 3 * 86400
@@ -94,16 +110,26 @@ int mirman_read(const char *file, struct mirdat *mdat, uint8_t active)
     return 0;
 }
 
-int mirman_check(uint32_t ip, struct mirdat *mdat)
+int mirman_check(uint32_t *ip, int af, struct mirdat *mdat, struct mirdat_ip **md)
 {
 	unsigned int i, flevel = cl_retflevel();
 
+
+    if(md)
+	*md = NULL;
 
     if(!mdat->active)
 	return 0;
 
     for(i = 0; i < mdat->num; i++) {
-	if(mdat->mirtab[i].atime && mdat->mirtab[i].ip == ip) {
+
+	if((af == AF_INET && mdat->mirtab[i].ip4 == *ip) || (af == AF_INET6 && !memcmp(mdat->mirtab[i].ip6, ip, 4 * sizeof(uint32_t)))) {
+
+	    if(!mdat->mirtab[i].atime) {
+		if(md)
+		    *md = &mdat->mirtab[i];
+		return 0;
+	    }
 
 	    if(mdat->dbflevel && (mdat->dbflevel > flevel) && (mdat->dbflevel - flevel > 3))
 		if(time(NULL) - mdat->mirtab[i].atime < 4 * 3600)
@@ -112,18 +138,24 @@ int mirman_check(uint32_t ip, struct mirdat *mdat)
 	    if(mdat->mirtab[i].ignore) {
 		if(time(NULL) - mdat->mirtab[i].atime > IGNTIME) {
 		    mdat->mirtab[i].ignore = 0;
+		    if(md)
+			*md = &mdat->mirtab[i];
 		    return 0;
 		} else {
 		    return 1;
 		}
 	    }
+
+	    if(md)
+		*md = &mdat->mirtab[i];
+	    return 0;
 	}
     }
 
     return 0;
 }
 
-int mirman_update(uint32_t ip, struct mirdat *mdat, uint8_t broken)
+int mirman_update(uint32_t *ip, int af, struct mirdat *mdat, uint8_t broken)
 {
 	unsigned int i, found = 0;
 
@@ -132,7 +164,7 @@ int mirman_update(uint32_t ip, struct mirdat *mdat, uint8_t broken)
 	return 0;
 
     for(i = 0; i < mdat->num; i++) {
-	if(mdat->mirtab[i].ip == ip) {
+	if((af == AF_INET && mdat->mirtab[i].ip4 == *ip) || (af == AF_INET6 && !memcmp(mdat->mirtab[i].ip6, ip, 4 * sizeof(uint32_t)))) {
 	    found = 1;
 	    break;
 	}
@@ -160,7 +192,12 @@ int mirman_update(uint32_t ip, struct mirdat *mdat, uint8_t broken)
 	    logg("!Can't allocate memory for new element in mdat->mirtab\n");
 	    return -1;
 	}
-	mdat->mirtab[mdat->num].ip = ip;
+	if(af == AF_INET) {
+	    mdat->mirtab[mdat->num].ip4 = *ip;
+	} else {
+	    mdat->mirtab[mdat->num].ip4 = 0;
+	    memcpy(mdat->mirtab[mdat->num].ip6, ip, 4 * sizeof(uint32_t));
+	}
 	mdat->mirtab[mdat->num].atime = 0;
 	mdat->mirtab[mdat->num].succ = 0;
 	mdat->mirtab[mdat->num].fail = 0;
@@ -179,14 +216,21 @@ int mirman_update(uint32_t ip, struct mirdat *mdat, uint8_t broken)
 void mirman_list(const struct mirdat *mdat)
 {
 	unsigned int i;
-	unsigned char *ip;
 	time_t tm;
+	char ip[46];
 
 
     for(i = 0; i < mdat->num; i++) {
 	printf("Mirror #%u\n", i + 1);
-	ip = (unsigned char *) &mdat->mirtab[i].ip;
-	printf("IP: %u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
+#ifdef SUPPORT_IPv6
+	if(mdat->mirtab[i].ip4)
+	    printf("IP: %s\n", inet_ntop(AF_INET, &mdat->mirtab[i].ip4, ip, sizeof(ip)));
+	else
+	    printf("IP: %s\n", inet_ntop(AF_INET6, mdat->mirtab[i].ip6, ip, sizeof(ip)));
+#else
+	if(mdat->mirtab[i].ip4)
+	    printf("IP: %s\n", inet_ntoa(*(struct in_addr*) &mdat->mirtab[i].ip4));
+#endif
 	printf("Successes: %u\n", mdat->mirtab[i].succ);
 	printf("Failures: %u\n", mdat->mirtab[i].fail);
 	tm = mdat->mirtab[i].atime;
@@ -195,6 +239,15 @@ void mirman_list(const struct mirdat *mdat)
 	if(i != mdat->num - 1)
 	    printf("-------------------------------------\n");
     }
+}
+
+void mirman_whitelist(struct mirdat *mdat)
+{
+	unsigned int i;
+
+    logg("Whitelisting all mirrors\n");
+    for(i = 0; i < mdat->num; i++)
+	mdat->mirtab[i].ignore = 0;
 }
 
 int mirman_write(const char *file, struct mirdat *mdat)

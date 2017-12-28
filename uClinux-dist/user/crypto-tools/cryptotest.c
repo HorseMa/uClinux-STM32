@@ -146,7 +146,7 @@ struct alg {
 	int	blocksize;
 	int	minkeylen;
 	int	maxkeylen;
-	int	hashsize;
+	int	hashsize;		/* doubles as do not use IV for ciphers */
 	int	code;
 } algorithms[] = {
 #ifdef CRYPTO_NULL_CBC
@@ -160,9 +160,7 @@ struct alg {
 	{ "aes",			0,	16,	16,	16,		0,	CRYPTO_RIJNDAEL128_CBC},
 	{ "aes192",			0,	16,	24,	24,		0,	CRYPTO_RIJNDAEL128_CBC},
 	{ "aes256",			0,	16,	32,	32,		0,	CRYPTO_RIJNDAEL128_CBC},
-#ifdef notdef
-	{ "arc4",			0,	8,	1,	32,		0,	CRYPTO_ARC4 },
-#endif
+	{ "arc4",			0,	8,	1,	32,		1,	CRYPTO_ARC4 },
 	{ "md5",			1,	8,	0,	0,		16,	CRYPTO_MD5 },
 	{ "md5_hmac",		1,	8,	1,	64,		16,	CRYPTO_MD5_HMAC },
 	{ "sha1",			1,	8,	0,	0,		20,	CRYPTO_SHA1 },
@@ -342,7 +340,7 @@ runtest(struct alg *alg, int count, int size, u_long cmd, struct timeval *tv)
 		err(1, "CIOCGSESSION");
 	}
 
-	originaltext = (char *)malloc((alg->hashsize ? 2 : 3)*size + alg->hashsize);
+	originaltext = (char *)malloc((alg->ishash ? 2 : 3)*size + alg->hashsize);
 	if (originaltext == NULL)
 		err(1, "malloc (text)");
 	cleartext = originaltext+size;
@@ -376,13 +374,16 @@ runtest(struct alg *alg, int count, int size, u_long cmd, struct timeval *tv)
 			cop.src = cleartext;
 			cop.dst = ciphertext;
 			cop.mac = 0;
-			cop.iv = iv;
+			if (alg->hashsize)
+				cop.iv = NULL;
+			else
+				cop.iv = iv;
 
 			if (swap_data)
 				swap_buf(cleartext, size);
 			if (swap_data)
 				swap_buf(ciphertext, size);
-			if (swap_iv)
+			if (swap_iv && !alg->hashsize)
 				swap_buf(iv, N(iv));
 
 			if (ioctl(fd, CIOCCRYPT, &cop) < 0)
@@ -392,7 +393,7 @@ runtest(struct alg *alg, int count, int size, u_long cmd, struct timeval *tv)
 				swap_buf(cleartext, size);
 			if (swap_data)
 				swap_buf(ciphertext, size);
-			if (swap_iv)
+			if (swap_iv && !alg->hashsize)
 				swap_buf(iv, N(iv));
 
 			if (verify && bcmp(ciphertext, cleartext, size) == 0) {
@@ -415,13 +416,16 @@ runtest(struct alg *alg, int count, int size, u_long cmd, struct timeval *tv)
 			cop.src = ciphertext;
 			cop.dst = cleartext;
 			cop.mac = 0;
-			cop.iv = iv;
+			if (alg->hashsize)
+				cop.iv = NULL;
+			else
+				cop.iv = iv;
 
 			if (swap_data)
 				swap_buf(cleartext, size);
 			if (swap_data)
 				swap_buf(ciphertext, size);
-			if (swap_iv)
+			if (swap_iv && !alg->hashsize)
 				swap_buf(iv, N(iv));
 
 			if (ioctl(fd, CIOCCRYPT, &cop) < 0)
@@ -431,7 +435,7 @@ runtest(struct alg *alg, int count, int size, u_long cmd, struct timeval *tv)
 				swap_buf(cleartext, size);
 			if (swap_data)
 				swap_buf(ciphertext, size);
-			if (swap_iv)
+			if (swap_iv && !alg->hashsize)
 				swap_buf(iv, N(iv));
 
 			if (verify && bcmp(cleartext, originaltext, size) != 0) {

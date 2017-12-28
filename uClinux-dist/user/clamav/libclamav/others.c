@@ -60,7 +60,9 @@
 
 #ifdef CL_THREAD_SAFE
 #  include <pthread.h>
+#ifndef CLI_MEMFUNSONLY
 static pthread_mutex_t cli_gentemp_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 # ifndef HAVE_CTIME_R
 static pthread_mutex_t cli_ctime_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -77,6 +79,7 @@ static pthread_mutex_t cli_ctime_mutex = PTHREAD_MUTEX_INITIALIZER;
 #include "others.h"
 #include "md5.h"
 #include "cltypes.h"
+#include "regex/regex.h"
 
 #ifndef	O_BINARY
 #define	O_BINARY	0
@@ -87,18 +90,20 @@ static pthread_mutex_t cli_ctime_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define       P_tmpdir        "C:\\WINDOWS\\TEMP"
 #endif
 
-#define CL_FLEVEL 29 /* don't touch it */
+#define CL_FLEVEL 35 /* don't touch it */
 
 uint8_t cli_debug_flag = 0, cli_leavetemps_flag = 0;
 
+#ifndef CLI_MEMFUNSONLY
 static unsigned char name_salt[16] = { 16, 38, 97, 12, 8, 4, 72, 196, 217, 144, 33, 124, 18, 11, 17, 253 };
-
+#endif
 
 #define MSGCODE(x)					    \
 	va_list args;					    \
 	int len = sizeof(x) - 1;			    \
 	char buff[BUFSIZ];				    \
     strncpy(buff, x, len);				    \
+    buff[BUFSIZ-1]='\0';				    \
     va_start(args, str);				    \
     vsnprintf(buff + len, sizeof(buff) - len, str, args);   \
     buff[sizeof(buff) - 1] = '\0';			    \
@@ -132,11 +137,6 @@ unsigned int cl_retflevel(void)
     return CL_FLEVEL;
 }
 
-const char *cl_retver(void)
-{
-    return VERSION;
-}
-
 const char *cl_strerror(int clerror)
 {
     switch(clerror) {
@@ -166,8 +166,6 @@ const char *cl_strerror(int clerror)
 	    return "Unable to create temporary file";
 	case CL_ETMPDIR:
 	    return "Unable to create temporary directory";
-	case CL_EFSYNC:
-	    return "Unable to synchronize file <-> disk";
 	case CL_EMEM:
 	    return "Unable to allocate memory";
 	case CL_EOPEN:
@@ -192,8 +190,6 @@ const char *cl_strerror(int clerror)
 	    return "Bad format or broken data";
 	case CL_ESUPPORT:
 	    return "Not supported data format";
-	case CL_ELOCKDB:
-	    return "Unable to lock database directory";
 	case CL_EARJ:
 	    return "ARJ module failure";
 	default:
@@ -561,6 +557,18 @@ int cli_gentempfd(const char *dir, char **name, int *fd)
 }
 #endif
 
+/* Function: unlink
+        unlink() with error checking
+*/
+int cli_unlink(const char *pathname)
+{
+	if (unlink(pathname)==-1) {
+	    cli_warnmsg("cli_unlink: failure - %s\n", strerror(errno));
+	    return 1;
+	}
+	return 0;
+}
+
 #ifdef	C_WINDOWS
 /*
  * Windows doesn't allow you to delete a directory while it is still open
@@ -586,10 +594,7 @@ cli_rmdirs(const char *name)
     }
 
     if(!S_ISDIR(statb.st_mode)) {
-	if(unlink(name) < 0) {
-	    cli_warnmsg("cli_rmdirs: Can't remove %s: %s\n", name, strerror(errno));
-	    return -1;
-	}
+	if(cli_unlink(name)) return -1;
 	return 0;
     }
 
@@ -667,7 +672,7 @@ int cli_rmdirs(const char *dirname)
 #else
 	    while((dent = readdir(dd))) {
 #endif
-#if	(!defined(C_CYGWIN)) && (!defined(C_INTERIX)) && (!defined(C_WINDOWS))
+#if	(!defined(C_INTERIX)) && (!defined(C_WINDOWS))
 		if(dent->d_ino)
 #endif
 		{
@@ -697,13 +702,13 @@ int cli_rmdirs(const char *dirname)
 					return -1;
 				    }
 				}
-			    } else
-				if(unlink(path) < 0) {
-				    cli_warnmsg("cli_rmdirs: Couldn't remove %s: %s\n", path, strerror(errno));
+			    } else {
+				if(cli_unlink(path)) {
 				    free(path);
 				    closedir(dd);
 				    return -1;
 				}
+			    }
 			}
 			free(path);
 		    }
@@ -798,8 +803,11 @@ int cli_filecopy(const char *src, const char *dest)
 	return -1;
     }
 
-    if(!(buffer = cli_malloc(FILEBUFF)))
+    if(!(buffer = cli_malloc(FILEBUFF))) {
+	close(s);
+	close(d);
 	return -1;
+    }
 
     while((bytes = cli_readn(s, buffer, FILEBUFF)) > 0)
 	cli_writen(d, buffer, bytes);
@@ -809,6 +817,7 @@ int cli_filecopy(const char *src, const char *dest)
 
     return close(d);
 }
+
 
 /* Implement a generic bitset, trog@clamav.net */
 
@@ -946,3 +955,18 @@ const char* cli_ctime(const time_t *timep, char *buf, const size_t bufsize)
 	return ret;
 }
 
+#ifndef CLI_MEMFUNSONLY
+int cli_matchregex(const char *str, const char *regex)
+{
+	regex_t reg;
+	int match;
+
+    if(cli_regcomp(&reg, regex, REG_EXTENDED | REG_NOSUB) == 0) {
+	match = (cli_regexec(&reg, str, 0, NULL, 0) == REG_NOMATCH) ? 0 : 1;
+	cli_regfree(&reg);
+	return match;
+    }
+
+    return 0;
+}
+#endif

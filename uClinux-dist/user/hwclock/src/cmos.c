@@ -50,6 +50,7 @@
 #include "nls.h"
 
 #if defined(__i386__) || defined(__alpha__)
+#include <linux/compiler.h>
 #include <asm/io.h>		/* for inb, outb */
 #else
 void outb(int a, int b){}

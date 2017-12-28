@@ -47,14 +47,22 @@ struct cfgoption cfg_options[] = {
     {"DetectBrokenExecutables", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"ScanMail", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
     {"MailFollowURLs", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ScanPartialMessages", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"PhishingSignatures", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
     {"PhishingScanURLs",OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
     /* these are FP prone options, if default isn't used */
     {"PhishingAlwaysBlockCloak", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"PhishingAlwaysBlockSSLMismatch", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
-    {"PhishingRestrictedScan", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"HeuristicScanPrecedence", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     /* end of FP prone options */
     {"DetectPUA", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ExcludePUA", OPT_QUOTESTR, -1, NULL, 1, OPT_CLAMD},
+    {"IncludePUA", OPT_QUOTESTR, -1, NULL, 1, OPT_CLAMD},
+    {"StructuredDataDetection", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"StructuredMinCreditCardCount", OPT_NUM, 3, NULL, 0, OPT_CLAMD},
+    {"StructuredMinSSNCount", OPT_NUM, 3, NULL, 0, OPT_CLAMD},
+    {"StructuredSSNFormatNormal", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"StructuredSSNFormatStripped", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"AlgorithmicDetection", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
     {"ScanHTML", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
     {"ScanOLE2", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
@@ -78,6 +86,7 @@ struct cfgoption cfg_options[] = {
     {"ReadTimeout", OPT_NUM, 120, NULL, 0, OPT_CLAMD},
     {"IdleTimeout", OPT_NUM, 30, NULL, 0, OPT_CLAMD},
     {"MaxDirectoryRecursion", OPT_NUM, 15, NULL, 0, OPT_CLAMD},
+    {"ExcludePath", OPT_QUOTESTR, -1, NULL, 1, OPT_CLAMD},
     {"FollowDirectorySymlinks", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"FollowFileSymlinks", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"ExitOnOOM", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
@@ -286,8 +295,15 @@ struct cfgstruct *getcfg(const char *cfgfile, int verbose)
 				}
 				ctype = tolower(arg[strlen(arg) - 1]);
 				if(ctype == 'm' || ctype == 'k') {
-				    char *cpy = (char *) calloc(strlen(arg), 1);
-				    strncpy(cpy, arg, strlen(arg) - 1);
+				    char *cpy = strdup(arg);
+				    if(!cpy) {
+					fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
+					fclose(fs);
+					free(name);
+					freecfg(copt);
+					return NULL;
+				    }
+				    cpy[strlen(arg) - 1] = '\0';
 				    if(!cli_isnumber(cpy)) {
 					if(verbose)
 					    fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires numerical (raw/K/M) argument.\n", line, name);

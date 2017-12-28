@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #ifdef	HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -36,6 +37,7 @@
 #include "filetypes.h"
 #include "cltypes.h"
 #include "str.h"
+#include "readdb.h"
 
 uint8_t cli_ac_mindepth = AC_DEFAULT_MIN_DEPTH;
 uint8_t cli_ac_maxdepth = AC_DEFAULT_MAX_DEPTH;
@@ -126,7 +128,7 @@ int cli_ac_addpatt(struct cli_matcher *root, struct cli_ac_patt *pattern)
 
     ph = pt->list;
     while(ph) {
-	if((ph->length == pattern->length) && (ph->prefix_length == pattern->prefix_length)) {
+	if((ph->length == pattern->length) && (ph->prefix_length == pattern->prefix_length) && (ph->ch[0] == pattern->ch[0]) && (ph->ch[1] == pattern->ch[1])) {
 	    if(!memcmp(ph->pattern, pattern->pattern, ph->length * sizeof(uint16_t)) && !memcmp(ph->prefix, pattern->prefix, ph->prefix_length * sizeof(uint16_t))) {
 		if(!ph->alt && !pattern->alt) {
 		    match = 1;
@@ -372,6 +374,237 @@ void cli_ac_free(struct cli_matcher *root)
     }
 }
 
+/*
+ * In parse_only mode this function returns -1 on error or the max subsig id
+ */
+int cli_ac_chklsig(const char *expr, const char *end, uint32_t *lsigcnt, unsigned int *cnt, uint64_t *ids, unsigned int parse_only)
+{
+	unsigned int i, len = end - expr, pth = 0, opoff = 0, op1off = 0, val;
+	unsigned int blkend = 0, id, modval1, modval2 = 0, lcnt = 0, rcnt = 0, tcnt, modoff = 0;
+	uint64_t lids = 0, rids = 0, tids;
+	int ret, lval, rval;
+	char op = 0, op1 = 0, mod = 0, blkmod = 0;
+	const char *lstart = expr, *lend = NULL, *rstart = NULL, *rend = end, *pt;
+
+
+    for(i = 0; i < len; i++) {
+	switch(expr[i]) {
+	    case '(':
+		pth++;
+		break;
+
+	    case ')':
+		if(!pth) {
+		    cli_errmsg("cli_ac_chklsig: Syntax error: Missing opening parenthesis\n");
+		    return -1;
+		}
+		pth--;
+
+	    case '>':
+	    case '<':
+	    case '=':
+		mod = expr[i];
+		modoff = i;
+		break;
+
+	    default:
+		if(strchr("&|", expr[i])) {
+		    if(!pth) {
+			op = expr[i];
+			opoff = i;
+		    } else if(pth == 1) {
+			op1 = expr[i];
+			op1off = i;
+		    }
+		}
+	}
+
+	if(op)
+	    break;
+
+	if(op1 && !pth) {
+	    blkend = i;
+	    if(expr[i + 1] == '>' || expr[i + 1] == '<' || expr[i + 1] == '=') {
+		blkmod = expr[i + 1];
+		ret = sscanf(&expr[i + 2], "%u,%u", &modval1, &modval2);
+		if(ret != 2)
+		    ret = sscanf(&expr[i + 2], "%u", &modval1);
+		if(!ret || ret == EOF) {
+		    cli_errmsg("chklexpr: Syntax error: Missing number after '%c'\n", expr[i + 1]);
+		    return -1;
+		}
+		for(i += 2; i + 1 < len && (isdigit(expr[i + 1]) || expr[i + 1] == ','); i++);
+	    }
+
+	    if(&expr[i + 1] == rend)
+		break;
+	    else
+		blkmod = 0;
+	}
+    }
+
+    if(pth) {
+	cli_errmsg("cli_ac_chklsig: Syntax error: Missing closing parenthesis\n");
+	return -1;
+    }
+
+    if(!op && !op1) {
+	if(expr[0] == '(')
+	    return cli_ac_chklsig(++expr, --end, lsigcnt, cnt, ids, parse_only);
+
+	ret = sscanf(expr, "%u", &id);
+	if(!ret || ret == EOF) {
+	    cli_errmsg("cli_ac_chklsig: Can't parse %s\n", expr);
+	    return -1;
+	}
+
+	if(parse_only)
+	    val = id;
+	else
+	    val = lsigcnt[id];
+
+	if(mod) {
+	    pt = strchr(expr, mod) + modoff;
+	    ret = sscanf(pt, "%u", &modval1);
+	    if(!ret || ret == EOF) {
+		cli_errmsg("chklexpr: Syntax error: Missing number after '%c'\n", mod);
+		return -1;
+	    }
+	    if(!parse_only) {
+		switch(mod) {
+		    case '=':
+			if(val != modval1)
+			    return 0;
+			break;
+		    case '<':
+			if(val >= modval1)
+			    return 0;
+			break;
+		    case '>':
+			if(val <= modval1)
+			    return 0;
+			break;
+		    default:
+			return 0;
+		}
+		*cnt += val;
+		*ids |= (uint64_t) 1 << id;
+		return 1;
+	    }
+	}
+
+	if(parse_only) {
+	    return val;
+	} else {
+	    if(val) {
+		*cnt += val;
+		*ids |= (uint64_t) 1 << id;
+		return 1;
+	    } else {
+		return 0;
+	    }
+	}
+    }
+
+    if(!op) {
+	op = op1;
+	opoff = op1off;
+	lstart++;
+	rend = &expr[blkend];
+    }
+
+    if(!opoff) {
+	cli_errmsg("cli_ac_chklsig: Syntax error: Missing left argument\n");
+	return -1;
+    }
+    lend = &expr[opoff];
+    if(opoff + 1 == len) {
+	cli_errmsg("cli_ac_chklsig: Syntax error: Missing right argument\n");
+	return -1;
+    }
+    rstart = &expr[opoff + 1];
+
+    lval = cli_ac_chklsig(lstart, lend, lsigcnt, &lcnt, &lids, parse_only);
+    if(lval == -1) {
+	cli_errmsg("cli_ac_chklsig: Calculation of lval failed\n");
+	return -1;
+    }
+
+    rval = cli_ac_chklsig(rstart, rend, lsigcnt, &rcnt, &rids, parse_only);
+    if(rval == -1) {
+	cli_errmsg("cli_ac_chklsig: Calculation of rval failed\n");
+	return -1;
+    }
+
+    if(parse_only) {
+	switch(op) {
+	    case '&':
+	    case '|':
+		return MAX(lval, rval);
+	    default:
+		cli_errmsg("cli_ac_chklsig: Incorrect operator type\n");
+		return -1;
+	}
+    } else {
+	switch(op) {
+	    case '&':
+		ret = lval && rval;
+		break;
+	    case '|':
+		ret = lval || rval;
+		break;
+	    default:
+		cli_errmsg("cli_ac_chklsig: Incorrect operator type\n");
+		return -1;
+	}
+
+	if(!blkmod) {
+	    if(ret) {
+		*cnt += lcnt + rcnt;
+		*ids |= lids | rids;
+	    }
+	    return ret;
+	} else {
+	    if(ret) {
+		tcnt = lcnt + rcnt;
+		tids = lids | rids;
+	    } else {
+		tcnt = 0;
+		tids = 0;
+	    }
+
+	    switch(blkmod) {
+		case '=':
+		    if(tcnt != modval1)
+			return 0;
+		    break;
+		case '<':
+		    if(tcnt >= modval1)
+			return 0;
+		    break;
+		case '>':
+		    if(tcnt <= modval1)
+			return 0;
+		    break;
+		default:
+		    return 0;
+	    }
+
+	    if(modval2) {
+		val = 0;
+		while(tids) {
+		    val += tids & (uint64_t) 1;
+		    tids >>= 1;
+		}
+		if(val < modval2)
+		    return 0;
+	    }
+	    *cnt += tcnt;
+	    return 1;
+	}
+    }
+}
+
 /* 
  * FIXME: the current support for string alternatives uses a brute-force
  *        approach and doesn't perform any kind of verification and
@@ -480,7 +713,7 @@ inline static int ac_findmatch(const unsigned char *buffer, uint32_t offset, uin
 
     if(!(pattern->ch[0] & CLI_MATCH_IGNORE)) {
 	bp = offset - pattern->prefix_length;
-	if(pattern->ch_mindist[0] + 1 > bp)
+	if(pattern->ch_mindist[0] + (uint32_t) 1 > bp)
 	    return 0;
 	bp -= pattern->ch_mindist[0] + 1;
 	for(i = pattern->ch_mindist[0]; i <= pattern->ch_maxdist[0]; i++) {
@@ -500,8 +733,10 @@ inline static int ac_findmatch(const unsigned char *buffer, uint32_t offset, uin
     return 1;
 }
 
-int cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint8_t tracklen)
+int cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint32_t lsigs, uint8_t tracklen)
 {
+	unsigned int i;
+
 
     if(!data) {
 	cli_errmsg("cli_ac_init: data == NULL\n");
@@ -510,15 +745,35 @@ int cli_ac_initdata(struct cli_ac_data *data, uint32_t partsigs, uint8_t trackle
 
     data->partsigs = partsigs;
 
-    if(!partsigs)
-	return CL_SUCCESS;
-
-    data->offmatrix = (int32_t ***) cli_calloc(partsigs, sizeof(int32_t **));
-    if(!data->offmatrix) {
-	cli_errmsg("cli_ac_init: Can't allocate memory for data->offmatrix\n");
-	return CL_EMEM;
+    if(partsigs) {
+	data->offmatrix = (int32_t ***) cli_calloc(partsigs, sizeof(int32_t **));
+	if(!data->offmatrix) {
+	    cli_errmsg("cli_ac_init: Can't allocate memory for data->offmatrix\n");
+	    return CL_EMEM;
+	}
     }
-
+ 
+    data->lsigs = lsigs;
+    if(lsigs) {
+	data->lsigcnt = (uint32_t **) cli_malloc(lsigs * sizeof(uint32_t *));
+	if(!data->lsigcnt) {
+	    if(partsigs)
+		free(data->offmatrix);
+	    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt\n");
+	    return CL_EMEM;
+	}
+	data->lsigcnt[0] = (uint32_t *) cli_calloc(lsigs * 64, sizeof(uint32_t));
+	if(!data->lsigcnt[0]) {
+	    free(data->lsigcnt);
+	    if(partsigs)
+		free(data->offmatrix);
+	    cli_errmsg("cli_ac_init: Can't allocate memory for data->lsigcnt[0]\n");
+	    return CL_EMEM;
+	}
+	for(i = 1; i < lsigs; i++)
+	    data->lsigcnt[i] = data->lsigcnt[0] + 64 * i;
+     }
+ 
     return CL_SUCCESS;
 }
 
@@ -535,6 +790,13 @@ void cli_ac_freedata(struct cli_ac_data *data)
 	    }
 	}
 	free(data->offmatrix);
+	data->partsigs = 0;
+    }
+
+    if(data && data->lsigs) {
+	free(data->lsigcnt[0]);
+	free(data->lsigcnt);
+	data->lsigs = 0;
     }
 }
 
@@ -570,7 +832,7 @@ inline static int ac_addtype(struct cli_matched_type **list, cli_file_t type, of
     return CL_SUCCESS;
 }
 
-int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t offset, cli_file_t ftype, int fd, struct cli_matched_type **ftoffset, unsigned int mode, const cli_ctx *ctx)
+int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, void **customdata, struct cli_ac_result **res, const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t offset, cli_file_t ftype, int fd, struct cli_matched_type **ftoffset, unsigned int mode, const cli_ctx *ctx)
 {
 	struct cli_ac_node *current;
 	struct cli_ac_patt *patt, *pt;
@@ -580,6 +842,7 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 	uint8_t found;
 	struct cli_target_info info;
 	int type = CL_CLEAN;
+	struct cli_ac_result *newres;
 
 
     if(!root->ac_root)
@@ -615,7 +878,7 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 
 			realoff = offset + bp - pt->prefix_length;
 
-			if((pt->offset || pt->target) && (!pt->sigid || pt->partno == 1)) {
+			if(pt->offset && (!pt->sigid || pt->partno == 1)) {
 			    if((fd == -1 && !ftype) || !cli_validatesig(ftype, pt->offset, realoff, &info, fd, pt->virname)) {
 				pt = pt->next_same;
 				continue;
@@ -633,6 +896,8 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 				mdata->offmatrix[pt->sigid - 1] = cli_malloc(pt->parts * sizeof(int32_t *));
 				if(!mdata->offmatrix[pt->sigid - 1]) {
 				    cli_errmsg("cli_ac_scanbuff: Can't allocate memory for mdata->offmatrix[%u]\n", pt->sigid - 1);
+				    if(info.exeinfo.section)
+					free(info.exeinfo.section);
 				    return CL_EMEM;
 				}
 
@@ -641,6 +906,8 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 				    cli_errmsg("cli_ac_scanbuff: Can't allocate memory for mdata->offmatrix[%u][0]\n", pt->sigid - 1);
 				    free(mdata->offmatrix[pt->sigid - 1]);
 				    mdata->offmatrix[pt->sigid - 1] = NULL;
+				    if(info.exeinfo.section)
+					free(info.exeinfo.section);
 				    return CL_EMEM;
 				}
 				memset(mdata->offmatrix[pt->sigid - 1][0], -1, pt->parts * (AC_DEFAULT_TRACKLEN + 1) * sizeof(int32_t));
@@ -689,7 +956,7 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 				    if((pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) && (!pt->rtype || ftype == pt->rtype)) {
 					cli_dbgmsg("Matched signature for file type %s\n", pt->virname);
 					type = pt->type;
-					if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP) && type == CL_TYPE_MSEXE)))  {
+					if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP || ftype == CL_TYPE_MSOLE2) && type == CL_TYPE_MSEXE)))  {
 					    /* FIXME: we don't know which offset of the first part is the correct one */
 					    for(j = 1; j <= AC_DEFAULT_TRACKLEN && offmatrix[0][j] != -1; j++) {
 						if(ac_addtype(ftoffset, type, offmatrix[pt->parts - 1][j], ctx)) {
@@ -706,13 +973,37 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 				    }
 
 				} else { /* !pt->type */
-				    if(virname)
-					*virname = pt->virname;
+				    if(pt->lsigid[0]) {
+					mdata->lsigcnt[pt->lsigid[1]][pt->lsigid[2]]++;
+					pt = pt->next;
+					continue;
+				    }
 
-				    if(info.exeinfo.section)
-					free(info.exeinfo.section);
+				    if(res) {
+					newres = (struct cli_ac_result *) malloc(sizeof(struct cli_ac_result));
+					if(!newres) {
+					    if(info.exeinfo.section)
+						free(info.exeinfo.section);
+					    return CL_EMEM;
+					}
+					newres->virname = pt->virname;
+					newres->customdata = pt->customdata;
+					newres->next = *res;
+					*res = newres;
 
-				    return CL_VIRUS;
+					pt = pt->next;
+					continue;
+				    } else {
+					if(virname)
+					    *virname = pt->virname;
+					if(customdata)
+					    *customdata = pt->customdata;
+
+					if(info.exeinfo.section)
+					    free(info.exeinfo.section);
+
+					return CL_VIRUS;
+				    }
 				}
 			    }
 
@@ -727,7 +1018,7 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 				if((pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) && (!pt->rtype || ftype == pt->rtype)) {
 				    cli_dbgmsg("Matched signature for file type %s at %u\n", pt->virname, realoff);
 				    type = pt->type;
-				    if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP) && type == CL_TYPE_MSEXE)))  {
+				    if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP || ftype == CL_TYPE_MSOLE2) && type == CL_TYPE_MSEXE)))  {
 
 					if(ac_addtype(ftoffset, type, realoff, ctx)) {
 					    if(info.exeinfo.section)
@@ -737,12 +1028,37 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 				    }
 				}
 			    } else {
-				if(virname)
-				    *virname = pt->virname;
+				if(pt->lsigid[0]) {
+				    mdata->lsigcnt[pt->lsigid[1]][pt->lsigid[2]]++;
+				    pt = pt->next;
+				    continue;
+				}
 
-				if(info.exeinfo.section)
-				    free(info.exeinfo.section);
-				return CL_VIRUS;
+				if(res) {
+				    newres = (struct cli_ac_result *) malloc(sizeof(struct cli_ac_result));
+				    if(!newres) {
+					if(info.exeinfo.section)
+					    free(info.exeinfo.section);
+					return CL_EMEM;
+				    }
+				    newres->virname = pt->virname;
+				    newres->customdata = pt->customdata;
+				    newres->next = *res;
+				    *res = newres;
+
+				    pt = pt->next;
+				    continue;
+				} else {
+				    if(virname)
+					*virname = pt->virname;
+				    if(customdata)
+					*customdata = pt->customdata;
+
+				    if(info.exeinfo.section)
+					free(info.exeinfo.section);
+
+				    return CL_VIRUS;
+				}
 			    }
 			}
 			pt = pt->next_same;
@@ -760,15 +1076,20 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 }
 
 /* FIXME: clean up the code */
-int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t rtype, uint16_t type, uint32_t mindist, uint32_t maxdist, const char *offset, uint8_t target)
+int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t rtype, uint16_t type, uint32_t mindist, uint32_t maxdist, const char *offset, const uint32_t *lsigid, unsigned int options)
 {
 	struct cli_ac_patt *new;
 	char *pt, *pt2, *hex = NULL, *hexcpy = NULL;
 	uint16_t i, j, ppos = 0, pend, *dec;
-	uint8_t wprefix = 0, zprefix = 1, namelen, plen = 0;
+	uint8_t wprefix = 0, zprefix = 1, plen = 0;
 	struct cli_ac_alt *newalt, *altpt, **newtable;
 	int ret, error = CL_SUCCESS;
 
+
+    if(!root) {
+	cli_errmsg("cli_ac_addsig: root == NULL\n");
+	return CL_ENULLARG;
+    }
 
     if(strlen(hexsig) / 2 < root->ac_mindepth)
 	return CL_EPATSHORT;
@@ -783,9 +1104,13 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
     new->partno = partno;
     new->mindist = mindist;
     new->maxdist = maxdist;
-    new->target = target;
+    new->customdata = NULL;
     new->ch[0] |= CLI_MATCH_IGNORE;
     new->ch[1] |= CLI_MATCH_IGNORE;
+    if(lsigid) {
+	new->lsigid[0] = 1;
+	memcpy(&new->lsigid[1], lsigid, 2 * sizeof(uint32_t));
+    }
 
     if(strchr(hexsig, '[')) {
 	if(!(hexcpy = cli_strdup(hexsig))) {
@@ -1059,26 +1384,16 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
     if(new->length > root->maxpatlen)
 	root->maxpatlen = new->length;
 
-    if((pt = strstr(virname, " (Clam)")))
-	namelen = strlen(virname) - strlen(pt);
-    else
-	namelen = strlen(virname);
-
-    if(!namelen) {
-	cli_errmsg("cli_ac_addsig: No virus name\n");
-	new->prefix ? free(new->prefix) : free(new->pattern);
-	ac_free_alt(new);
-	free(new);
-	return CL_EMALFDB;
-    }
-
-    if((new->virname = cli_calloc(namelen + 1, sizeof(char))) == NULL) {
+    new->virname = cli_virname((char *) virname, options & CL_DB_OFFICIAL, 0);
+    if(!new->virname) {
 	new->prefix ? free(new->prefix) : free(new->pattern);
 	ac_free_alt(new);
 	free(new);
 	return CL_EMEM;
     }
-    strncpy(new->virname, virname, namelen);
+
+    if(new->lsigid[0])
+	root->ac_lsigtable[new->lsigid[1]]->virname = new->virname;
 
     if(offset) {
 	new->offset = cli_strdup(offset);

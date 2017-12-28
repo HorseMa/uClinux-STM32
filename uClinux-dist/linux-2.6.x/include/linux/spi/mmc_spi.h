@@ -1,7 +1,6 @@
 #ifndef __LINUX_SPI_MMC_SPI_H
 #define __LINUX_SPI_MMC_SPI_H
 
-#include <linux/mmc/protocol.h>
 #include <linux/interrupt.h>
 
 struct device;

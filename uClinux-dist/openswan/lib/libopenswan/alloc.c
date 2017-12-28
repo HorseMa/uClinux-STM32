@@ -11,7 +11,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: alloc.c,v 1.2 2004-10-16 23:42:13 mcr Exp $
+ * RCSID $Id: alloc.c,v 1.2 2004/10/16 23:42:13 mcr Exp $
  */
 
 #include <stdlib.h>
@@ -20,6 +20,7 @@
 #include <dirent.h>
 #include <time.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <openswan.h>
 
@@ -28,6 +29,8 @@
 
 #define LEAK_DETECTIVE
 #include "oswalloc.h"
+
+int leak_detective = 0;
 
 const chunk_t empty_chunk = { NULL, 0 };
 
@@ -72,6 +75,7 @@ union mhdr {
 	const char *name;
 	union mhdr *older, *newer;
 	unsigned long magic;
+	unsigned long size;
     } i;    /* info */
     unsigned long junk;	/* force maximal alignment */
 };
@@ -82,6 +86,11 @@ void *alloc_bytes1(size_t size, const char *name, int leak_detective)
 {
     union mhdr *p;
 
+    if(size == 0) {
+	/* uclibc returns NULL on malloc(0) */
+	size = 1;
+    }
+
     if(leak_detective) {
 	p = malloc(sizeof(union mhdr) + size);
     } else {
@@ -89,6 +98,11 @@ void *alloc_bytes1(size_t size, const char *name, int leak_detective)
     }
 
     if (p == NULL) {
+	if(getenv("OPENSWAN_SNAPSHOT_MALLOC_FAIL")) {
+	    if(fork()==0) { /* in child */
+		osw_abort();
+	    }
+	}
 	if(exit_log_func) {
 	    (*exit_log_func)("unable to malloc %lu bytes for %s"
 			     , (unsigned long) size, name);
@@ -97,6 +111,7 @@ void *alloc_bytes1(size_t size, const char *name, int leak_detective)
 
     if(leak_detective) {
 	p->i.name = name;
+	p->i.size = size;
 	p->i.older = allocs;
 	if (allocs != NULL)
 	    allocs->i.newer = p;
@@ -160,9 +175,9 @@ report_leaks(void)
 	if (p == NULL || pprev->i.name != p->i.name)
 	{
 	    if (n != 1)
-		openswan_log("leak: %lu * %s", n, pprev->i.name);
+		openswan_log("leak: %lu * %s, item size: %u", n, pprev->i.name, pprev->i.size);
 	    else
-		openswan_log("leak: %s", pprev->i.name);
+		openswan_log("leak: %s, item size: %u", pprev->i.name, pprev->i.size);
 	    n = 0;
 	}
     }

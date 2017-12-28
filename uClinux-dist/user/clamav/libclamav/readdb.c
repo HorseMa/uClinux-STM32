@@ -18,10 +18,6 @@
  *  MA 02110-1301, USA.
  */
 
-#ifdef _MSC_VER
-#include <winsock.h> /* for Sleep() */
-#endif
-
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
 #endif
@@ -58,6 +54,7 @@
 #include "filetypes.h"
 #include "filetypes_int.h"
 #include "readdb.h"
+#include "cltypes.h"
 
 #include "phishcheck.h"
 #include "phish_whitelist.h"
@@ -92,11 +89,62 @@ struct cli_ignored {
 int cl_loaddb(const char *filename, struct cl_engine **engine, unsigned int *signo);
 int cl_loaddbdir(const char *dirname, struct cl_engine **engine, unsigned int *signo);
 
-int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hexsig, uint16_t rtype, uint16_t type, const char *offset, uint8_t target)
+
+char *cli_virname(char *virname, unsigned int official, unsigned int allocated)
+{
+	unsigned int len;
+	char *newname, *pt;
+
+
+    if(!virname)
+	return NULL;
+
+    if((pt = strstr(virname, " (Clam)")))
+	len = strlen(virname) - strlen(pt);
+    else
+	len = strlen(virname);
+
+    if(!len) {
+	cli_errmsg("cli_virname: Empty virus name\n");
+	return NULL;
+    }
+
+    if(!official) {
+	newname = (char *) cli_malloc(len + 11 + 1);
+	if(!newname) {
+	    cli_errmsg("cli_virname: Can't allocate memory for newname\n");
+	    if(allocated)
+		free(virname);
+	    return NULL;
+	}
+	strncpy(newname, virname, len);
+	newname[len] = 0;
+	strcat(newname, ".UNOFFICIAL");
+	newname[len + 11] = 0;
+	if(allocated)
+	    free(virname);
+	return newname;
+    }
+
+    if(!allocated) {
+	newname = (char *) cli_malloc(len + 1);
+	if(!newname) {
+	    cli_errmsg("cli_virname: Can't allocate memory for newname\n");
+	    return NULL;
+	}
+	strncpy(newname, virname, len);
+	newname[len] = 0;
+	return newname;
+    }
+
+    return virname;
+}
+
+int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hexsig, uint16_t rtype, uint16_t type, const char *offset, uint8_t target, const uint32_t *lsigid, unsigned int options)
 {
 	struct cli_bm_patt *bm_new;
 	char *pt, *hexcpy, *start, *n;
-	int ret, virlen, asterisk = 0;
+	int ret, asterisk = 0;
 	unsigned int i, j, len, parts = 0;
 	int mindist = 0, maxdist = 0, error = 0;
 
@@ -135,7 +183,7 @@ int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hex
 		*pt++ = 0;
 	    }
 
-	    if((ret = cli_ac_addsig(root, virname, start, root->ac_partsigs, parts, i, rtype, type, mindist, maxdist, offset, target))) {
+	    if((ret = cli_ac_addsig(root, virname, start, root->ac_partsigs, parts, i, rtype, type, mindist, maxdist, offset, lsigid, options))) {
 		cli_errmsg("cli_parse_add(): Problem adding signature (1).\n");
 		error = 1;
 		break;
@@ -215,7 +263,7 @@ int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hex
 		return CL_EMALFDB;
 	    }
 
-	    if((ret = cli_ac_addsig(root, virname, pt, root->ac_partsigs, parts, i, rtype, type, 0, 0, offset, target))) {
+	    if((ret = cli_ac_addsig(root, virname, pt, root->ac_partsigs, parts, i, rtype, type, 0, 0, offset, lsigid, options))) {
 		cli_errmsg("cli_parse_add(): Problem adding signature (2).\n");
 		free(pt);
 		return ret;
@@ -224,8 +272,8 @@ int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hex
 	    free(pt);
 	}
 
-    } else if(root->ac_only || strpbrk(hexsig, "?(") || type) {
-	if((ret = cli_ac_addsig(root, virname, hexsig, 0, 0, 0, rtype, type, 0, 0, offset, target))) {
+    } else if(root->ac_only || strpbrk(hexsig, "?(") || type || lsigid) {
+	if((ret = cli_ac_addsig(root, virname, hexsig, 0, 0, 0, rtype, type, 0, 0, offset, lsigid, options))) {
 	    cli_errmsg("cli_parse_add(): Problem adding signature (3).\n");
 	    return ret;
 	}
@@ -239,27 +287,14 @@ int cli_parse_add(struct cli_matcher *root, const char *virname, const char *hex
 	    free(bm_new);
 	    return CL_EMALFDB;
 	}
-
 	bm_new->length = strlen(hexsig) / 2;
 
-	if((pt = strstr(virname, "(Clam)")))
-	    virlen = strlen(virname) - strlen(pt) - 1;
-	else
-	    virlen = strlen(virname);
-
-	if(virlen <= 0) {
-	    free(bm_new->pattern);
-	    free(bm_new);
-	    return CL_EMALFDB;
-	}
-
-	if((bm_new->virname = cli_calloc(virlen + 1, sizeof(char))) == NULL) {
+	bm_new->virname = cli_virname((char *) virname, options & CL_DB_OFFICIAL, 0);
+	if(!bm_new->virname) {
 	    free(bm_new->pattern);
 	    free(bm_new);
 	    return CL_EMEM;
 	}
-
-	strncpy(bm_new->virname, virname, virlen);
 
 	if(offset) {
 	    bm_new->offset = cli_strdup(offset);
@@ -295,9 +330,9 @@ int cli_initengine(struct cl_engine **engine, unsigned int options)
 
     if(!*engine) {
 #ifdef CL_EXPERIMENTAL
-	cli_dbgmsg("Initializing the engine ("VERSION"-exp)\n");
+	cli_dbgmsg("Initializing the engine (%s-exp)\n", cl_retver());
 #else
-	cli_dbgmsg("Initializing the engine ("VERSION")\n");
+	cli_dbgmsg("Initializing the engine (%s)\n", cl_retver());
 #endif
 
 	*engine = (struct cl_engine *) cli_calloc(1, sizeof(struct cl_engine));
@@ -367,7 +402,7 @@ static int cli_initroots(struct cl_engine *engine, unsigned int options)
     return CL_SUCCESS;
 }
 
-char *cli_dbgets(char *buff, unsigned int size, FILE *fs, gzFile *gzs, unsigned int *gzrsize)
+char *cli_dbgets(char *buff, unsigned int size, FILE *fs, struct cli_dbio *dbio)
 {
     if(fs) {
 	return fgets(buff, size, fs);
@@ -376,12 +411,16 @@ char *cli_dbgets(char *buff, unsigned int size, FILE *fs, gzFile *gzs, unsigned 
 	    char *pt;
 	    unsigned int bs;
 
-	if(!*gzrsize)
+	if(!dbio->size)
 	    return NULL;
 
-	bs = *gzrsize < size ? *gzrsize + 1 : size;
-	pt = gzgets(gzs, buff, bs);
-	*gzrsize -= strlen(buff);
+	bs = dbio->size < size ? dbio->size + 1 : size;
+	if(dbio->gzs)
+	    pt = gzgets(dbio->gzs, buff, bs);
+	else
+	    pt = fgets(buff, bs, dbio->fs);
+
+	dbio->size -= strlen(buff);
 	if(!pt)
 	    cli_errmsg("cli_dbgets: Preliminary end of data\n");
 	return pt;
@@ -409,7 +448,43 @@ static int cli_chkign(const struct cli_ignored *ignored, const char *dbname, uns
     return 0;
 }
 
-static int cli_loaddb(FILE *fs, struct cl_engine **engine, unsigned int *signo, unsigned int options, gzFile *gzs, unsigned int gzrsize, const char *dbname)
+static int cli_chkpua(const char *signame, const char *pua_cats, unsigned int options)
+{
+	char cat[32], *pt;
+	const char *sig;
+	int ret;
+
+    if(strncmp(signame, "PUA.", 4)) {
+	cli_dbgmsg("Skipping signature %s - no PUA prefix\n", signame);
+	return 1;
+    }
+    sig = signame + 3;
+    if(!(pt = strchr(sig + 1, '.'))) {
+	cli_dbgmsg("Skipping signature %s - bad syntax\n", signame);
+	return 1;
+    }
+
+    if((unsigned int) (pt - sig + 2) > sizeof(cat)) {
+	cli_dbgmsg("Skipping signature %s - too long category name\n", signame);
+	return 1;
+    }
+
+    strncpy(cat, sig, pt - signame + 1);
+    cat[pt - sig + 1] = 0;
+    pt = strstr(pua_cats, cat);
+
+    if(options & CL_DB_PUA_INCLUDE)
+	ret = pt ? 0 : 1;
+    else
+	ret = pt ? 1 : 0;
+
+    if(ret)
+	cli_dbgmsg("Skipping PUA signature %s - excluded category\n", signame);
+
+    return ret;
+}
+
+static int cli_loaddb(FILE *fs, struct cl_engine **engine, unsigned int *signo, unsigned int options, struct cli_dbio *dbio, const char *dbname)
 {
 	char buffer[FILEBUFF], *pt, *start;
 	unsigned int line = 0, sigs = 0;
@@ -429,7 +504,7 @@ static int cli_loaddb(FILE *fs, struct cl_engine **engine, unsigned int *signo, 
 
     root = (*engine)->root[0];
 
-    while(cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize)) {
+    while(cli_dbgets(buffer, FILEBUFF, fs, dbio)) {
 	line++;
 	cli_chomp(buffer);
 
@@ -448,7 +523,7 @@ static int cli_loaddb(FILE *fs, struct cl_engine **engine, unsigned int *signo, 
 
 	if(*pt == '=') continue;
 
-	if((ret = cli_parse_add(root, start, pt, 0, 0, NULL, 0))) {
+	if((ret = cli_parse_add(root, start, pt, 0, 0, NULL, 0, NULL, options))) {
 	    ret = CL_EMALFDB;
 	    break;
 	}
@@ -473,7 +548,7 @@ static int cli_loaddb(FILE *fs, struct cl_engine **engine, unsigned int *signo, 
     return CL_SUCCESS;
 }
 
-static int cli_loadwdb(FILE *fs, struct cl_engine **engine, unsigned int options, gzFile *gzs, unsigned int gzrsize)
+static int cli_loadwdb(FILE *fs, struct cl_engine **engine, unsigned int options, struct cli_dbio *dbio)
 {
 	int ret = 0;
 
@@ -494,7 +569,7 @@ static int cli_loadwdb(FILE *fs, struct cl_engine **engine, unsigned int options
 	}
     }
 
-    if((ret = load_regex_matcher((*engine)->whitelist_matcher, fs, options, 1, gzs, gzrsize))) {
+    if((ret = load_regex_matcher((*engine)->whitelist_matcher, fs, options, 1, dbio))) {
 	phishing_done(*engine);
 	cl_free(*engine);
 	return ret;
@@ -503,7 +578,7 @@ static int cli_loadwdb(FILE *fs, struct cl_engine **engine, unsigned int options
     return CL_SUCCESS;
 }
 
-static int cli_loadpdb(FILE *fs, struct cl_engine **engine, unsigned int options, gzFile *gzs, unsigned int gzrsize)
+static int cli_loadpdb(FILE *fs, struct cl_engine **engine, unsigned int options, struct cli_dbio *dbio)
 {
 	int ret = 0;
 
@@ -524,7 +599,7 @@ static int cli_loadpdb(FILE *fs, struct cl_engine **engine, unsigned int options
 	}
     }
 
-    if((ret = load_regex_matcher((*engine)->domainlist_matcher, fs, options, 0, gzs, gzrsize))) {
+    if((ret = load_regex_matcher((*engine)->domainlist_matcher, fs, options, 0, dbio))) {
 	phishing_done(*engine);
 	cl_free(*engine);
 	return ret;
@@ -534,7 +609,7 @@ static int cli_loadpdb(FILE *fs, struct cl_engine **engine, unsigned int options
 }
 
 #define NDB_TOKENS 6
-static int cli_loadndb(FILE *fs, struct cl_engine **engine, unsigned int *signo, unsigned short sdb, unsigned int options, gzFile *gzs, unsigned int gzrsize, const char *dbname)
+static int cli_loadndb(FILE *fs, struct cl_engine **engine, unsigned int *signo, unsigned short sdb, unsigned int options, struct cli_dbio *dbio, const char *dbname)
 {
 	const char *tokens[NDB_TOKENS];
 	char buffer[FILEBUFF];
@@ -555,7 +630,7 @@ static int cli_loadndb(FILE *fs, struct cl_engine **engine, unsigned int *signo,
 	return ret;
     }
 
-    while(cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize)) {
+    while(cli_dbgets(buffer, FILEBUFF, fs, dbio)) {
 	line++;
 
 	if(!strncmp(buffer, "Exploit.JPEG.Comment", 20)) /* temporary */
@@ -573,6 +648,10 @@ static int cli_loadndb(FILE *fs, struct cl_engine **engine, unsigned int *signo,
 	    ret = CL_EMALFDB;
 	    break;
 	}
+
+	if((*engine)->pua_cats && (options & CL_DB_PUA_MODE) && (options & (CL_DB_PUA_INCLUDE | CL_DB_PUA_EXCLUDE)))
+	    if(cli_chkpua(virname, (*engine)->pua_cats, options))
+		continue;
 
 	if((*engine)->ignored && cli_chkign((*engine)->ignored, dbname, line, virname))
 	    continue;
@@ -627,7 +706,7 @@ static int cli_loadndb(FILE *fs, struct cl_engine **engine, unsigned int *signo,
 	    break;
 	}
 
-	if((ret = cli_parse_add(root, virname, sig, 0, 0, offset, target))) {
+	if((ret = cli_parse_add(root, virname, sig, 0, 0, offset, target, NULL, options))) {
 	    ret = CL_EMALFDB;
 	    break;
 	}
@@ -657,8 +736,343 @@ static int cli_loadndb(FILE *fs, struct cl_engine **engine, unsigned int *signo,
     return CL_SUCCESS;
 }
 
+struct lsig_attrib {
+    const char *name;
+    unsigned int type;
+    void **pt;
+};
+
+/* TODO: rework this */
+static int lsigattribs(char *attribs, struct cli_lsig_tdb *tdb)
+{
+	struct lsig_attrib attrtab[] = {
+#define ATTRIB_TOKENS	2
+	    { "Target",	    CLI_TDB_UINT,	(void **) &tdb->target	    },
+	    { "Engine",	    CLI_TDB_RANGE,	(void **) &tdb->engine	    },
+/*
+	    { "NoS",	    CLI_TDB_RANGE,	(void **) &tdb->nos	    },
+	    { "EP",	    CLI_TDB_RANGE,	(void **) &tdb->ep	    },
+	    { "SectOff",    CLI_TDB_RANGE2,	(void **) &tdb->sectoff	    },
+	    { "SectRVA",    CLI_TDB_RANGE2,	(void **) &tdb->sectrva	    },
+	    { "SectVSZ",    CLI_TDB_RANGE2,	(void **) &tdb->sectvsz	    },
+	    { "SectRAW",    CLI_TDB_RANGE2,	(void **) &tdb->sectraw	    },
+	    { "SectRSZ",    CLI_TDB_RANGE2,	(void **) &tdb->sectrsz	    },
+	    { "SectURVA",   CLI_TDB_RANGE2,	(void **) &tdb->secturva    },
+	    { "SectUVSZ",   CLI_TDB_RANGE2,	(void **) &tdb->sectuvsz    },
+	    { "SectURAW",   CLI_TDB_RANGE2,	(void **) &tdb->secturaw    },
+	    { "SectURSZ",   CLI_TDB_RANGE2,	(void **) &tdb->sectursz    },
+*/
+	    { NULL,	    0,			NULL,			    }
+	};
+	struct lsig_attrib *apt;
+	char *tokens[ATTRIB_TOKENS], *pt, *pt2;
+	unsigned int v1, v2, v3, i, j;
+	uint32_t cnt, off[ATTRIB_TOKENS];
+
+
+    cli_strtokenize(attribs, ',', ATTRIB_TOKENS, (const char **) tokens);
+
+    for(i = 0; tokens[i]; i++) {
+	if(!(pt = strchr(tokens[i], ':'))) {
+	    cli_errmsg("lsigattribs: Incorrect format of attribute '%s'\n", tokens[i]);
+	    return -1;
+	}
+	*pt++ = 0;
+
+	apt = NULL;
+	for(j = 0; attrtab[j].name; j++) {
+	    if(!strcmp(attrtab[j].name, tokens[i])) {
+		apt = &attrtab[j];
+		break;
+	    }
+	}
+
+	if(!apt) {
+	    cli_dbgmsg("lsigattribs: Unknown attribute name '%s'\n", tokens[i]);
+	    continue;
+	}
+
+	switch(apt->type) {
+	    case CLI_TDB_UINT:
+		off[i] = cnt = tdb->cnt[CLI_TDB_UINT]++;
+		tdb->val = (uint32_t *) cli_realloc2(tdb->val, tdb->cnt[CLI_TDB_UINT] * sizeof(uint32_t));
+		if(!tdb->val) {
+		    tdb->cnt[CLI_TDB_UINT] = 0;
+		    return -1;
+		}
+		tdb->val[cnt] = atoi(pt);
+		break;
+
+	    case CLI_TDB_RANGE:
+		if(!(pt2 = strchr(pt, '-'))) {
+		    cli_errmsg("lsigattribs: Incorrect parameters in '%s'\n", tokens[i]);
+		    return -1;
+		}
+		*pt2++ = 0;
+		off[i] = cnt = tdb->cnt[CLI_TDB_RANGE];
+		tdb->cnt[CLI_TDB_RANGE] += 2;
+		tdb->range = (uint32_t *) cli_realloc2(tdb->range, tdb->cnt[CLI_TDB_RANGE] * sizeof(uint32_t));
+		if(!tdb->range) {
+		    tdb->cnt[CLI_TDB_RANGE] = 0;
+		    return -1;
+		}
+		tdb->range[cnt] = atoi(pt);
+		tdb->range[cnt + 1] = atoi(pt2);
+		break;
+
+	    case CLI_TDB_RANGE2:
+		if(!strchr(pt, '-') || !strchr(pt, '.')) {
+		    cli_errmsg("lsigattribs: Incorrect parameters in '%s'\n", tokens[i]);
+		    return -1;
+		}
+		off[i] = cnt = tdb->cnt[CLI_TDB_RANGE];
+		tdb->cnt[CLI_TDB_RANGE] += 3;
+		tdb->range = (uint32_t *) cli_realloc2(tdb->range, tdb->cnt[CLI_TDB_RANGE] * sizeof(uint32_t));
+		if(!tdb->range) {
+		    tdb->cnt[CLI_TDB_RANGE] = 0;
+		    return -1;
+		}
+		if(sscanf(pt, "%u.%u-%u", &v1, &v2, &v3) != 3) {
+		    cli_errmsg("lsigattribs: Can't parse parameters in '%s'\n", tokens[i]);
+		    return -1;
+		}
+		tdb->range[cnt] = (uint32_t) v1;
+		tdb->range[cnt + 1] = (uint32_t) v2;
+		tdb->range[cnt + 2] = (uint32_t) v3;
+		break;
+
+	    case CLI_TDB_STR:
+		off[i] = cnt = tdb->cnt[CLI_TDB_STR];
+		tdb->cnt[CLI_TDB_STR] += strlen(pt) + 1;
+		tdb->str = (char *) cli_realloc2(tdb->str, tdb->cnt[CLI_TDB_STR] * sizeof(char));
+		if(!tdb->str) {
+		    cli_errmsg("lsigattribs: Can't allocate memory for tdb->str\n");
+		    return -1;
+		}
+		memcpy(&tdb->str[cnt], pt, strlen(pt));
+		tdb->str[tdb->cnt[CLI_TDB_STR] - 1] = 0;
+		break;
+	}
+    }
+
+    if(!i) {
+	cli_errmsg("lsigattribs: Empty TDB\n");
+	return -1;
+    }
+
+    for(i = 0; tokens[i]; i++) {
+	for(j = 0; attrtab[j].name; j++) {
+	    if(!strcmp(attrtab[j].name, tokens[i])) {
+		apt = &attrtab[j];
+		break;
+	    }
+	}
+	switch(apt->type) {
+	    case CLI_TDB_UINT:
+		*apt->pt = (uint32_t *) &tdb->val[off[i]];
+		break;
+
+	    case CLI_TDB_RANGE:
+	    case CLI_TDB_RANGE2:
+		*apt->pt = (uint32_t *) &tdb->range[off[i]];
+		break;
+
+	    case CLI_TDB_STR:
+		*apt->pt = (char *) &tdb->str[off[i]];
+		break;
+	}
+    }
+
+    return 0;
+}
+
+#define FREE_TDB(x)		\
+    if(x.cnt[CLI_TDB_UINT])	\
+	free(x.val);		\
+    if(x.cnt[CLI_TDB_RANGE])    \
+	free(x.range);		\
+    if(x.cnt[CLI_TDB_STR])	\
+	free(x.str);
+
+#define LDB_TOKENS 67
+static int cli_loadldb(FILE *fs, struct cl_engine **engine, unsigned int *signo, unsigned int options, struct cli_dbio *dbio, const char *dbname)
+{
+	char *tokens[LDB_TOKENS];
+	char buffer[32768], *pt;
+	const char *sig, *virname, *offset, *logic;
+	struct cli_matcher *root;
+	unsigned int line = 0, sigs = 0;
+	unsigned short target = 0;
+	struct cli_ac_lsig **newtable, *lsig;
+	uint32_t lsigid[2];
+	int ret = CL_SUCCESS, i, subsigs;
+	struct cli_lsig_tdb tdb;
+
+
+    if((ret = cli_initengine(engine, options))) {
+	cl_free(*engine);
+	return ret;
+    }
+
+    if((ret = cli_initroots(*engine, options))) {
+	cl_free(*engine);
+	return ret;
+    }
+
+    while(cli_dbgets(buffer, FILEBUFF, fs, dbio)) {
+	line++;
+	sigs++;
+	cli_chomp(buffer);
+
+	cli_strtokenize(buffer, ';', LDB_TOKENS, (const char **) tokens);
+
+	if(!(virname = tokens[0])) {
+	    ret = CL_EMALFDB;
+	    break;
+	}
+
+	if((*engine)->pua_cats && (options & CL_DB_PUA_MODE) && (options & (CL_DB_PUA_INCLUDE | CL_DB_PUA_EXCLUDE)))
+	    if(cli_chkpua(virname, (*engine)->pua_cats, options))
+		continue;
+
+	if((*engine)->ignored && cli_chkign((*engine)->ignored, dbname, line, virname))
+	    continue;
+
+	if(!(logic = tokens[2])) {
+	    ret = CL_EMALFDB;
+	    break;
+	}
+
+	subsigs = cli_ac_chklsig(logic, logic + strlen(logic), NULL, NULL, NULL, 1);
+	if(subsigs == -1) {
+	    ret = CL_EMALFDB;
+	    break;
+	}
+	subsigs++;
+
+	if(subsigs > 64) {
+	    cli_errmsg("cli_loadldb: Broken logical expression or too many subsignatures\n");
+	    ret = CL_EMALFDB;
+	    break;
+	}
+
+	/* TDB */
+	memset(&tdb, 0, sizeof(tdb));
+
+	if(lsigattribs(tokens[1], &tdb) == -1) {
+	    FREE_TDB(tdb);
+	    ret = CL_EMALFDB;
+	    break;
+	}
+
+	if(tdb.engine) {
+	    if(tdb.engine[0] > cl_retflevel()) {
+		cli_dbgmsg("cli_loadldb: Signature for %s not loaded (required f-level: %u)\n", virname, tdb.engine[0]);
+		FREE_TDB(tdb);
+		sigs--;
+		continue;
+	    } else if(tdb.engine[1] < cl_retflevel()) {
+		FREE_TDB(tdb);
+		sigs--;
+		continue;
+	    }
+	}
+
+	if(!tdb.target) {
+	    cli_errmsg("cli_loadldb: No target specified in TDB\n");
+	    FREE_TDB(tdb);
+	    ret = CL_EMALFDB;
+	    break;
+	} else if(tdb.target[0] >= CLI_MTARGETS) {
+	    cli_dbgmsg("cli_loadldb: Not supported target type in logical signature for %s\n", virname);
+	    FREE_TDB(tdb);
+	    sigs--;
+	    continue;
+	}
+
+	root = (*engine)->root[tdb.target[0]];
+
+	lsig = (struct cli_ac_lsig *) cli_calloc(1, sizeof(struct cli_ac_lsig));
+	if(!lsig) {
+	    cli_errmsg("cli_loadldb: Can't allocate memory for lsig\n");
+	    FREE_TDB(tdb);
+	    ret = CL_EMEM;
+	    break;
+	}
+	lsig->logic = cli_strdup(logic);
+	if(!lsig->logic) {
+	    cli_errmsg("cli_loadldb: Can't allocate memory for lsig->logic\n");
+	    FREE_TDB(tdb);
+	    ret = CL_EMEM;
+	    free(lsig);
+	    break;
+	}
+
+	lsigid[0] = lsig->id = root->ac_lsigs;
+	memcpy(&lsig->tdb, &tdb, sizeof(tdb));
+
+	root->ac_lsigs++;
+	newtable = (struct cli_ac_lsig **) cli_realloc(root->ac_lsigtable, root->ac_lsigs * sizeof(struct cli_ac_lsig *));
+	if(!newtable) {
+	    root->ac_lsigs--;
+	    cli_errmsg("cli_loadldb: Can't realloc root->ac_lsigtable\n");
+	    FREE_TDB(tdb);
+	    free(lsig);
+	    ret = CL_EMEM;
+	    break;
+	}
+	newtable[root->ac_lsigs - 1] = lsig;
+	root->ac_lsigtable = newtable;
+
+	for(i = 0; i < subsigs; i++) {
+	    if(!tokens[3 + i]) {
+		cli_errmsg("cli_loadldb: Missing subsignature id %u\n", i);
+		ret = CL_EMALFDB;
+		break;
+	    }
+	    lsigid[1] = i;
+	    sig = tokens[3 + i];
+
+	    if((pt = strchr(tokens[3 + i], ':'))) {
+		*pt = 0;
+		sig = ++pt;
+		offset = tokens[3 + i];
+		if(!strcmp(offset, "*"))
+		    offset = NULL;
+	    } else {
+		offset = NULL;
+		sig = tokens[3 + i];
+	    }
+
+	    if((ret = cli_parse_add(root, virname, sig, 0, 0, offset, target, lsigid, options))) {
+		ret = CL_EMALFDB;
+		break;
+	    }
+	}
+	if(ret)
+	    break;
+    }
+
+    if(!line) {
+	cli_errmsg("Empty database file\n");
+	cl_free(*engine);
+	return CL_EMALFDB;
+    }
+
+    if(ret) {
+	cli_errmsg("Problem parsing database at line %u\n", line);
+	cl_free(*engine);
+	return ret;
+    }
+
+    if(signo)
+	*signo += sigs;
+
+    return CL_SUCCESS;
+}
+
 #define FTM_TOKENS 8	
-static int cli_loadftm(FILE *fs, struct cl_engine **engine, unsigned int options, unsigned int internal, gzFile *gzs, unsigned int gzrsize)
+static int cli_loadftm(FILE *fs, struct cl_engine **engine, unsigned int options, unsigned int internal, struct cli_dbio *dbio)
 {
 	const char *tokens[FTM_TOKENS], *pt;
 	char buffer[FILEBUFF];
@@ -683,8 +1097,9 @@ static int cli_loadftm(FILE *fs, struct cl_engine **engine, unsigned int options
 	    if(!ftypes_int[line])
 		break;
 	    strncpy(buffer, ftypes_int[line], sizeof(buffer));
+	    buffer[sizeof(buffer)-1]='\0';
 	} else {
-	    if(!cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize))
+	    if(!cli_dbgets(buffer, FILEBUFF, fs, dbio))
 		break;
 	    cli_chomp(buffer);
 	}
@@ -723,7 +1138,7 @@ static int cli_loadftm(FILE *fs, struct cl_engine **engine, unsigned int options
 	}
 
 	if(atoi(tokens[0]) == 1) { /* A-C */
-	    if((ret = cli_parse_add((*engine)->root[0], tokens[3], tokens[2], rtype, type, strcmp(tokens[1], "*") ? tokens[1] : NULL, 0)))
+	    if((ret = cli_parse_add((*engine)->root[0], tokens[3], tokens[2], rtype, type, strcmp(tokens[1], "*") ? tokens[1] : NULL, 0, NULL, options)))
 		break;
 
 	} else if(atoi(tokens[0]) == 0) { /* memcmp() */
@@ -775,7 +1190,7 @@ static int cli_loadftm(FILE *fs, struct cl_engine **engine, unsigned int options
     return CL_SUCCESS;
 }
 
-static int cli_loadign(FILE *fs, struct cl_engine **engine, unsigned int options, gzFile *gzs, unsigned int gzrsize)
+static int cli_loadign(FILE *fs, struct cl_engine **engine, unsigned int options, struct cli_dbio *dbio)
 {
 	char buffer[FILEBUFF], *pt;
 	unsigned int line = 0;
@@ -797,7 +1212,7 @@ static int cli_loadign(FILE *fs, struct cl_engine **engine, unsigned int options
 	}
     }
 
-    while(cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize)) {
+    while(cli_dbgets(buffer, FILEBUFF, fs, dbio)) {
 	line++;
 	cli_chomp(buffer);
 
@@ -911,9 +1326,12 @@ static int cli_md5db_init(struct cl_engine **engine, unsigned int mode)
     else			    \
 	db = (*engine)->md5_fp;
 
-static int cli_loadmd5(FILE *fs, struct cl_engine **engine, unsigned int *signo, unsigned int mode, unsigned int options, gzFile *gzs, unsigned int gzrsize, const char *dbname)
+#define MD5_TOKENS 3
+static int cli_loadmd5(FILE *fs, struct cl_engine **engine, unsigned int *signo, unsigned int mode, unsigned int options, struct cli_dbio *dbio, const char *dbname)
 {
-	char buffer[FILEBUFF], *pt;
+	const char *tokens[MD5_TOKENS];
+	char buffer[FILEBUFF];
+	const char *pt;
 	int ret = CL_SUCCESS;
 	unsigned int size_field = 1, md5_field = 0, line = 0, sigs = 0;
 	uint32_t size;
@@ -930,9 +1348,23 @@ static int cli_loadmd5(FILE *fs, struct cl_engine **engine, unsigned int *signo,
 	md5_field = 1;
     }
 
-    while(cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize)) {
+    while(cli_dbgets(buffer, FILEBUFF, fs, dbio)) {
 	line++;
 	cli_chomp(buffer);
+	cli_strtokenize(buffer, ':', MD5_TOKENS, tokens);
+
+	if(!(pt = tokens[2])) { /* virname */
+	    ret = CL_EMALFDB;
+	    break;
+	}
+
+	if((*engine)->pua_cats && (options & CL_DB_PUA_MODE) && (options & (CL_DB_PUA_INCLUDE | CL_DB_PUA_EXCLUDE)))
+	    if(cli_chkpua(pt, (*engine)->pua_cats, options))
+		continue;
+
+	if((*engine)->ignored && cli_chkign((*engine)->ignored, dbname, line, pt))
+	    continue;
+
 
 	new = (struct cli_bm_patt *) cli_calloc(1, sizeof(struct cli_bm_patt));
 	if(!new) {
@@ -940,7 +1372,7 @@ static int cli_loadmd5(FILE *fs, struct cl_engine **engine, unsigned int *signo,
 	    break;
 	}
 
-	if(!(pt = cli_strtok(buffer, md5_field, ":"))) {
+	if(!(pt = tokens[md5_field])) {
 	    free(new);
 	    ret = CL_EMALFDB;
 	    break;
@@ -948,35 +1380,25 @@ static int cli_loadmd5(FILE *fs, struct cl_engine **engine, unsigned int *signo,
 
 	if(strlen(pt) != 32 || !(new->pattern = (unsigned char *) cli_hex2str(pt))) {
 	    cli_errmsg("cli_loadmd5: Malformed MD5 string at line %u\n", line);
-	    free(pt);
 	    free(new);
 	    ret = CL_EMALFDB;
 	    break;
 	}
-	free(pt);
 	new->length = 16;
 
-	if(!(pt = cli_strtok(buffer, size_field, ":"))) {
+	if(!(pt = tokens[size_field])) {
 	    free(new->pattern);
 	    free(new);
 	    ret = CL_EMALFDB;
 	    break;
 	}
 	size = atoi(pt);
-	free(pt);
 
-	if(!(new->virname = cli_strtok(buffer, 2, ":"))) {
+	if(!(new->virname = cli_virname((char *) tokens[2], options & CL_DB_OFFICIAL, 0))) {
 	    free(new->pattern);
 	    free(new);
 	    ret = CL_EMALFDB;
 	    break;
-	}
-
-	if((*engine)->ignored && cli_chkign((*engine)->ignored, dbname, line, new->virname)) {
-	    free(new->virname);
-	    free(new->pattern);
-	    free(new);
-	    continue;
 	}
 
 	MD5_DB;
@@ -1025,7 +1447,7 @@ static int cli_loadmd5(FILE *fs, struct cl_engine **engine, unsigned int *signo,
     return CL_SUCCESS;
 }
 
-static int cli_loadmd(FILE *fs, struct cl_engine **engine, unsigned int *signo, int type, unsigned int options, gzFile *gzs, unsigned int gzrsize, const char *dbname)
+static int cli_loadmd(FILE *fs, struct cl_engine **engine, unsigned int *signo, int type, unsigned int options, struct cli_dbio *dbio, const char *dbname)
 {
 	char buffer[FILEBUFF], *pt;
 	unsigned int line = 0, sigs = 0;
@@ -1038,7 +1460,7 @@ static int cli_loadmd(FILE *fs, struct cl_engine **engine, unsigned int *signo, 
 	return ret;
     }
 
-    while(cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize)) {
+    while(cli_dbgets(buffer, FILEBUFF, fs, dbio)) {
 	line++;
 	if(buffer[0] == '#')
 	    continue;
@@ -1051,9 +1473,9 @@ static int cli_loadmd(FILE *fs, struct cl_engine **engine, unsigned int *signo, 
 	    break;
 	}
 
-	if(!(new->virname = cli_strtok(buffer, 0, ":"))) {
+	if(!(new->virname = cli_virname(cli_strtok(buffer, 0, ":"), options & CL_DB_OFFICIAL, 1))) {
 	    free(new);
-	    ret = CL_EMALFDB;
+	    ret = CL_EMEM;
 	    break;
 	}
 
@@ -1206,7 +1628,7 @@ static int cli_loadmd(FILE *fs, struct cl_engine **engine, unsigned int *signo, 
 
 static int cli_loaddbdir(const char *dirname, struct cl_engine **engine, unsigned int *signo, unsigned int options);
 
-int cli_load(const char *filename, struct cl_engine **engine, unsigned int *signo, unsigned int options, gzFile *gzs, unsigned int gzrsize)
+int cli_load(const char *filename, struct cl_engine **engine, unsigned int *signo, unsigned int options, struct cli_dbio *dbio)
 {
 	FILE *fs = NULL;
 	int ret = CL_SUCCESS;
@@ -1214,7 +1636,7 @@ int cli_load(const char *filename, struct cl_engine **engine, unsigned int *sign
 	const char *dbname;
 
 
-    if(!gzs && (fs = fopen(filename, "rb")) == NULL) {
+    if(!dbio && (fs = fopen(filename, "rb")) == NULL) {
 	cli_errmsg("cli_load(): Can't open file %s\n", filename);
 	return CL_EOPEN;
     }
@@ -1231,7 +1653,7 @@ int cli_load(const char *filename, struct cl_engine **engine, unsigned int *sign
 	dbname = filename;
 
     if(cli_strbcasestr(dbname, ".db")) {
-	ret = cli_loaddb(fs, engine, signo, options, gzs, gzrsize, dbname);
+	ret = cli_loaddb(fs, engine, signo, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".cvd")) {
 	    int warn = 0;
@@ -1250,66 +1672,75 @@ int cli_load(const char *filename, struct cl_engine **engine, unsigned int *sign
 	ret = cli_cvdload(fs, engine, signo, warn, options | CL_DB_CVDNOTMP, 1);
 
     } else if(cli_strbcasestr(dbname, ".hdb")) {
-	ret = cli_loadmd5(fs, engine, signo, MD5_HDB, options, gzs, gzrsize, dbname);
+	ret = cli_loadmd5(fs, engine, signo, MD5_HDB, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".hdu")) {
 	if(options & CL_DB_PUA)
-	    ret = cli_loadmd5(fs, engine, signo, MD5_HDB, options, gzs, gzrsize, dbname);
+	    ret = cli_loadmd5(fs, engine, signo, MD5_HDB, options | CL_DB_PUA_MODE, dbio, dbname);
 	else
 	    skipped = 1;
 
     } else if(cli_strbcasestr(dbname, ".fp")) {
-	ret = cli_loadmd5(fs, engine, signo, MD5_FP, options, gzs, gzrsize, dbname);
+	ret = cli_loadmd5(fs, engine, signo, MD5_FP, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".mdb")) {
-	ret = cli_loadmd5(fs, engine, signo, MD5_MDB, options, gzs, gzrsize, dbname);
+	ret = cli_loadmd5(fs, engine, signo, MD5_MDB, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".mdu")) {
 	if(options & CL_DB_PUA)
-	    ret = cli_loadmd5(fs, engine, signo, MD5_MDB, options, gzs, gzrsize, dbname);
+	    ret = cli_loadmd5(fs, engine, signo, MD5_MDB, options | CL_DB_PUA_MODE, dbio, dbname);
 	else
 	    skipped = 1;
 
     } else if(cli_strbcasestr(dbname, ".ndb")) {
-	ret = cli_loadndb(fs, engine, signo, 0, options, gzs, gzrsize, dbname);
+	ret = cli_loadndb(fs, engine, signo, 0, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".ndu")) {
 	if(!(options & CL_DB_PUA))
 	    skipped = 1;
 	else
-	    ret = cli_loadndb(fs, engine, signo, 0, options, gzs, gzrsize, dbname);
+	    ret = cli_loadndb(fs, engine, signo, 0, options | CL_DB_PUA_MODE, dbio, dbname);
+
+    } else if(cli_strbcasestr(filename, ".ldb")) {
+       ret = cli_loadldb(fs, engine, signo, options, dbio, dbname);
+
+    } else if(cli_strbcasestr(filename, ".ldu")) {
+	if(options & CL_DB_PUA)
+	    ret = cli_loadldb(fs, engine, signo, options | CL_DB_PUA_MODE, dbio, dbname);
+	else
+	    skipped = 1;
 
     } else if(cli_strbcasestr(dbname, ".sdb")) {
-	ret = cli_loadndb(fs, engine, signo, 1, options, gzs, gzrsize, dbname);
+	ret = cli_loadndb(fs, engine, signo, 1, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".zmd")) {
-	ret = cli_loadmd(fs, engine, signo, 1, options, gzs, gzrsize, dbname);
+	ret = cli_loadmd(fs, engine, signo, 1, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".rmd")) {
-	ret = cli_loadmd(fs, engine, signo, 2, options, gzs, gzrsize, dbname);
+	ret = cli_loadmd(fs, engine, signo, 2, options, dbio, dbname);
 
     } else if(cli_strbcasestr(dbname, ".cfg")) {
-	ret = cli_dconf_load(fs, engine, options, gzs, gzrsize);
+	ret = cli_dconf_load(fs, engine, options, dbio);
 
     } else if(cli_strbcasestr(dbname, ".wdb")) {
 	if(options & CL_DB_PHISHING_URLS) {
-	    ret = cli_loadwdb(fs, engine, options, gzs, gzrsize);
+	    ret = cli_loadwdb(fs, engine, options, dbio);
 	} else
 	    skipped = 1;
     } else if(cli_strbcasestr(dbname, ".pdb")) {
 	if(options & CL_DB_PHISHING_URLS) {
-	    ret = cli_loadpdb(fs, engine, options, gzs, gzrsize);
+	    ret = cli_loadpdb(fs, engine, options, dbio);
 	} else
 	    skipped = 1;
     } else if(cli_strbcasestr(dbname, ".ftm")) {
-	ret = cli_loadftm(fs, engine, options, 0, gzs, gzrsize);
+	ret = cli_loadftm(fs, engine, options, 0, dbio);
 
     } else if(cli_strbcasestr(dbname, ".ign")) {
-	ret = cli_loadign(fs, engine, options, gzs, gzrsize);
+	ret = cli_loadign(fs, engine, options, dbio);
 
     } else {
 	cli_dbgmsg("cli_load: unknown extension - assuming old database format\n");
-	ret = cli_loaddb(fs, engine, signo, options, gzs, gzrsize, dbname);
+	ret = cli_loaddb(fs, engine, signo, options, dbio, dbname);
     }
 
     if(ret) {
@@ -1328,7 +1759,7 @@ int cli_load(const char *filename, struct cl_engine **engine, unsigned int *sign
 }
 
 int cl_loaddb(const char *filename, struct cl_engine **engine, unsigned int *signo) {
-    return cli_load(filename, engine, signo, CL_DB_STDOPT, NULL, 0);
+    return cli_load(filename, engine, signo, CL_DB_STDOPT, NULL);
 }
 
 static int cli_loaddbdir(const char *dirname, struct cl_engine **engine, unsigned int *signo, unsigned int options)
@@ -1352,7 +1783,7 @@ static int cli_loaddbdir(const char *dirname, struct cl_engine **engine, unsigne
 
     /* try to load local.ign and daily.cvd/daily.ign first */
     sprintf(dbfile, "%s/local.ign", dirname);
-    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL, 0))) {
+    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL))) {
 	free(dbfile);
 	return ret;
     }
@@ -1360,20 +1791,20 @@ static int cli_loaddbdir(const char *dirname, struct cl_engine **engine, unsigne
     sprintf(dbfile, "%s/daily.cld", dirname);
     if(access(dbfile, R_OK))
 	sprintf(dbfile, "%s/daily.cvd", dirname);
-    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL, 0))) {
+    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL))) {
 	free(dbfile);
 	return ret;
     }
 
     sprintf(dbfile, "%s/daily.ign", dirname);
-    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL, 0))) {
+    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL))) {
 	free(dbfile);
 	return ret;
     }
 
     /* check for and load daily.cfg */
     sprintf(dbfile, "%s/daily.cfg", dirname);
-    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL, 0))) {
+    if(!access(dbfile, R_OK) && (ret = cli_load(dbfile, engine, signo, options, NULL))) {
 	free(dbfile);
 	return ret;
     }
@@ -1391,7 +1822,7 @@ static int cli_loaddbdir(const char *dirname, struct cl_engine **engine, unsigne
 #else
     while((dent = readdir(dd))) {
 #endif
-#if	(!defined(C_INTERIX)) && (!defined(C_WINDOWS)) && (!defined(C_CYGWIN))
+#if	(!defined(C_INTERIX)) && (!defined(C_WINDOWS))
 	if(dent->d_ino)
 #endif
 	{
@@ -1405,7 +1836,7 @@ static int cli_loaddbdir(const char *dirname, struct cl_engine **engine, unsigne
 		    return CL_EMEM;
 		}
 		sprintf(dbfile, "%s/%s", dirname, dent->d_name);
-		ret = cli_load(dbfile, engine, signo, options, NULL, 0);
+		ret = cli_load(dbfile, engine, signo, options, NULL);
 
 		if(ret) {
 		    cli_dbgmsg("cli_loaddbdir(): error loading database %s\n", dbfile);
@@ -1449,7 +1880,7 @@ int cl_load(const char *path, struct cl_engine **engine, unsigned int *signo, un
 
     switch(sb.st_mode & S_IFMT) {
 	case S_IFREG: 
-	    ret = cli_load(path, engine, signo, options, NULL, 0);
+	    ret = cli_load(path, engine, signo, options, NULL);
 	    break;
 
 	case S_IFDIR:
@@ -1507,7 +1938,7 @@ int cl_statinidir(const char *dirname, struct cl_stat *dbstat)
 #else
     while((dent = readdir(dd))) {
 #endif
-#if	(!defined(C_INTERIX)) && (!defined(C_WINDOWS)) && (!defined(C_CYGWIN))
+#if	(!defined(C_INTERIX)) && (!defined(C_WINDOWS))
 	if(dent->d_ino)
 #endif
 	{
@@ -1590,7 +2021,7 @@ int cl_statchkdir(const struct cl_stat *dbstat)
 #else
     while((dent = readdir(dd))) {
 #endif
-#if	(!defined(C_INTERIX)) && (!defined(C_WINDOWS)) && (!defined(C_CYGWIN))
+#if	(!defined(C_INTERIX)) && (!defined(C_WINDOWS))
 	if(dent->d_ino)
 #endif
 	{
@@ -1670,7 +2101,7 @@ int cl_statfree(struct cl_stat *dbstat)
 
 void cl_free(struct cl_engine *engine)
 {
-	int i;
+	unsigned int i, j;
 	struct cli_meta_node *metapt, *metah;
 	struct cli_matcher *root;
 
@@ -1684,7 +2115,9 @@ void cl_free(struct cl_engine *engine)
     pthread_mutex_lock(&cli_ref_mutex);
 #endif
 
-    engine->refcount--;
+    if(engine->refcount)
+	engine->refcount--;
+
     if(engine->refcount) {
 #ifdef CL_THREAD_SAFE
 	pthread_mutex_unlock(&cli_ref_mutex);
@@ -1702,6 +2135,14 @@ void cl_free(struct cl_engine *engine)
 		if(!root->ac_only)
 		    cli_bm_free(root);
 		cli_ac_free(root);
+		if(root->ac_lsigtable) {
+		    for(j = 0; j < root->ac_lsigs; j++) {
+			free(root->ac_lsigtable[j]->logic);
+			FREE_TDB(root->ac_lsigtable[j]->tdb);
+			free(root->ac_lsigtable[j]);
+		    }
+		    free(root->ac_lsigtable);
+		}
 		free(root);
 	    }
 	}
@@ -1753,6 +2194,9 @@ void cl_free(struct cl_engine *engine)
     if(engine->dconf)
 	free(engine->dconf);
 
+    if(engine->pua_cats)
+	free(engine->pua_cats);
+
     cli_ftfree(engine->ftypes);
     cli_freeign(engine);
     free(engine);
@@ -1781,7 +2225,7 @@ int cl_build(struct cl_engine *engine)
 	return CL_ENULLARG;
 
     if(!engine->ftypes)
-	if((ret = cli_loadftm(NULL, &engine, 0, 1, NULL, 0)))
+	if((ret = cli_loadftm(NULL, &engine, 0, 1, NULL)))
 	    return ret;
 
     for(i = 0; i < CLI_MTARGETS; i++) {
@@ -1792,6 +2236,12 @@ int cl_build(struct cl_engine *engine)
 	}
     }
 
+    if((ret = cli_build_regex_list(engine->whitelist_matcher))) {
+	    return ret;
+    }
+    if((ret = cli_build_regex_list(engine->domainlist_matcher))) {
+	    return ret;
+    }
     cli_md5db_build(engine->md5_mdb);
     cli_freeign(engine);
     cli_dconf_print(engine->dconf);

@@ -41,6 +41,7 @@
 
 #include "others.h"
 #include "scanners.h"
+#include "autoit.h"
 
 
 /* FIXME: use unicode detection and normalization from edwin */
@@ -349,10 +350,8 @@ static int ea05(int desc, cli_ctx *ctx, char *tmpd) {
 
     files++;
 
-    /* FIXME: TODO send to text notmalization */
-
-    /* FIXME: ad-interim solution. ideally we should detect text and turn it to ascii */
-    UNP.usize = u2a(UNP.outputbuf, UNP.usize);
+    /* FIXME: REGRESSION NEEDED! */
+    /* UNP.usize = u2a(UNP.outputbuf, UNP.usize); */
 
     snprintf(tempfile, 1023, "%s/autoit.%.3u", tmpd, files);
     tempfile[1023]='\0';
@@ -372,15 +371,16 @@ static int ea05(int desc, cli_ctx *ctx, char *tmpd) {
       cli_dbgmsg("autoit: file extracted to %s\n", tempfile);
     else 
       cli_dbgmsg("autoit: file successfully extracted\n");
-    fsync(i);
     lseek(i, 0, SEEK_SET);
     if(cli_magic_scandesc(i, ctx) == CL_VIRUS) {
       close(i);
-      if(!cli_leavetemps_flag) unlink(tempfile);
+      if(!cli_leavetemps_flag)
+        if(cli_unlink(tempfile)) return CL_EIO;
       return CL_VIRUS;
     }
     close(i);
-    if(!cli_leavetemps_flag) unlink(tempfile);
+    if(!cli_leavetemps_flag) 
+      if (cli_unlink(tempfile)) return CL_EIO;
   }
   return ret;
 }
@@ -881,15 +881,16 @@ static int ea06(int desc, cli_ctx *ctx, char *tmpd) {
       cli_dbgmsg("autoit: %s extracted to %s\n", (script)?"script":"file", tempfile);
     else 
       cli_dbgmsg("autoit: %s successfully extracted\n", (script)?"script":"file");
-    fsync(i);
     lseek(i, 0, SEEK_SET);
     if(cli_magic_scandesc(i, ctx) == CL_VIRUS) {
       close(i);
-      if(!cli_leavetemps_flag) unlink(tempfile);
+      if(!cli_leavetemps_flag) 
+        if (cli_unlink(tempfile)) return CL_EIO;
       return CL_VIRUS;
     }
     close(i);
-    if(!cli_leavetemps_flag) unlink(tempfile);
+    if(!cli_leavetemps_flag)
+      if (cli_unlink(tempfile)) return CL_EIO;
   }
   return ret;
 }

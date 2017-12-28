@@ -47,6 +47,21 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 	       field, regs->cp0_epc);
 #endif
 
+#ifdef CONFIG_CAVIUM_OCTEON_HW_FIX_UNALIGNED
+	/*
+	 * Normally the FPU emulator uses a load word from address one
+	 * to retake control of the CPU after executing the
+	 * instruction in the delay slot of an emulated branch. The
+	 * Octeon hardware unaligned access fix changes this from an
+	 * address exception into a TLB exception. This code checks to
+	 * see if this page fault was caused by an FPU emulation.
+	 *
+	 * Terminate if exception was recognized as a delay slot return */
+	extern int do_dsemulret(struct pt_regs *);
+	if (do_dsemulret(regs))
+		return;
+#endif
+
 	info.si_code = SEGV_MAPERR;
 
 	/*

@@ -292,6 +292,13 @@ static void ledman_initarch(void);
 static void ipd_set(unsigned long bits);
 #endif
 
+#if defined(CONFIG_SG590)
+static ledmap_t sgoct_std;
+static leddef_t sgoct_def;
+static void ledman_initarch(void);
+static void sgoct_set(unsigned long bits);
+#endif
+
 /****************************************************************************/
 /****************************************************************************/
 
@@ -382,6 +389,10 @@ ledmode_t led_mode[] = {
 	{ "std", ads5282_std, ads5282_def, ledman_bits, ledman_tick, ads5282_set, LT },
 #endif
 
+#if defined(CONFIG_SG590)
+	{ "std", sgoct_std, sgoct_def, ledman_bits, ledman_tick, sgoct_set, LT },
+#endif
+
 	{ "",  NULL, NULL, NULL }
 };
 
@@ -407,7 +418,7 @@ ledman_setup(char *arg)
 INIT_RET_TYPE ledman_init(void)
 {
 	int expires;
-	printk(KERN_INFO "ledman: Copyright (C) SnapGear, 2000-2003.\n");
+	printk(KERN_INFO "ledman: Copyright (C) SnapGear, 2000-2008.\n");
 
 	if (register_chrdev(LEDMAN_MAJOR, "nled",  &ledman_fops) < 0) {
 		printk("%s(%d): ledman_init() can't get Major %d\n",
@@ -419,7 +430,7 @@ INIT_RET_TYPE ledman_init(void)
 	ledman_initkeywest();
 #endif
 
-#if defined(CONFIG_X86) || defined(CONFIG_ARM)
+#if defined(CONFIG_X86) || defined(CONFIG_ARM) || defined(CONFIG_MIPS)
 	ledman_initarch();
 #endif
 
@@ -486,7 +497,7 @@ ledman_starttimer(void)
 static void
 ledman_poll(unsigned long arg)
 {
-	int expires;
+	unsigned long expires;
 	if (led_mode[current_mode].tick) {
 		(*led_mode[current_mode].tick)();
 		expires = jiffies + led_mode[current_mode].jiffies;
@@ -1677,17 +1688,14 @@ static void ledman_initarch(void)
 	*IXP4XX_EXP_CS2 = 0xbfff0003;
 
 	/* Map the LED chip select address space */
-	ledman_cs2 = (volatile unsigned char *) ioremap(IXP4XX_EXP_BUS_CS2_BASE_PHYS, 512);
+	ledman_cs2 = (volatile unsigned char *) ioremap(SE5100_LEDMAN_BASE_PHYS, 512);
 	*ledman_cs2 = 0xffffffff;
 
 	/* Configure GPIO9 as interrupt input (ERASE switch) */
-	gpio_line_config(9, (IXP4XX_GPIO_IN | IXP4XX_GPIO_FALLING_EDGE));
-
-	if (request_irq(26, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
-		printk("LED: failed to register IRQ26 for ERASE witch\n");
-	else
-		printk("LED: registered ERASE switch on IRQ26\n");
-
+	gpio_line_config(9, IXP4XX_GPIO_IN);
+        set_irq_type(26, IRQT_FALLING);
+        gpio_line_isr_clear(9);
+        
 	montejade_wdtinit();
 }
 
@@ -2260,4 +2268,88 @@ static void ledman_initarch(void)
 
 /****************************************************************************/
 #endif /* CONFIG_ARCH_EP9312 */
+/****************************************************************************/
+/****************************************************************************/
+#if defined(CONFIG_SG590)
+/****************************************************************************/
+
+#include <linux/interrupt.h>
+#include <asm/mach-cavium-octeon/gpio.h>
+#include <asm/mach-cavium-octeon/irq.h>
+
+/*
+ *	Here is the definition of the LEDs on the SG590.
+ */
+#define LED_D2  0x0004
+#define LED_D3  0x0008
+#define LED_D4  0x0010
+#define LED_D5  0x0020
+#define LED_D6  0x0040
+#define LED_D7  0x0080
+#define LED_D8  0x0100
+#define LEDMASK 0x01fc
+
+static ledmap_t	sgoct_std = {
+	[LEDMAN_ALL]       = LEDMASK,
+	[LEDMAN_HEARTBEAT] = LED_D2,
+	[LEDMAN_LAN1_RX]   = LED_D3,
+	[LEDMAN_LAN1_TX]   = LED_D3,
+	[LEDMAN_LAN2_RX]   = LED_D4,
+	[LEDMAN_LAN2_TX]   = LED_D4,
+	[LEDMAN_HIGHAVAIL] = LED_D5,
+	[LEDMAN_COM1_RX]   = LED_D6,
+	[LEDMAN_COM1_TX]   = LED_D6,
+	[LEDMAN_COM2_RX]   = LED_D6,
+	[LEDMAN_COM2_TX]   = LED_D6,
+	[LEDMAN_ONLINE]    = LED_D7,
+	[LEDMAN_VPN]       = LED_D8,
+	[LEDMAN_NVRAM_1]   = LED_D2 | LED_D3 | LED_D7 | LED_D8,
+	[LEDMAN_NVRAM_2]   = LED_D4 | LED_D5 | LED_D6,
+	[LEDMAN_LAN1_DHCP] = LEDMASK,
+};
+
+static leddef_t	sgoct_def = {
+	[LEDS_FLASH] = LED_D2,
+};
+
+#define	ERASEGPIO	11
+#define	ERASEIRQ	OCTEON_IRQ_GPIO11
+
+static irqreturn_t ledman_interrupt(int irq, void *dev_id)
+{
+	printk("%s(%d): ledman_interrupt(irq=%d)\n", __FILE__, __LINE__, irq);
+	octeon_gpio_interrupt_ack(ERASEGPIO);
+	ledman_signalreset();
+	return IRQ_HANDLED;
+}
+
+static void sgoct_set(unsigned long bits)
+{
+	octeon_gpio_clear(bits & LEDMASK);
+	octeon_gpio_set(~bits & LEDMASK);
+}
+
+static void ledman_initarch(void)
+{
+	int i;
+
+	/* SET all LED GPIO bits as outputs */
+	for (i = 0; (i < 32); i++) {
+		if ((0x1 << i) & LEDMASK)
+			octeon_gpio_config(i, OCTEON_GPIO_OUTPUT);
+	}
+	sgoct_set(0);
+
+	/* Set up the factory erase button GPIO line */
+	if (request_irq(ERASEIRQ, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
+		printk("LED: failed to register IRQ%d for ERASE witch\n", ERASEIRQ);
+	else
+		printk("LED: registered ERASE switch on IRQ%d\n", ERASEIRQ);
+
+	octeon_gpio_config(ERASEGPIO, OCTEON_GPIO_INTERRUPT |
+		OCTEON_GPIO_INT_EDGE | OCTEON_GPIO_INPUT_XOR);
+}
+
+/****************************************************************************/
+#endif /* CONFIG_SG590 */
 /****************************************************************************/

@@ -15,6 +15,7 @@ LINKHDRS = \
 	$(ROOTDIR)/lib/libgmp/build/install/include/*.h,. \
 	$(ROOTDIR)/lib/pcre/builddir/pcre.h,. \
 	$(ROOTDIR)/lib/pcre/pcreposix.h,. \
+	$(ROOTDIR)/lib/bitvector/*.h,. \
 	$(ROOTDIR)/lib/libjpeg/*.h,. \
 	$(ROOTDIR)/lib/libpng/*.h,. \
 	$(ROOTDIR)/lib/libm/*.h,. \
@@ -41,7 +42,9 @@ LINKHDRS = \
 	$(ROOTDIR)/lib/termcap/termcap.h,. \
 	$(ROOTDIR)/lib/sysfsutils/include/*.h,sysfs \
 	$(ROOTDIR)/$(LINUXDIR)/include/linux,. \
+	$(ROOTDIR)/$(LINUXDIR)/arch/$(ARCH)/include/asm-*,. \
 	$(ROOTDIR)/$(LINUXDIR)/include/asm-*,. \
+	$(ROOTDIR)/$(LINUXDIR)/arch/$(ARCH)/include/asm,. \
 	$(ROOTDIR)/$(LINUXDIR)/include/asm,. \
 	$(ROOTDIR)/$(LINUXDIR)/include/mtd,. \
 	$(ROOTDIR)/autoconf.h,vendor \
@@ -71,28 +74,10 @@ LINKHDRS = \
 	$(ROOTDIR)/user/gdb/include/symcat.h,. \
 	$(ROOTDIR)/lib/popt/popt.h,. \
 	$(ROOTDIR)/lib/osip2/build/install/include/osip*2,. \
-	$(ROOTDIR)/prop/librep/librep.h,. \
-	$(ROOTDIR)/prop/librep/librep_c++compatibility.h,. \
-	$(ROOTDIR)/prop/librep/librep_vector.h,. \
-	$(ROOTDIR)/prop/librep/query.h,. \
+	$(ROOTDIR)/prop/libtrustedsource/librep/*.h,. \
+	$(ROOTDIR)/prop/libtrustedsource/librep/common/query.h,common \
 	$(ROOTDIR)/prop/initdhcpd/initdhcpd.h,. \
 	$(ROOTDIR)/lib/libffi/install/include/libffi,.
-
-#
-# Both freeswan and openswan can provide des and crypto headers
-# and we need to make sure we are using the correct ones.
-#
--include $(ROOTDIR)/$(LINUXDIR)/.config
-ifneq ($(CONFIG_IPSEC),) #freeswan selected
-LINKHDRS +=	\
-	$(ROOTDIR)/freeswan/libdes/*.h,des \
-	$(ROOTDIR)/freeswan/libcrypto/libaes/*.h,aes
-else # openswan
-LINKHDRS +=	\
-	$(ROOTDIR)/openswan/linux/include/des/*.h,des \
-	$(ROOTDIR)/openswan/linux/include/crypto/des.h,des \
-	$(ROOTDIR)/openswan/linux/include/crypto/*.h,aes
-endif
 
 
 .PHONY: all romfs clean

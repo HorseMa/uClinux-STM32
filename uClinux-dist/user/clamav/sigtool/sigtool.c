@@ -84,6 +84,8 @@ static const struct dblist_s {
     { "main.mdu",   1 },    { "daily.mdu",  1 },
     { "main.ndb",   1 },    { "daily.ndb",  1 },
     { "main.ndu",   1 },    { "daily.ndu",  1 },
+    { "main.ldb",   1 },    { "daily.ldb",  1 },
+    { "main.ldu",   1 },    { "daily.ldu",  1 },
     { "main.sdb",   1 },    { "daily.sdb",  1 },
     { "main.zmd",   1 },    { "daily.zmd",  1 },
     { "main.rmd",   1 },    { "daily.rmd",  1 },
@@ -258,6 +260,7 @@ static char *getdsig(const char *host, const char *user, const unsigned char *da
 
     if((pt = getenv("SIGNDPASS"))) {
 	strncpy(pass, pt, sizeof(pass));
+	pass[sizeof(pass)-1]='\0';
     } else {
 	mprintf("Password: ");
 
@@ -281,12 +284,13 @@ static char *getdsig(const char *host, const char *user, const unsigned char *da
 	    return NULL;
 	}
 	strncpy(pass, pt, sizeof(pass));
+	pass[sizeof(pass)-1]='\0';
 	free(pt);
 
 #ifdef HAVE_TERMIOS_H
 	if(tcsetattr(0, TCSAFLUSH, &old)) {
 	    mprintf("!getdsig: tcsetattr() failed\n");
-	    memset(pass, 0, strlen(pass));
+	    memset(pass, 0, sizeof(pass));
 	    return NULL;
 	}
 #endif
@@ -300,7 +304,7 @@ static char *getdsig(const char *host, const char *user, const unsigned char *da
 #endif
 	perror("socket()");
 	mprintf("!getdsig: Can't create socket\n");
-	memset(pass, 0, strlen(pass));
+	memset(pass, 0, sizeof(pass));
 	return NULL;
     }
 
@@ -312,7 +316,7 @@ static char *getdsig(const char *host, const char *user, const unsigned char *da
         close(sockd);
 	perror("connect()");
 	mprintf("!getdsig: Can't connect to ClamAV Signing Service at %s\n", host);
-	memset(pass, 0, strlen(pass));
+	memset(pass, 0, sizeof(pass));
 	return NULL;
     }
     memset(cmd, 0, sizeof(cmd));
@@ -330,13 +334,13 @@ static char *getdsig(const char *host, const char *user, const unsigned char *da
     if(write(sockd, cmd, len) < 0) {
 	mprintf("!getdsig: Can't write to socket\n");
 	close(sockd);
-	memset(cmd, 0, len);
-	memset(pass, 0, strlen(pass));
+	memset(cmd, 0, sizeof(cmd));
+	memset(pass, 0, sizeof(pass));
 	return NULL;
     }
 
-    memset(cmd, 0, len);
-    memset(pass, 0, strlen(pass));
+    memset(cmd, 0, sizeof(cmd));
+    memset(pass, 0, sizeof(pass));
     memset(buff, 0, sizeof(buff));
 
     if((bread = cli_readn(sockd, buff, sizeof(buff))) > 0) {
@@ -346,7 +350,7 @@ static char *getdsig(const char *host, const char *user, const unsigned char *da
 	    close(sockd);
 	    return NULL;
 	} else {
-	    mprintf("Signature received (length = %u)\n", strlen(buff) - 10);
+	    mprintf("Signature received (length = %lu)\n", strlen(buff) - 10);
 	}
     } else {
 	mprintf("!getdsig: Communication error with remote server\n");
@@ -587,6 +591,7 @@ static int build(struct optstruct *opt)
     if(opt->filename) {
 	if(cli_strbcasestr(opt->filename, ".cvd") || cli_strbcasestr(opt->filename, ".cld")) {
 	    strncpy(olddb, opt->filename, sizeof(olddb));
+	    olddb[sizeof(olddb)-1]='\0';
 	} else {
 	    mprintf("!build: Not a CVD/CLD file\n");
 	    return -1;
@@ -655,6 +660,7 @@ static int build(struct optstruct *opt)
 
     if((pt = getenv("SIGNDUSER"))) {
 	strncpy(builder, pt, sizeof(builder));
+	builder[sizeof(builder)-1]='\0';
     } else {
 	mprintf("Builder name: ");
 	if(scanf("%as", &pt) == EOF) {
@@ -662,6 +668,7 @@ static int build(struct optstruct *opt)
 	    return -1;
 	}
 	strncpy(builder, pt, sizeof(builder));
+	builder[sizeof(builder)-1]='\0';
 	free(pt);
     }
 
@@ -816,6 +823,7 @@ static int build(struct optstruct *opt)
 	return -1;
     }
     strncpy(olddb, pt, sizeof(olddb));
+    olddb[sizeof(olddb)-1]='\0';
     free(pt);
 
     if(!(pt = cli_gentemp(NULL))) {
@@ -896,6 +904,7 @@ static int unpack(struct optstruct *opt)
 
     } else {
 	strncpy(name, opt_arg(opt, "unpack"), sizeof(name));
+	name[sizeof(name)-1]='\0';
     }
 
     if(cvd_unpack(name, ".") == -1) {
@@ -978,9 +987,12 @@ static int listdir(const char *dirname)
 	     cli_strbcasestr(dent->d_name, ".mdu") ||
 	     cli_strbcasestr(dent->d_name, ".ndb") ||
 	     cli_strbcasestr(dent->d_name, ".ndu") ||
+	     cli_strbcasestr(dent->d_name, ".ldb") ||
+	     cli_strbcasestr(dent->d_name, ".ldu") ||
 	     cli_strbcasestr(dent->d_name, ".sdb") ||
 	     cli_strbcasestr(dent->d_name, ".zmd") ||
 	     cli_strbcasestr(dent->d_name, ".rmd") ||
+	     cli_strbcasestr(dent->d_name, ".cld") ||
 	     cli_strbcasestr(dent->d_name, ".cvd"))) {
 
 		dbfile = (char *) malloc(strlen(dent->d_name) + strlen(dirname) + 2);
@@ -1119,12 +1131,16 @@ static int listdb(const char *filename)
 	    free(start);
 	}
 
-    } else if(cli_strbcasestr(filename, ".ndb") || cli_strbcasestr(filename, ".ndu") || cli_strbcasestr(filename, ".sdb") || cli_strbcasestr(filename, ".zmd") || cli_strbcasestr(filename, ".rmd")) {
+    } else if(cli_strbcasestr(filename, ".ndb") || cli_strbcasestr(filename, ".ndu") || cli_strbcasestr(filename, ".ldb") || cli_strbcasestr(filename, ".ldu") || cli_strbcasestr(filename, ".sdb") || cli_strbcasestr(filename, ".zmd") || cli_strbcasestr(filename, ".rmd")) {
 
 	while(fgets(buffer, FILEBUFF, fh)) {
 	    line++;
 	    cli_chomp(buffer);
-	    start = cli_strtok(buffer, 0, ":");
+
+	    if(cli_strbcasestr(filename, ".ldb") || cli_strbcasestr(filename, ".ldu"))
+		start = cli_strtok(buffer, 0, ";");
+	    else
+		start = cli_strtok(buffer, 0, ":");
 
 	    if(!start) {
 		mprintf("!listdb: Malformed pattern line %u (file %s)\n", line, filename);
@@ -1170,6 +1186,7 @@ static int vbadump(struct optstruct *opt)
 	int fd, hex_output;
 	char *dir;
 	const char *pt;
+	struct uniq *vba = NULL;
 
 
     if(opt_check(opt, "vba-hex")) {
@@ -1199,19 +1216,69 @@ static int vbadump(struct optstruct *opt)
         return -1;
     }
 
-    if(cli_ole2_extract(fd, dir, NULL)) {
+    if(cli_ole2_extract(fd, dir, NULL, &vba)) {
 	cli_rmdirs(dir);
         free(dir);
 	close(fd);
         return -1;
     }
-
     close(fd);
-    sigtool_vba_scandir(dir, hex_output);
+    if (vba) 
+      sigtool_vba_scandir(dir, hex_output, vba);
     cli_rmdirs(dir);
     free(dir);
     return 0;
 }
+
+static int comparemd5(const char *dbname)
+{
+	char info[16], buff[256], *md5, *pt;
+	FILE *fh;
+	int ret = 0;
+
+
+    if(strstr(dbname, "main"))
+	strcpy(info, "main.info");
+    else
+	strcpy(info, "daily.info");
+
+    if(!(fh = fopen(info, "r"))) {
+	mprintf("!verifydiff: Can't open %s\n", info);
+	return -1;
+    }
+
+    if(!fgets(buff, sizeof(buff), fh) || strncmp(buff, "ClamAV-VDB", 10)) {
+	mprintf("!verifydiff: Incorrect info file %s\n", info);
+	fclose(fh);
+	return -1;
+    }
+
+    while(fgets(buff, sizeof(buff), fh)) {
+	cli_chomp(buff);
+	if(!(pt = strchr(buff, ':'))) {
+	    mprintf("!verifydiff: Incorrect format of %s\n", info);
+	    ret = -1;
+	    break;
+	}
+	*pt++ = 0;
+	if(!(md5 = cli_md5file(buff))) {
+	    mprintf("!verifydiff: Can't generate MD5 for %s\n", buff);
+	    ret = -1;
+	    break;
+	}
+	if(strcmp(pt, md5)) {
+	    mprintf("!verifydiff: %s has incorrect checksum\n", buff);
+	    ret = -1;
+	    free(md5);
+	    break;
+	}
+	free(md5);
+    }
+
+    fclose(fh);
+    return ret;
+}
+
 
 static int rundiff(struct optstruct *opt)
 {
@@ -1237,6 +1304,9 @@ static int rundiff(struct optstruct *opt)
 
     ret = cdiff_apply(fd, mode);
     close(fd);
+
+    if(!ret)
+	ret = comparemd5(diff);
 
     return ret;
 }
@@ -1304,6 +1374,7 @@ static int compare(const char *oldpath, const char *newpath, FILE *diff)
 
 		    if(found) {
 			strncpy(tbuff, obuff, sizeof(tbuff));
+			tbuff[sizeof(tbuff)-1]='\0';
 			for(i = 0; i < tline; i++) {
 			    tbuff[16] = 0;
 			    if((pt = strchr(tbuff, ' ')))
@@ -1346,8 +1417,7 @@ static int compare(const char *oldpath, const char *newpath, FILE *diff)
 
 static int verifydiff(const char *diff, const char *cvd, const char *incdir)
 {
-	char *tempdir, cwd[512], buff[1024], info[32], *md5, *pt;
-	FILE *fh;
+	char *tempdir, cwd[512];
 	int ret = 0, fd;
 	unsigned short mode;
 
@@ -1422,50 +1492,8 @@ static int verifydiff(const char *diff, const char *cvd, const char *incdir)
     }
     close(fd);
 
-    if(strstr(diff, "main"))
-	strcpy(info, "main.info");
-    else
-	strcpy(info, "daily.info");
+    ret = comparemd5(diff);
 
-    if(!(fh = fopen(info, "r"))) {
-	mprintf("!verifydiff: Can't open %s\n", info);
-	if(chdir(cwd) == -1)
-	    mprintf("^verifydiff: Can't chdir to %s\n", cwd);
-	cli_rmdirs(tempdir);
-	free(tempdir);
-	return -1;
-    }
-
-    if(!fgets(buff, sizeof(buff), fh) || strncmp(buff, "ClamAV-VDB", 10)) {
-	mprintf("!verifydiff: Incorrect info file %s\n", info);
-	if(chdir(cwd) == -1)
-	    mprintf("^verifydiff: Can't chdir to %s\n", cwd);
-	cli_rmdirs(tempdir);
-	free(tempdir);
-	return -1;
-    }
-
-    while(fgets(buff, sizeof(buff), fh)) {
-	cli_chomp(buff);
-	if(!(pt = strchr(buff, ':'))) {
-	    mprintf("!verifydiff: Incorrect format of %s\n", info);
-	    ret = -1;
-	    break;
-	}
-	*pt++ = 0;
-	if(!(md5 = cli_md5file(buff))) {
-	    mprintf("!verifydiff: Can't generate MD5 for %s\n", buff);
-	    ret = -1;
-	    break;
-	}
-	if(strcmp(pt, md5)) {
-	    mprintf("!verifydiff: %s has incorrect checksum\n", buff);
-	    ret = -1;
-	    break;
-	}
-    }
-
-    fclose(fh);
     if(chdir(cwd) == -1)
 	mprintf("^verifydiff: Can't chdir to %s\n", cwd);
     cli_rmdirs(tempdir);
@@ -1486,7 +1514,7 @@ static int diffdirs(const char *old, const char *new, const char *patch)
 	FILE *diff;
 	DIR *dd;
 	struct dirent *dent;
-	char cwd[512], opath[1024];
+	char cwd[512], path[1024];
 
 
     if(!getcwd(cwd, sizeof(cwd))) {
@@ -1519,8 +1547,8 @@ static int diffdirs(const char *old, const char *new, const char *patch)
 	    if(!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, ".."))
 		continue;
 
-	    snprintf(opath, sizeof(opath), "%s/%s", old, dent->d_name);
-	    if(compare(opath, dent->d_name, diff) == -1) {
+	    snprintf(path, sizeof(path), "%s/%s", old, dent->d_name);
+	    if(compare(path, dent->d_name, diff) == -1) {
 		fclose(diff);
 		unlink(patch);
 		closedir(dd);
@@ -1528,7 +1556,28 @@ static int diffdirs(const char *old, const char *new, const char *patch)
 	    }
 	}
     }
+    closedir(dd);
 
+    /* check for removed files */
+    if((dd = opendir(old)) == NULL) {
+        mprintf("!diffdirs: Can't open directory %s\n", old);
+	fclose(diff);
+	return -1;
+    }
+
+    while((dent = readdir(dd))) {
+#ifndef C_INTERIX
+	if(dent->d_ino)
+#endif
+	{
+	    if(!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, ".."))
+		continue;
+
+	    snprintf(path, sizeof(path), "%s/%s", new, dent->d_name);
+	    if(access(path, R_OK))
+		fprintf(diff, "UNLINK %s\n", dent->d_name);
+	}
+    }
     closedir(dd);
 
     fclose(diff);
@@ -1647,7 +1696,7 @@ static int makediff(struct optstruct *opt)
 static void help(void)
 {
     mprintf("\n");
-    mprintf("             Clam AntiVirus: Signature Tool (sigtool)  "VERSION"\n");
+    mprintf("             Clam AntiVirus: Signature Tool (sigtool)  %s\n", get_version());
     mprintf("    (C) 2002 - 2007 ClamAV Team - http://www.clamav.net/team\n\n");
 
     mprintf("    --help                 -h              show help\n");

@@ -204,7 +204,7 @@ static unrar_fileheader_t *read_block(int fd, header_type hdr_type)
 static int is_rar_archive(int fd)
 {
 	mark_header_t mark;
-	const mark_header_t rar_hdr[2] = {{0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00}, {'U', 'n', 'i', 'q', 'u', 'E', '!'}};
+	const mark_header_t rar_hdr[2] = {{{0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00}}, {{'U', 'n', 'i', 'q', 'u', 'E', '!'}}};
 
 
     if(read(fd, &mark, SIZEOF_MARKHEAD) != SIZEOF_MARKHEAD)
@@ -264,8 +264,42 @@ int unrar_open(int fd, const char *dirname, unrar_state_t *state)
     if(!is_rar_archive(fd))
 	return UNRAR_ERR;
 
+    main_hdr = read_header(fd, MAIN_HEAD);
+    if(!main_hdr)
+	return UNRAR_ERR;
+
+    unrar_dbgmsg("UNRAR: Head CRC: %.4x\n", main_hdr->head_crc);
+    unrar_dbgmsg("UNRAR: Head Type: %.2x\n", main_hdr->head_type);
+    unrar_dbgmsg("UNRAR: Flags: %.4x\n", main_hdr->flags);
+    unrar_dbgmsg("UNRAR: Head Size: %.4x\n", main_hdr->head_size);
+
+    if(main_hdr->flags & MHD_PASSWORD) {
+	free(main_hdr);
+	return UNRAR_PASSWD;
+    }
+
+    snprintf(filename,1024,"%s/comments", dirname);
+    if(mkdir(filename,0700)) {
+	unrar_dbgmsg("UNRAR: Unable to create comment temporary directory\n");
+	free(main_hdr);
+	return UNRAR_ERR;
+    }
+    state->comment_dir = strdup(filename);
+    if(!state->comment_dir) {
+	free(main_hdr);
+	return UNRAR_EMEM;
+    }
+
+    if(main_hdr->head_size < SIZEOF_NEWMHD) {
+	free(main_hdr);
+	free(state->comment_dir);
+	return UNRAR_ERR;
+    }
+
     unpack_data = (unpack_data_t *) malloc(sizeof(unpack_data_t));
     if(!unpack_data) {
+	free(main_hdr);
+	free(state->comment_dir);
 	unrar_dbgmsg("UNRAR: malloc failed for unpack_data\n");
 	return UNRAR_EMEM;
     }
@@ -276,48 +310,6 @@ int unrar_open(int fd, const char *dirname, unrar_state_t *state)
     unpack_data->unp_crc = 0xffffffff;
 
     ppm_constructor(&unpack_data->ppm_data);
-    main_hdr = read_header(fd, MAIN_HEAD);
-    if(!main_hdr) {
-	ppm_destructor(&unpack_data->ppm_data);
-	rar_init_filters(unpack_data);
-	unpack_free_data(unpack_data);
-	free(unpack_data);
-	return UNRAR_ERR;
-    }
-    unrar_dbgmsg("UNRAR: Head CRC: %.4x\n", main_hdr->head_crc);
-    unrar_dbgmsg("UNRAR: Head Type: %.2x\n", main_hdr->head_type);
-    unrar_dbgmsg("UNRAR: Flags: %.4x\n", main_hdr->flags);
-    unrar_dbgmsg("UNRAR: Head Size: %.4x\n", main_hdr->head_size);
-
-    snprintf(filename,1024,"%s/comments", dirname);
-    if(mkdir(filename,0700)) {
-	unrar_dbgmsg("UNRAR: Unable to create comment temporary directory\n");
-	free(main_hdr);
-	ppm_destructor(&unpack_data->ppm_data);
-	rar_init_filters(unpack_data);
-	unpack_free_data(unpack_data);
-	free(unpack_data);
-	return UNRAR_ERR;
-    }
-    state->comment_dir = strdup(filename);
-    if(!state->comment_dir) {
-	free(main_hdr);
-	ppm_destructor(&unpack_data->ppm_data);
-	rar_init_filters(unpack_data);
-	unpack_free_data(unpack_data);
-	free(unpack_data);
-	return UNRAR_EMEM;
-    }
-
-    if(main_hdr->head_size < SIZEOF_NEWMHD) {
-	free(main_hdr);
-	ppm_destructor(&unpack_data->ppm_data);
-	rar_init_filters(unpack_data);
-	unpack_free_data(unpack_data);
-	free(unpack_data);
-	free(state->comment_dir);
-	return UNRAR_ERR;
-    }
 
     if(main_hdr->flags & MHD_COMMENT) {
 	unrar_comment_header_t *comment_header;
@@ -387,7 +379,6 @@ int unrar_extract_next_prepare(unrar_state_t *state, const char *dirname)
 	char filename[1024];
 	int ofd;
 	unrar_metadata_t *new_metadata;
-	unpack_data_t *unpack_data;
 
 
     state->file_header = read_block(state->fd, FILE_HEAD);
@@ -542,3 +533,23 @@ void unrar_close(unrar_state_t *state)
     free(state->unpack_data);
     free(state->comment_dir);
 }
+
+#ifdef	C_WINDOWS
+/*
+ * A copy is needed here to avoid a cyclic dependancy libclamunrar_iface<->libclamav
+ * e.g. see the comment in bug 775 about dropping the old internal snprintf
+ * which didn't have this problem and bug 785
+ */
+#include <stdarg.h>
+static int
+snprintf(char *str, size_t size, const char *format, ...)
+{
+	int ret;
+
+	va_list args;
+	va_start(args, format);
+	ret = _vsnprintf_s(str, size, _TRUNCATE, format, args);
+	va_end(args);
+	return ret;
+}
+#endif

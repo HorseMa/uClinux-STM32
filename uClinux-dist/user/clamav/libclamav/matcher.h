@@ -41,6 +41,28 @@
 #define CLI_MATCH_NIBBLE_HIGH	0x0300
 #define CLI_MATCH_NIBBLE_LOW	0x0400
 
+struct cli_lsig_tdb {
+#define CLI_TDB_UINT	0
+#define CLI_TDB_RANGE	1
+#define CLI_TDB_STR	2
+#define CLI_TDB_RANGE2	3
+    uint32_t *val, *range;
+    char *str;
+    uint32_t cnt[3];
+
+    const uint32_t *target;
+    const uint32_t *engine, *nos, *ep;
+    const uint32_t *sectoff, *sectrva, *sectvsz, *sectraw, *sectrsz,
+		   *secturva, *sectuvsz, *secturaw, *sectursz;
+};
+
+struct cli_ac_lsig {
+    uint32_t id;
+    char *logic;
+    const char *virname;
+    struct cli_lsig_tdb tdb;
+};
+
 struct cli_matcher {
     /* Extended Boyer-Moore */
     uint8_t *bm_shift;
@@ -50,7 +72,8 @@ struct cli_matcher {
     uint32_t bm_patterns;
 
     /* Extended Aho-Corasick */
-    uint32_t ac_partsigs, ac_nodes, ac_patterns;
+    uint32_t ac_partsigs, ac_nodes, ac_patterns, ac_lsigs;
+    struct cli_ac_lsig **ac_lsigtable;
     struct cli_ac_node *ac_root, **ac_nodetable;
     struct cli_ac_patt **ac_pattable;
     uint8_t ac_mindepth, ac_maxdepth;
@@ -73,7 +96,7 @@ struct cli_mtarget {
     uint8_t ac_only;
 };
 
-#define CLI_MTARGETS 8
+#define CLI_MTARGETS 9
 static const struct cli_mtarget cli_mtargets[CLI_MTARGETS] =  {
     { 0,		    "GENERIC",	    0,	0   },
     { CL_TYPE_MSEXE,	    "PE",	    1,	0   },
@@ -82,7 +105,8 @@ static const struct cli_mtarget cli_mtargets[CLI_MTARGETS] =  {
     { CL_TYPE_MAIL,	    "MAIL",	    4,	1   },
     { CL_TYPE_GRAPHICS,	    "GRAPHICS",	    5,	1   },
     { CL_TYPE_ELF,	    "ELF",	    6,	1   },
-    { CL_TYPE_TEXT_ASCII,   "ASCII",	    7,	1   }
+    { CL_TYPE_TEXT_ASCII,   "ASCII",	    7,	1   },
+    { CL_TYPE_PE_DISASM,    "DISASM",	    8,	1   }
 };
 
 struct cli_target_info {

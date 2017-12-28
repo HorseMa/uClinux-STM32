@@ -44,6 +44,7 @@ DEVICE_SCANNER=		-group=root	-mode=0666
 DEVICE_CODA=		-group=root	-mode=0600
 DEVICE_IPSEC=		-group=root	-mode=0200
 DEVICE_READABLE=	-group=root	-mode=0444
+DEVICE_PRIVREAD=	-group=root	-mode=0644
 DEVICE_CRYPTO=		-group=crypto	-mode=0666
 DEVICE_PTY=		-group=tty	-mode=0620
 DEVICE_TUN=		-group=root	-mode=0700
@@ -75,9 +76,9 @@ DEVICES += \
 	$(DEVICE_TTY)		tty,c,5,0
 
 ifdef CONFIG_POOR_ENTROPY
-DEVICES += $(DEVICE_READABLE)	urandom,c,1,9	 random,c,1,9
+DEVICES += $(DEVICE_PRIVREAD)	urandom,c,1,9	 random,c,1,9
 else
-DEVICES += $(DEVICE_READABLE)	urandom,c,1,9	 random,c,1,8
+DEVICES += $(DEVICE_PRIVREAD)	urandom,c,1,9	 random,c,1,8
 endif
 
 # Devices that depend on config options.
@@ -105,7 +106,7 @@ ifdef CONFIG_VT
 		tty0,c,4,0	tty1,c,4,1	tty2,c,4,2	tty3,c,4,3
 endif
 
-ifneq ($(CONFIG_SERIAL)$(CONFIG_SERIAL_8250)$(CONFIG_SERIAL_KS8695)$(CONFIG_COLDFIRE_SERIAL),)
+ifneq ($(CONFIG_SERIAL)$(CONFIG_SERIAL_8250)$(CONFIG_SERIAL_KS8695)$(CONFIG_COLDFIRE_SERIAL)$(CONFIG_SERIAL_MCF),)
 	DEVICES += $(DEVICE_DIALOUT) \
 		ttyS0,c,4,64	ttyS1,c,4,65 \
 		cua0,c,5,64	cua1,c,5,65

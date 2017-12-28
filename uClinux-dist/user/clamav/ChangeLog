@@ -1,13 +1,784 @@
-Wed Apr  9 17:58:43 CEST 2008
------------------------------
-  V 0.93:
+Tue Sep  2 15:11:53 CEST 2008 (tk)
+----------------------------------
+  * V 0.94
 
-  * libclamunrar: bb#541 (RAR - Version required to extract - Evasion)
-  * libclamav/spin.c: bb#876 (PeSpin Heap Overflow Vulnerability)
-  * libclamav/pe.c: bb#878 (Upack Buffer Overflow Vulnerability)
-  * libclamav/message.c: bb#881 (message.c: read beyond allocated region)
-  * libclamav/unarj.c: bb#897 (ARJ: Sample from CERT-FI hangs clamav)
-  * libclamunrar: bb#898 (RAR crashes on some fuzzed files from CERT-FI)
+Mon Sep  1 20:24:43 CEST 2008 (tk)
+----------------------------------
+  * libclamav/others.c: bump f-level
+
+Mon Sep  1 20:19:57 CEST 2008 (tk)
+----------------------------------
+  * docs: update
+
+Mon Sep  1 19:31:08 CEST 2008 (tk)
+----------------------------------
+  * libclamav/message.c, mbox.c: fix out-of-memory null dereference in
+  mbox/message (bb#1141)
+  Patch from Edwin
+
+Mon Sep  1 19:27:55 CEST 2008 (tk)
+----------------------------------
+  * libclamav/chmunpack.c: fix possible invalid memory access (bb#1089)
+			   Patch from Trog
+
+Mon Sep  1 10:57:56 EEST 2008 (edwin)
+------------------------------------ 
+  * libclamav/scanners.c: enable scanscript for UTF* types too
+
+Sun Aug 31 15:31:04 CEST 2008 (acab)
+------------------------------------
+  * libclamav/disasm, unit_tests: more endianess issues fixed (that should eb all)
+
+Sun Aug 31 04:23:12 CEST 2008 (acab)
+------------------------------------
+  * libclamunrar/unrarvm.c: big-endian fixes
+
+Sat Aug 30 01:29:51 CEST 2008 (tk)
+----------------------------------
+  * libclamav/dlp.c: limit number of false positive alerts
+  * clamd, clamscan: don't scan for stripped SSNs by default
+
+Fri Aug 29 12:29:32 CEST 2008 (tk)
+----------------------------------
+  * libclamav/dlp.c: credit card detection fixes
+  * clamd, clamscan: minCC and minSSN counts now set by default to 3
+
+Fri Aug 29 02:46:19 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: Add option "--no-check-cf" to bypass sendmail.cf sanity
+		   checks. For use by package maintainers on fresh installs,
+		   when sendmail.cf is present for any reason although it's
+		   not used or when the milter is configured via an m4 file
+		   included in sendmail.cf. This option is intentionally
+		   not extensively documented (bb#726)
+
+Thu Aug 28 15:13:07 CEST 2008 (acab)
+------------------------------------
+  * unit_tests/check_disasm: add the remaining test cases (fpu, prefixes and more)
+
+Thu Aug 28 12:55:19 CEST 2008 (acab)
+------------------------------------
+  * unit_tests/check_disasm: test cases for most mrm (and others)
+
+Tue Aug 26 02:52:10 CEST 2008 (acab)
+------------------------------------
+  * libclamav/disasm*; unit_tests/check_disasm: some fixes, work in progress
+
+Mon Aug 25 23:52:04 CEST 2008 (tk)
+----------------------------------
+  * drop support for Cygwin (due to broken ClamAV builds)
+
+Mon Aug 25 22:17:03 CEST 2008 (tk)
+----------------------------------
+  * man/freshclam.1.in: fix typo (bb#1147)
+
+Mon Aug 25 16:03:44 CEST 2008 (tk)
+----------------------------------
+  * libclamav: drop obsolete code in matcher-ac
+
+Sun Aug 24 23:51:48 CEST 2008 (tk)
+----------------------------------
+  * libclamav/unrar.c: improve handling of currupted archives and downgrade
+		       some error messages
+
+Sat Aug 23 22:18:47 CEST 2008 (tk)
+----------------------------------
+  * shared/misc.c: fix double "-exp"
+
+Fri Aug 22 15:20:08 CEST 2008 (tk)
+----------------------------------
+  * freshclam/manager.c: fix warnings - bb#1142
+
+Fri Aug 22 12:33:58 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter/clamav-milter.c: missing proto
+
+Thu Aug 21 13:29:22 CEST 2008 (tk)
+----------------------------------
+  * freshclam/manager.c: fix error path memleaks - bb#1141
+
+Thu Aug 21 13:24:17 CEST 2008 (tk)
+----------------------------------
+  * shared/tar.c: fix invalid close on error path - bb#1141
+
+Thu Aug 21 13:22:29 CEST 2008 (tk)
+----------------------------------
+  * libclamav/others.c: fix fd feak on error path - bb#1141
+
+Wed Aug 20 20:09:11 CEST 2008 (acab)
+------------------------------------
+  * libclamav/sis.c: fix fd feak on error path - bb#1141
+
+Wed Aug 20 10:54:24 CEST 2008 (tk)
+----------------------------------
+  * clamd/clamd.c: return an error (instead of a warning) if
+    AllowSupplementaryGroups is enabled but initgroups() not available
+
+Mon Aug 18 12:01:10 CEST 2008 (tk)
+----------------------------------
+  * libclamunrar_iface, libclamav: improve detection of encrypted RAR archives
+  (bb#1134)
+
+Sun Aug 17 19:30:25 CEST 2008 (tk)
+----------------------------------
+  * clamd/server-th.c: add missing proto for cli_initengine() (bb#1136)
+
+Sat Aug 16 19:58:30 CEST 2008 (tk)
+----------------------------------
+  * V 0.94rc1
+
+Thu Aug 14 18:19:54 CEST 2008 (acab)
+------------------------------------
+  * libclamav/str.c: fix for cli_hex2str - bb#1133
+
+Tue Aug 12 13:16:00 CEST 2008 (acab)
+------------------------------------
+  * clamscan/manager.c: add missing proto
+
+Tue Aug 12 00:08:05 CEST 2008 (acab)
+------------------------------------
+  * m4/resolv.m4: fix logic in -lresolv checks
+
+Mon Aug 11 17:53:03 CEST 2008 (acab)
+------------------------------------
+  * libclamav/pdf.c: count skipped files too - bb#1128
+
+Sun Aug 10 18:07:43 CEST 2008 (acab)
+------------------------------------
+  * unit_tests: check for check version
+
+Sun Aug 10 17:46:12 CEST 2008 (tk)
+----------------------------------
+  * freshclam/manager.c: add machine/OS info to the default user agent string
+
+Thu Aug  7 14:27:44 CEST 2008 (tk)
+----------------------------------
+  * unit_tests/check_matchers.c: add tests for cli_(ac|bm)_scanbuff
+
+Wed Aug  6 02:15:39 CEST 2008 (acab)
+------------------------------------
+  * libclamav/unzip.c: fix incorrect debug spam which misleaded poor sigmakers
+
+Wed Aug  6 02:11:12 CEST 2008 (acab)
+------------------------------------
+  * build system, clamav-milter: work around for non MT lresolv (bb#1125)
+
+Tue Aug  5 13:14:31 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: properly wrap dns stuff (again) - bb#1125
+
+Tue Aug  5 12:43:27 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: properly wrap dns stuff - bb#1125
+
+Mon Aug  4 22:07:54 CEST 2008 (tk)
+----------------------------------
+  * libclamav/ole2_extract: don't return CL_BREAK in cli_ole2_extract()
+  (bb#1123)
+
+Mon Aug  4 16:46:46 EEST 2008 (edwin)
+-------------------------------------
+  * clamdscan: add support for file descriptor passing (from
+  contrib/clamd_fdscan) (bb #1117)
+
+Mon Aug  4 02:40:33 CEST 2008 (acab)
+------------------------------------
+  * test: add clam.impl.zip
+
+Mon Aug  4 01:46:54 CEST 2008 (acab)
+------------------------------------
+  * unit_tests: add uniq checks
+
+Mon Aug  4 00:20:28 CEST 2008 (acab)
+------------------------------------
+  * test: add clam.ole.doc
+
+Sun Aug  3 23:09:44 CEST 2008 (acab)
+------------------------------------
+  * libclamav/uniq: faster md5 lookup
+  * sigtool: sync
+
+Sun Aug  3 16:12:17 CEST 2008 (acab)
+------------------------------------
+  * libclamav: use md5 based lookup for ole2/vba instead of hashtab (bb#1071)
+
+Fri Aug  1 21:29:33 CEST 2008 (tk)
+----------------------------------
+  * clamconf: handle multiple select options
+
+Fri Aug  1 02:15:20 CEST 2008 (acab)
+------------------------------------
+  * libclamav: enable support for UPX/LZMA (bb#910)
+
+Fri Aug  1 00:07:30 CEST 2008 (tk)
+----------------------------------
+  * libclamav: scan disasm data with type-8 sigs (bb#895)
+
+Thu Jul 31 18:09:58 CEST 2008 (tk)
+----------------------------------
+  * libclamav: add support for loading specific PUA categories (bb#939)
+  * clamd: new options ExcludePUA and IncludePUA
+  * clamscan: new switches --exclude-pua and --include-pua
+
+Thu Jul 31 13:35:11 EEST 2008 (edwin)
+-------------------------------------
+  * clamd, clamscan, libclamav: new option HeuristicScanPrecedence (bb #649)
+  * docs/: update docs for HeuristicScanPrecedence and ScanPartialMessages
+  * unit_tests/: add test for HeuristicScanPrecedence
+
+Thu Jul 31 04:01:02 CEST 2008 (acab)
+------------------------------------
+  * libclamav/upx: add preliminar support for upx/lzma (disabled)
+
+Wed Jul 30 20:09:03 EEST 2008 (edwin)
+-------------------------------------
+  * clamd/others.c: avoid calling non-async-signal-safe functions between fork()
+  and exec() (bb #889)
+  * unit_tests: add unit-test for virusaction
+
+Wed Jul 30 17:02:40 CEST 2008 (tk)
+----------------------------------
+  * clamscan, clamav-milter: catch and ignore SIGXFSZ; display warning if
+			     system limits are too restrictive (bb#994)
+
+Wed Jul 30 16:38:26 EEST 2008 (edwin)
+-------------------------------------
+  * clamd, libclamav, shared: (bb #913, #916)
+	* fix scan of partial messages
+	* allow for tempfiles to be cleaned up based on age
+	* new clamd.conf option ScanPartialMessages
+  * contrib/cleanup-partial.pl: sample cleanup script
+  * clamd/thrmgr.c: fix item_count
+
+Tue Jul 29 23:18:23 CEST 2008 (tk)
+----------------------------------
+  * clamd: revert patch from bb#1028 (bb#1113)
+
+Tue Jul 29 13:18:24 EEST 2008 (edwin)
+------------------------------------
+  * libclamav/regex_*.[ch]: handle multiple matches (bb #1110)
+  * unit_tests: update tests for regex, reenable test 
+
+Tue Jul 29 10:47:23 CEST 2008 (tk)
+----------------------------------
+  * libclamav/matcher-ac.c: add support for returning multiple matches in
+			    cli_ac_scanbuff()
+
+Tue Jul 29 10:29:54 EEST 2008 (edwin)
+-------------------------------------
+  * configure.in: check for <sys/select.h> before <sys/types.h> (bb #452)
+
+Tue Jul 29 03:53:31 CEST 2008 (acab)
+------------------------------------
+  * libclamav/disasm.c: change output struct
+  * unit_tests/check_disasm.c: actually check something (more to come)
+
+Tue Jul 29 02:44:53 CEST 2008 (acab)
+------------------------------------
+  * test: add clam.d64.zip
+
+Tue Jul 29 02:18:11 CEST 2008 (acab)
+------------------------------------
+  * libclamav/autoit.c: rely on generic text normalization for
+  			unicode scripts
+  * test: add clam.ea05.exe, clam.ea06.exe
+
+Mon Jul 28 21:04:53 CEST 2008 (acab)
+------------------------------------
+  * unit_tests: preliminary disasm tests
+
+Mon Jul 28 15:05:01 CEST 2008 (acab)
+------------------------------------
+  * libclamav/pe.c: fix fd leak - thx sherpya
+
+Mon Jul 28 12:50:54 CEST 2008 (tk)
+----------------------------------
+  * database/Makefile.am: add check for .cld files (bb#1088)
+
+Sun Jul 27 23:18:47 CEST 2008 (acab)
+------------------------------------
+  * misc fixes: add some missing checks for pthread api calls (bb#384)
+
+Sun Jul 27 21:35:04 CEST 2008 (acab)
+------------------------------------
+  * libclamav/unzip: workaround for non-mmap builds (bb#900)
+
+Sun Jul 27 18:09:23 CEST 2008 (acab)
+------------------------------------
+  * libclamav: preliminary x86 disassembler support
+
+Sat Jul 26 18:41:40 CEST 2008 (tk)
+----------------------------------
+  * sigtool/sigtool.c: handle .ldb/.ldu files (bb#896)
+
+Sat Jul 26 17:30:02 CEST 2008 (tk)
+----------------------------------
+  * libclamav: lsigs: handle extended block modifiers (bb#896)
+
+Fri Jul 25 20:41:21 CEST 2008 (tk)
+----------------------------------
+  * libclamav: add initial support for logical signatures (bb#896)
+
+Fri Jul 25 02:24:53 CEST 2008 (acab)
+------------------------------------
+  * libclamav/scanners.c: warn if no bzip2 support - bb#1060
+
+Wed Jul 23 23:44:59 CEST 2008 (tk)
+----------------------------------
+  * freshclam/mirman.c: fix handling of IPv6 addresses
+
+Wed Jul 23 21:53:10 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: use thread safe resolv calls - bb#668 
+
+Wed Jul 23 16:32:32 EEST 2008 (edwin)
+------------------------------------
+  * libclamav: performance improvements for URL matching (bb #725, bb #650):
+	* use a suffix AC-trie and a shift-or FSM to filter
+	* rewrite the URL regex in C
+	* use a perfect hash to lookup TLD and ccTLD, instead of a regex
+	* TODO: suffixes having a common prefix: loop over all of them
+		cli_ac_free: multiple virname pointing to same location
+
+Mon Jul 21 12:16:44 CEST 2008 (tk)
+----------------------------------
+  * sigtool/vba.c: fix crash on error in vba code (bb#1106)
+
+Fri Jul 18 19:33:41 CEST 2008 (tk)
+----------------------------------
+  * libclamav: use a regex for the filename field in .zmd/.rmd (bb#193)
+
+Fri Jul 18 18:25:32 CEST 2008 (tk)
+----------------------------------
+  * freshclam/freshclam.c: improve some msgs (bb#1066)
+
+Fri Jul 18 18:09:11 CEST 2008 (tk)
+----------------------------------
+  * clamd: add support for ExcludePath (bb#675)
+
+Wed Jul 16 17:52:12 CEST 2008 (tk)
+----------------------------------
+  * clamconf: handle .cld databases (bb#1101)
+
+Wed Jul 16 16:33:08 CEST 2008 (tk)
+----------------------------------
+  * clamd: improve handling of memory errors
+
+Wed Jul 16 13:56:21 CEST 2008 (tk)
+----------------------------------
+  * freshclam: if all mirrors get blacklisted internally and freshclam is
+	       recent enough then attempt to whitelist them (bb#965)
+
+Tue Jul 15 17:30:01 CEST 2008 (tk)
+----------------------------------
+  * libclamav, clamd: prune old lockdb code
+
+Tue Jul 15 18:25:53 EEST 2008 (edwin)
+-------------------------------------
+  * configure.in:
+	* use pkg-config to locate check, if available (bb #1093)
+	* make --enable-coverage depends on unit tests being activated
+	* fix a typo in bzip2 configure check
+  * unit_tests/Makefile.am: remove temporary log files on make clean
+
+Mon Jul 14 22:09:22 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/htmlnorm.c: fix crash in js parser (bb #1096)
+  * configure.in: fix configure test for check: if it is not available, and we didn't pass
+		  --enable-check, do not complain
+  * unit_tests/check_jsnorm.c: add unit test for jsnorm bug
+
+Mon Jul 14 18:54:01 CEST 2008 (tk)
+----------------------------------
+  * freshclam: try load balance update sessions between available mirrors
+	       (only in IPv6-aware block)
+
+Mon Jul 14 17:26:03 EEST 2008 (edwin)
+------------------------------------
+  * libclamav/htmlnorm.c: improve normalization of screnc encoded files(bb #1022)
+
+Mon Jul 14 13:57:15 CEST 2008 (tk)
+----------------------------------
+  * freshclam/manager.c: fix rename() problem on w32 (bb#1084)
+
+Mon Jul 14 10:47:22 CEST 2008 (tk)
+----------------------------------
+  * freshclam/mirman.c: fix compilation error on w32 (bb#1095)
+
+Mon Jul 14 10:32:26 CEST 2008 (tk)
+----------------------------------
+  * freshclam/manager.c: respect HTTPProxyPort in new code (bb#1094)
+
+Fri Jul 11 20:14:14 CEST 2008 (tk)
+----------------------------------
+  * freshclam: IPv6 support (bb#715)
+  * configure: --disable-ipv6
+
+Thu Jul 10 19:41:37 EEST 2008 (edwin)
+-------------------------------------
+ * unit_tests/: add unit tests for binaries
+ * build system: enable unit tests by default (if check is available)
+		 add --enable-coverage to run gcov/lcov
+		 add --enable-tests-install to install test files 
+
+Thu Jul 10 16:02:50 EEST 2008 (edwin)
+------------------------------------
+ * unit_tests/:
+	avoid misleading message when unit tests are disabled (bb #1090)
+	fix some compiler warnings
+
+Tue Jul  8 21:33:32 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/Makefile.am, libclamav/jsparse, unit_test/:
+	add all needed files to EXTRA_DIST (to fix make distcheck)
+	create unit tests for js normalizer
+	cleanups
+
+Tue Jul  8 17:54:19 CEST 2008
+-----------------------------
+  * libclamav/petite.c: fix another out of bounds memory read (bb#1000)
+			Reported by Secunia (CVE-2008-2713)
+
+Tue Jul  8 17:54:12 CEST 2008
+-----------------------------
+  * clamd/others.c: add missing checks for recv() failures (bb#1079)
+
+Tue Jul  8 14:06:05 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/dconf.[ch], htmlnorm.c, jsparse/js-norm.[ch], scanners.c:
+	  enable JS normalizer 
+
+Mon Jul  7 21:42:18 EEST 2008 (edwin)
+-------------------------------------
+  * build system, libclamav/jsparse: add Javascript normalizer (not yet enabled)
+
+Mon Jul  7 15:41:02 CEST 2008 (tk)
+----------------------------------
+  * libclamav/ole2_extract.c, sigtool: make sigtool compatible with the new
+				       OLE2 scan scheme (bb#1086)
+
+Fri Jul  4 18:04:40 CEST 2008 (tk)
+----------------------------------
+  * configure, clamd: fix compilation error on systems without
+		      pthread_yield() (bb#1058)
+
+Fri Jul  4 14:21:12 CEST 2008 (tk)
+----------------------------------
+  * libclamav/dlp.c: improve detection of credit card numbers (bb#941)
+
+Thu Jul  3 16:02:03 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/scanners.c: add missing check for file open failure (bb #1083).
+
+Thu Jul  3 12:47:38 CEST 2008 (tk)
+----------------------------------
+  * libclamav: add ".UNOFFICIAL" suffix to 3rd party signatures (bb#1061)
+
+Wed Jul  2 13:24:25 CEST 2008 (tk)
+----------------------------------
+  * sigtool/sigtool.c: make use of the UNLINK command in cdiffs (bb#1080)
+
+Wed Jul  2 12:43:46 CEST 2008 (tk)
+----------------------------------
+  * sigtool/sigtool.c: verify MD5's in --run-cdiff
+
+Mon Jun 30 21:14:03 EEST 2008 (edwin)
+------------------------------------
+  * freshclam/manager.c: add missing closesocket on error path (bb #1073).
+
+Mon Jun 16 23:43:31 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/hashtab.[ch]: hashtab_insert should return pointer to newly
+  inserted element. Fix grow bug.
+
+Fri Jun 13 13:10:15 CEST 2008 (tk)
+----------------------------------
+  * libclamav/matcher-ac.c: fix handling of nodes which also match single
+			    bytes (bb#1054)
+
+Fri Jun 13 02:01:15 CEST 2008 (tk)
+----------------------------------
+  * shared/cfgparser.c: handle memory errors in OPT_COMPSIZE
+
+Tue Jun 10 18:18:42 CEST 2008 (tk)
+----------------------------------
+  * clamscan: drop support for external unpackers (bb#1052)
+
+Mon Jun  9 20:31:50 CEST 2008 (tk)
+----------------------------------
+  * sync with 0.93.1
+
+Tue Jun  3 23:37:50 CEST 2008 (tk)
+----------------------------------
+  * test: add clam.mail, clam.ppt and clam.tnef (bb#902)
+
+Tue Jun  3 19:41:34 CEST 2008 (tk)
+----------------------------------
+  * clamd/thrmgr.c: move some msgs to debug (bb#1028)
+
+Mon Jun  2 20:50:10 CEST 2008 (acab)
+------------------------------------
+  * libclamav/ole2_extract.c: comment removed
+
+Mon Jun  2 18:31:53 CEST 2008 (tk)
+----------------------------------
+  * clamd/scanner.c: log IP addresses of remote clients (bb#966)
+		     Patch from Jorge Valdes <jvaldes*intercom.com.sv>
+
+Mon Jun  2 17:49:50 CEST 2008 (tk)
+----------------------------------
+  * clamdscan/clamdscan.c: don't show scan summary when clamd cannot be
+			   contacted (bb#1041)
+
+Mon Jun  2 17:59:15 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/hashtab.[ch], scanners.c: avoid using C99 flexible array members
+  (bb #1039)
+
+Mon Jun  2 14:57:31 CEST 2008 (tk)
+----------------------------------
+  * freshclam: in interactive mode EXIT_n can be passed to --on-*-execute
+	       to overwrite the default return code values (bb#465)
+
+Mon Jun  2 13:09:57 CEST 2008 (tk)
+----------------------------------
+  * clamd: minimize memory fragmentation after db reload (bb#1028,
+	   OPTIMIZE_MEMORY_FOOTPRINT currently defined by default)
+	   Patch from LEE, Kok-Seng <kokseng*88pobox.com>
+
+Fri May 30 11:40:56 CEST 2008 (tk)
+----------------------------------
+  * libclamunrar_iface, clamd, freshclam: merge win32 patches from NJH (bb#802)
+
+Wed May 28 03:49:55 CEST 2008 (acab)
+------------------------------------
+  * docs/man: typo
+
+Tue May 27 21:43:04 CEST 2008 (acab)
+------------------------------------
+  * libclamav/ole2_extract.c: allow (partial) scan of broken ole files
+
+Tue May 27 17:39:06 CEST 2008
+-----------------------------
+  * improve handling of PDF, CAB, RTF, OLE2 and HTML files (sync with
+    branch/0.93)
+
+Sat May 24 21:38:47 EEST 2008 (edwin)
+-------------------------------------
+  * clamd/others.c, session.c, m4/fdpassing.m4:
+	remove duplicate code, and fix build error (bb #1034)
+
+Wed May 21 15:51:32 CEST 2008 (tk)
+----------------------------------
+  * freshclam/fresclam.c: don't call daemonize() under w32 (bb#1002)
+
+Wed May 21 14:54:04 CEST 2008 (tk)
+----------------------------------
+  * test/Makefile.am: compatibility with pmake (bb#1018)
+
+Mon May 19 17:44:32 CEST 2008 (tk)
+----------------------------------
+  * libclamav/cvd.c: fix initialization of dbio
+
+Sun May 18 22:39:00 CEST 2008 (tk)
+----------------------------------
+  * libclamav: faster loading of uncompressed .cld files
+
+Fri May 16 10:23:01 EEST 2008 (edwin)
+------------------------------------
+  * libclamav/readdb.c, str.c: improve DB load time
+
+Mon May 12 15:31:13 CEST 2008 (acab)
+------------------------------------
+  * clamd/server-th.c: minor fixes (bb#384)
+
+Sat May 10 10:18:41 EEST 2008 (edwin)
+-------------------------------------
+  * clamd/session.c: fix dummy prototype (bb #1019)
+
+Fri May  9 23:11:51 EEST 2008 (edwin)
+-------------------------------------
+  * build system: add configure checks for FD passing
+  * m4/fdpassing.m4: move all FD passing checks here
+  * clamd/session.[ch], scanner.[ch]:
+  * contrib/clamd_fdscan:
+	add rfc2292/bsd4.4 style file descriptor passing support
+	this code is from Marc Balmer <marc*msys.ch>, with some portability
+	fixes applied
+
+Fri May  9 14:46:57 EEST 2008 (edwin)
+-------------------------------------
+  * contrib/init/RedHat: check for already running clamav-milter (bb #823)
+
+Fri May  9 13:58:27 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/regex: avoid name collisions on AIX (bb #947)
+                     sync with libc: minor cleanups 
+
+Wed May  7 11:51:54 CEST 2008 (tk)
+----------------------------------
+  * clamscan: new switches --structured-ssn-format, --structured-ssn-count,
+	      --structured-cc-count (bb#959)
+
+Tue May  6 19:10:56 CEST 2008 (tk)
+----------------------------------
+  * test: add more test files: clam-mew.exe, clam-nsis.exe, clam-petite.exe,
+	  clam-upack.exe, clam-wwpack.exe, clam.pdf (bb#902)
+
+Mon May  5 20:28:22 CEST 2008 (acab)
+------------------------------------
+  * build system: revert r3808 to allow building on *BSD - bb#1010
+
+Mon May  5 15:32:42 CEST 2008 (tk)
+----------------------------------
+  * doc/clamdoc.tex: add a note about forking daemons (bb#906)
+
+Sun May  4 21:57:33 EEST 2008 (edwin)
+------------------------------------
+  * libclamav/Makefile.am: link .la files first, this
+	should avoid linking to old libclamav as in bb #931
+
+Sat May  3 14:46:41 CEST 2008 (tk)
+----------------------------------
+  * libclamav/readdb.h: read daily.cfg stored inside .cld containers (bb#1006)
+
+Fri May  2 20:09:56 EEST 2008 (edwin)
+------------------------------------
+  * libclamav/mbox.c, shared/network.c: prevent uninitialized use of hostent
+  structure (bb #1003).
+
+Wed Apr 30 14:44:18 CEST 2008 (tk)
+----------------------------------
+  * libclamav/chmunpack.c: fix unlink failure on win32 (bb#951)
+
+Wed Apr 30 14:15:53 CEST 2008 (tk)
+----------------------------------
+  * libclamav/mspack.c: downgrade some error messages (bb#911)
+
+Wed Apr 30 12:35:29 CEST 2008 (tk)
+----------------------------------
+  * clamav-milter: retrieve db version from daily.cld (bb#942)
+
+Tue Apr 29 18:53:51 CEST 2008 (acab)
+------------------------------------
+  * libclamav/unzip.c: check for unprefixed bz2 - bb#990
+
+Tue Apr 29 15:04:11 CEST 2008 (acab)
+------------------------------------
+  * doc/man/freshclam.1.in: english typo - thanks Stephen Gran
+
+Tue Apr 29 13:37:11 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: doc update
+
+Tue Apr 29 13:31:03 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: add an option to avoid sanitising email addresses - bb#953
+
+Tue Apr 29 13:08:43 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: fix iana reserved localnet masks - bb#958
+
+Mon Apr 28 16:25:08 CEST 2008 (acab)
+------------------------------------
+  * libclamav/unzip.c: check for unprefixed bz2 - bb#995
+
+Mon Apr 28 16:14:39 CEST 2008 (acab)
+------------------------------------
+  * libclamav/inflate64: avoid collisions on AIX - bb#947
+
+Mon Apr 28 16:13:33 CEST 2008 (tk)
+----------------------------------
+  * libclamav/scanners.c: don't return CL_EMAX* error codes to
+			  applications (bb#1001)
+
+Mon Apr 28 13:48:36 CEST 2008 (tk)
+----------------------------------
+  * clamscan/manager.c: print information about clean files when the RAR
+			code is not compiled-in (bb#999)
+
+Mon Apr 28 12:37:31 CEST 2008 (tk)
+----------------------------------
+  * libclamav/unzip.c: remove detection of Suspect.Zip and
+		       Exploit.Zip.ModifiedHeaders (bb#997)
+
+Thu Apr 24 20:02:50 CEST 2008 (acab)
+------------------------------------
+  * clamav-milter: accept -i for --pidfile as advertised - bb#988
+
+Wed Apr 23 03:44:28 CEST 2008 (acab)
+------------------------------------
+  * build system: do not lint pthreads where it's not needed (thanks sgran)
+
+Mon Apr 21 17:25:41 EEST 2008 (edwin)
+-------------------------------------
+  * configure: explicitly link freshclam with zlib, better zlib checks (bb
+  #935)
+
+Mon Apr 21 16:21:56 CEST 2008 (tk)
+----------------------------------
+  * libclamav/cvd.c: add work-around for zlib issues with mixed data (bb#932)
+
+Mon Apr 21 11:28:38 CEST 2008 (tk)
+----------------------------------
+  * libclamav/others.h: explicitely cast some constants (bb#936)
+
+Sun Apr 20 19:09:00 CEST 2008 (tk)
+----------------------------------
+  * sigtool/sigtool.c: bb#938 (sigtool --list-sigs not working with .cld files)
+
+Fri Apr 18 18:33:59 CEST 2008 (tk)
+----------------------------------
+  * libclamav: DLP: dconf support; pass flags through scan options
+  * clamd: new options: StructuredDataDetection, StructuredMinCreditCardCount,
+	   StructuredMinSSNCount, StructuredSSNFormatNormal,
+	   StructuredSSNFormatStripped
+  * etc/clamd.conf, docs/man/clamd.conf.5.in: update
+  * TODO: add DLP fine-tuning options to clamscan
+
+Fri Apr 18 13:55:41 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav/dconf.h: fix flag code assignment (bb #952)
+
+Wed Apr 16 20:10:17 CEST 2008 (tk)
+----------------------------------
+  * libclamav: integrate the DLP code from Marty Roesch
+  * clamscan: new switch --detect-structured
+  * TODO: clamd, docs, dconf, fine-tuning options
+
+Wed Apr 16 19:32:12 CEST 2008 (acab)
+------------------------------------
+  * configure: check for bzip2 CVE-2008-1372 - bb#903
+
+Tue Apr 15 18:34:11 CEST 2008 (acab)
+------------------------------------
+  * test: add clam-fsg.exe (bb#902)
+
+Mon Apr 14 22:46:17 EEST 2008
+-----------------------------
+  * libclamav/iana_tld.h, libclamav/phishcheck.c: update TLD list (bb #925)
+
+Mon Apr 14 21:35:11 CEST 2008 (tk)
+----------------------------------
+  * Check in 0.93 patches:
+    - libclamunrar: bb#541 (RAR - Version required to extract - Evasion)
+    - libclamav/spin.c: bb#876 (PeSpin Heap Overflow Vulnerability)
+    - libclamav/pe.c: bb#878 (Upack Buffer Overflow Vulnerability)
+    - libclamav/message.c: bb#881 (message.c: read beyond allocated region)
+    - libclamav/unarj.c: bb#897 (ARJ: Sample from CERT-FI hangs clamav)
+    - libclamunrar: bb#898 (RAR crashes on some fuzzed files from CERT-FI)
+
+Mon Apr 14 13:19:17 CEST 2008 (tk)
+----------------------------------
+  * test: add clam-aspack.exe, clam-pespin.exe and clam-upx.exe (bb#902)
+
+Fri Apr 11 18:40:41 CEST 2008 (tk)
+----------------------------------
+  * test: add clam.chm and clam.sis (bb#902)
+
+Fri Apr 11 12:15:54 CEST 2008 (tk)
+----------------------------------
+  * test/Makefile.am: new Makefile
 
 Wed Apr  9 16:33:21 EEST 2008 (edwin)
 -------------------------------------
@@ -17,9 +788,21 @@ Tue Apr  8 22:27:11 EEST 2008 (edwin)
 -------------------------------------
   * libclamav/mspack.[ch]: fix build on NetBSD 4.0 (bb #921)
 
+Tue Apr  8 19:04:50 CEST 2008 (acab)
+------------------------------------
+  * libclamav: hardfail on unlink failure
+
 Mon Apr  7 22:38:27 CEST 2008 (tk)
 ----------------------------------
   * libclamav/msexpand.c: fix big-endian support
+
+Mon Apr  7 16:04:47 EEST 2008 (edwin)
+-------------------------------------
+  * libclamav, unit-tests: use packed attribute for unaligned access, bb #890.
+
+Mon Apr  7 12:51:43 CEST 2008 (tk)
+----------------------------------
+  * libclamav: scan for embedded PEs inside OLE2 files (bb#914)
 
 Mon Apr  7 11:15:49 CEST 2008 (tk)
 ----------------------------------
@@ -28,10 +811,14 @@ Mon Apr  7 11:15:49 CEST 2008 (tk)
 Sun Apr  6 12:33:25 CEST 2008 (acab)
 ------------------------------------
   * libclamav/pe.c: make petite softfail as it's really reading unaligned data
-  
+
 Sun Apr  6 12:19:47 CEST 2008 (acab)
 ------------------------------------
   * libclamav/pe.c: make upack softfail as it's really reading unaligned data
+
+Thu Apr  3 15:03:18 EEST 2008 (edwin)
+-------------------------------------
+  * unit_tests/Makefile.am/.in: fix typo that caused 'make tags' to fail.
 
 Thu Apr  3 13:52:19 CEST 2008 (tk)
 ----------------------------------
@@ -42,10 +829,26 @@ Wed Apr  2 22:54:23 CEST 2008 (tk)
   * libclamav/scanners.c: cl_scandesc: check if limits is not null (bb#907)
   * clamd/scanners.c: remove RAWSCAN command (bb#907)
 
+Wed Apr  2 16:38:36 CEST 2008 (acab)
+------------------------------------
+  * libclamav: check return codes from syscalls (bb#384)
+
 Wed Apr  2 16:34:43 CEST 2008 (tk)
 ----------------------------------
   * libclamav: update copyrights and stick more files to GPLv2; move and add
 	       more credits to the AUTHORS file; add COPYING.BSD
+
+Wed Apr  2 12:30:06 CEST 2008 (acab)
+------------------------------------
+  * libclamav: check return codes from syscalls (bb#384) - unlink
+
+Thu Mar 27 20:16:07 EET 2008 (edwin)
+------------------------------------
+  * test: add test file for RTF (bb #902)
+
+Thu Mar 27 18:16:28 CET 2008 (tk)
+---------------------------------
+  * test: add test files for ARJ, SZDD and .tar.gz (bb#902)
 
 Tue Mar 25 01:55:19 CET 2008 (acab)
 -----------------------------------
@@ -55,14 +858,19 @@ Mon Mar 24 21:22:16 EET 2008 (edwin)
 -----------------------------------
   * libclamav/str.c: cli_warnmsg -> cli_dbgmsg (bb #892)
 
-Mon Mar 24 19:31:10 CET 2008 (acab)
------------------------------------
-  * libclamav/nsis: a cleaner approach to bb#844 and bb#888
-
 Mon Mar 24 20:30:34 EET 2008 (edwin)
 ------------------------------------
   * libclamav/mbox.c, message.c: cli_warnmsg -> cli_dbgmsg (bb #880),
 	don't handle multipart/encrypted specially
+
+Mon Mar 24 19:31:10 CET 2008 (acab)
+-----------------------------------
+  * libclamav/nsis: a cleaner approach to bb#844 and bb#888
+
+Fri Mar 21 23:14:31 CET 2008 (acab)
+-----------------------------------
+  * libclamav/nsis: only insists to unpack for LZMA
+  		    partially reverts r3705 - bb#888
 
 Fri Mar 21 03:31:16 CET 2008 (acab)
 -----------------------------------
@@ -71,6 +879,16 @@ Fri Mar 21 03:31:16 CET 2008 (acab)
 Thu Mar 20 21:27:22 CET 2008 (tk)
 ---------------------------------
   * doc/signatures.[pdf,tex]: update documentation
+
+Thu Mar 20 21:06:30 CET 2008 (acab)
+-----------------------------------
+ * libclamav/blob.[ch]: Fix for "bad file descriptor" under win32, properly
+			 generate tempfiles, huge cleanup
+
+Thu Mar 20 20:55:37 CET 2008 (acab)
+-----------------------------------
+  * libclamav: Remove fsync()'s. Win32 ports should greatly benefit from it
+  		Please report problems. - bb#844
 
 Thu Mar 20 12:16:13 CET 2008 (tk)
 ---------------------------------
@@ -99,7 +917,12 @@ Mon Mar 17 17:25:44 EET 2008 (edwin)
 
 Mon Mar 17 16:43:23 EET 2008 (edwin)
 -----------------------------------
-   * libclamav/others.c: check ctime return value (bb #869).
+  * libclamav/others.c: check ctime return value (bb #869).
+
+Thu Mar 13 10:50:36 CET 2008 (tk)
+---------------------------------
+  * unit_tests: add initial support for unit tests; based on a patch by
+		Brian Caswell <bmc*sourcefire.com>
 
 Mon Mar 10 19:40:25 CET 2008 (acab)
 -----------------------------------

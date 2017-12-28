@@ -690,27 +690,6 @@ static const struct trans_ctl_table trans_net_irda_table[] = {
 	{}
 };
 
-static struct trans_ctl_table trans_net_ipsec_table[] = {
-	{ 1 /*NET_IPSEC_DEBUG_AH*/,	"debug_ah" },
-	{ 2 /*NET_IPSEC_DEBUG_ESP*/,	"debug_esp" },
-	{ 3 /*NET_IPSEC_DEBUG_TUNNEL*/,	"debug_tunnel" },
-	{ 4 /*NET_IPSEC_DEBUG_EROUTE*/,	"debug_eroute" },
-	{ 5 /*NET_IPSEC_DEBUG_SPI*/,	"debug_spi" },
-	{ 6 /*NET_IPSEC_DEBUG_RADIJ*/,	"debug_radij" },
-	{ 7 /*NET_IPSEC_DEBUG_NETLINK*/,"debug_netlink" },
-	{ 8 /*NET_IPSEC_DEBUG_XFORM*/,	"debug_xform" },
-	{ 9 /*NET_IPSEC_DEBUG_RCV*/,	"debug_rcv" },
-	{ 10 /*NET_IPSEC_DEBUG_PFKEY*/,	"debug_pfkey" },
-	{ 11 /*NET_IPSEC_DEBUG_VERBOSE*/,"debug_verbose" },
-	{ 12 /*NET_IPSEC_DEBUG_IPCOMP*/,"debug_ipcomp" },
-	{ 13 /*NET_IPSEC_ICMP*/,	"icmp" },
-	{ 14 /*NET_IPSEC_INBOUND_POLICY_CHECK*/,"inbound_policy_check" },
-	{ 15 /*NET_IPSEC_TOS*/,		"tos" },
-	{ 16 /*NET_IPSEC_PFKEY_LOSSAGE*/,"pfk_lossage" },
-	{}
-}
-;
-
 static const struct trans_ctl_table trans_net_table[] = {
 	{ NET_CORE,		"core",		trans_net_core_table },
 	/* NET_ETHER not used */
@@ -734,7 +713,6 @@ static const struct trans_ctl_table trans_net_table[] = {
 	{ NET_DCCP,		"dccp",		trans_net_dccp_table },
 	{ NET_IRDA,		"irda",		trans_net_irda_table },
 	{ 2089,			"nf_conntrack_max" },
-	{ 2112,			"ipsec",	trans_net_ipsec_table },
 	{}
 };
 

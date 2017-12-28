@@ -13,7 +13,6 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: ipsec_rcv.h,v 1.28.2.2 2006-10-06 21:39:26 paul Exp $
  */
 
 #ifndef IPSEC_RCV_H
@@ -38,8 +37,8 @@
 
 #define __NO_VERSION__
 #ifndef AUTOCONF_INCLUDED
-#include <linux/config.h>	/* for CONFIG_IP_FORWARD */
-#endif
+#include <linux/config.h>
+#endif	/* for CONFIG_IP_FORWARD */
 #ifdef CONFIG_MODULES
 #include <linux/module.h>
 #endif
@@ -90,15 +89,16 @@ enum ipsec_rcv_value {
 
 #define IPSEC_RSM_INIT			0	/* make it easy, starting state is 0 */
 #define	IPSEC_RSM_DECAP_INIT	1
-#define	IPSEC_RSM_DECAP_CHK		2
+#define	IPSEC_RSM_DECAP_LOOKUP	2
 #define	IPSEC_RSM_AUTH_INIT		3
-#define	IPSEC_RSM_AUTH_CALC		4
-#define	IPSEC_RSM_AUTH_CHK		5
-#define	IPSEC_RSM_DECRYPT		6
-#define	IPSEC_RSM_DECAP_CONT	7	/* do we restart at IPSEC_RSM_DECAP_INIT */
-#define	IPSEC_RSM_CLEANUP		8
-#define	IPSEC_RSM_IPCOMP		9
-#define	IPSEC_RSM_COMPLETE		10
+#define	IPSEC_RSM_AUTH_DECAP	4
+#define	IPSEC_RSM_AUTH_CALC		5
+#define	IPSEC_RSM_AUTH_CHK		6
+#define	IPSEC_RSM_DECRYPT		7
+#define	IPSEC_RSM_DECAP_CONT	8	/* do we restart at IPSEC_RSM_DECAP_INIT */
+#define	IPSEC_RSM_CLEANUP		9
+#define	IPSEC_RSM_IPCOMP		10
+#define	IPSEC_RSM_COMPLETE		11
 #define IPSEC_RSM_DONE 			100
 
 struct ipsec_rcv_state {
@@ -106,11 +106,13 @@ struct ipsec_rcv_state {
 	struct net_device_stats *stats;
 	struct iphdr    *ipp;          /* the IP header */
 	struct ipsec_sa *ipsp;         /* current SA being processed */
+	struct ipsec_sa *lastipsp;     /* last SA that was processed */
 	int len;                       /* length of packet */
 	int ilen;                      /* length of inner payload (-authlen) */
 	int authlen;                   /* how big is the auth data at end */
 	int hard_header_len;           /* layer 2 size */
 	int iphlen;                    /* how big is IP header */
+	unsigned int   transport_direct:1;
 	struct auth_alg *authfuncs;
 	ip_said said;
 	char   sa[SATOT_BUF];
@@ -187,73 +189,21 @@ ipsec_rcv(struct sk_buff *skb,
 	  unsigned short xlen);
 #endif /* PROTO_HANDLER_SINGLE_PARM */
 
-#ifdef CONFIG_KLIPS_DEBUG
 extern int debug_rcv;
 #define ipsec_rcv_dmp(_x,_y, _z) if (debug_rcv && sysctl_ipsec_debug_verbose) ipsec_dmp_block(_x,_y,_z)
 #else
 #define ipsec_rcv_dmp(_x,_y, _z) do {} while(0)
-#endif /* CONFIG_KLIPS_DEBUG */
 
 extern int sysctl_ipsec_inbound_policy_check;
 #endif /* __KERNEL__ */
 
+extern int klips26_udp_encap_rcv(struct sock *sk, struct sk_buff *skb);
 extern int klips26_rcv_encap(struct sk_buff *skb, __u16 encap_type);
 
+// manage ipsec rcv state objects
+extern int ipsec_rcv_state_cache_init (void);
+extern void ipsec_rcv_state_cache_cleanup (void);
 
 #endif /* IPSEC_RCV_H */
-
-/*
- * $Log: ipsec_rcv.h,v $
- * Revision 1.28.2.2  2006-10-06 21:39:26  paul
- * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
- * set. This is defined through autoconf.h which is included through the
- * linux kernel build macros.
- *
- * Revision 1.28.2.1  2006/07/10 15:52:20  paul
- * Fix for bug #642 by Bart Trojanowski
- *
- * Revision 1.28  2005/05/11 00:59:45  mcr
- * 	do not call debug routines if !defined KLIPS_DEBUG.
- *
- * Revision 1.27  2005/04/29 04:59:46  mcr
- * 	use ipsec_dmp_block.
- *
- * Revision 1.26  2005/04/13 22:48:35  mcr
- * 	added comments, and removed some log.
- * 	removed Linux 2.0 support.
- *
- * Revision 1.25  2005/04/08 18:25:37  mcr
- * 	prototype klips26 encap receive function
- *
- * Revision 1.24  2004/08/20 21:45:37  mcr
- * 	CONFIG_KLIPS_NAT_TRAVERSAL is not used in an attempt to
- * 	be 26sec compatible. But, some defines where changed.
- *
- * Revision 1.23  2004/08/03 18:17:40  mcr
- * 	in 2.6, use "net_device" instead of #define device->net_device.
- * 	this probably breaks 2.0 compiles.
- *
- * Revision 1.22  2004/07/10 19:08:41  mcr
- * 	CONFIG_IPSEC -> CONFIG_KLIPS.
- *
- * Revision 1.21  2004/04/06 02:49:08  mcr
- * 	pullup of algo code from alg-branch.
- *
- * Revision 1.20  2004/04/05 19:55:06  mcr
- * Moved from linux/include/freeswan/ipsec_rcv.h,v
- *
- * Revision 1.19  2003/12/15 18:13:09  mcr
- * 	when compiling with NAT traversal, don't assume that the
- * 	kernel has been patched, unless CONFIG_IPSEC_NAT_NON_ESP
- * 	is set.
- *
- * history elided 2005-04-12.
- *
- * Local Variables:
- * c-basic-offset:8
- * c-style:linux
- * End:
- *
- */
 
 

@@ -276,7 +276,7 @@ MACHINE         = vc547x
 endif
 
 ifeq ($(CONFIG_MACH_UC5471DSP), y)
-TEXTADDR	= 0x10020000
+TEXTADDR	= 0x10040000
 MACHINE         = uc5471dsp
 endif
 

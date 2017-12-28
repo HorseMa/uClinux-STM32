@@ -117,7 +117,7 @@ static void help(void)
     mprintf_stdout = 1;
 
     mprintf("\n");
-    mprintf("                   Clam AntiVirus: freshclam  "VERSION"\n");
+    mprintf("                   Clam AntiVirus: freshclam  %s\n", get_version());
     mprintf("    (C) 2002 - 2007 ClamAV Team - http://www.clamav.net/team\n\n");
 
     mprintf("    --help               -h              show help\n");
@@ -148,7 +148,7 @@ static void help(void)
     mprintf("\n");
 }
 
-static int download(const struct cfgstruct *copt, const struct optstruct *opt, const char *datadir)
+static int download(const struct cfgstruct *copt, const struct optstruct *opt, const char *datadir, const char *cfgfile)
 {
 	int ret = 0, try = 0, maxattempts = 0;
 	const struct cfgstruct *cpt;
@@ -158,7 +158,7 @@ static int download(const struct cfgstruct *copt, const struct optstruct *opt, c
     logg("*Max retries == %d\n", maxattempts);
 
     if(!(cpt = cfgopt(copt, "DatabaseMirror"))->enabled) {
-	logg("^You must specify at least one database mirror.\n");
+	logg("^You must specify at least one database mirror in %s\n", cfgfile);
 	return 56;
     } else {
 	while(cpt) {
@@ -175,7 +175,7 @@ static int download(const struct cfgstruct *copt, const struct optstruct *opt, c
 		    logg("Giving up on %s...\n", cpt->strarg);
 		    cpt = (struct cfgstruct *) cpt->nextarg;
 		    if(!cpt) {
-			logg("Update failed. Your network may be down or none of the mirrors listed in freshclam.conf is working. Check http://www.clamav.net/support/mirror-problem for possible reasons.\n");
+			logg("Update failed. Your network may be down or none of the mirrors listed in %s is working. Check http://www.clamav.net/support/mirror-problem for possible reasons.\n", cfgfile);
 		    }
 		    try = 0;
 		}
@@ -192,7 +192,7 @@ static int download(const struct cfgstruct *copt, const struct optstruct *opt, c
 int main(int argc, char **argv)
 {
 	int ret = 52;
-	const char *newdir, *cfgfile;
+	const char *newdir, *cfgfile, *arg = NULL;
 	char *pidfile = NULL;
 	struct cfgstruct *copt;
 	const struct cfgstruct *cpt;
@@ -200,7 +200,7 @@ int main(int argc, char **argv)
 	struct sigaction sigact;
 	struct sigaction oldact;
 #endif
-#if !defined(C_CYGWIN)  && !defined(C_OS2) && !defined(C_WINDOWS)
+#if !defined(C_OS2) && !defined(C_WINDOWS)
 	char *unpuser;
 	struct passwd *user;
 #endif
@@ -296,7 +296,7 @@ int main(int argc, char **argv)
 	    return 56;
 	}
 
-#if !defined(C_CYGWIN) && !defined(C_WINDOWS)
+#ifndef C_WINDOWS
 	if(statbuf.st_mode & (S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH)) {
 	    logg("^Insecure permissions (for HTTPProxyPassword): %s must have no more than 0700 permissions.\n", cfgfile);
 	    opt_free(opt);
@@ -306,7 +306,7 @@ int main(int argc, char **argv)
 #endif
     }
 
-#if !defined(C_CYGWIN)  && !defined(C_OS2) && !defined(C_WINDOWS)
+#if !defined(C_OS2) && !defined(C_WINDOWS)
     /* freshclam shouldn't work with root privileges */
     if(opt_check(opt, "user"))
 	unpuser = opt_arg(opt, "user");
@@ -487,6 +487,7 @@ int main(int argc, char **argv)
 
 	bigsleep = 24 * 3600 / checks;
 
+#if !defined(C_OS2) && !defined(C_WINDOWS)
 	if(!cfgopt(copt, "Foreground")->enabled) {
 	    if(daemonize() == -1) {
 		logg("!daemonize() failed\n");
@@ -497,6 +498,7 @@ int main(int argc, char **argv)
             foreground = 0;
 	    mprintf_disabled = 1;
         }
+#endif
 
 	if(opt_check(opt, "pid")) {
 	    pidfile = opt_arg(opt, "pid");
@@ -509,7 +511,7 @@ int main(int argc, char **argv)
 
 	active_children = 0;
 
-	logg("#freshclam daemon "VERSION" (OS: "TARGET_OS_TYPE", ARCH: "TARGET_ARCH_TYPE", CPU: "TARGET_CPU_TYPE")\n");
+	logg("#freshclam daemon %s (OS: "TARGET_OS_TYPE", ARCH: "TARGET_ARCH_TYPE", CPU: "TARGET_CPU_TYPE")\n", get_version());
 
 #ifdef	C_WINDOWS
 	signal(SIGINT, daemon_sighandler);
@@ -522,18 +524,18 @@ int main(int argc, char **argv)
 #endif
 
 	while(!terminate) {
-	    ret = download(copt, opt, newdir);
+	    ret = download(copt, opt, newdir, cfgfile);
 
             if(ret > 1) {
-		    const char *arg = NULL;
-
 	        if(opt_check(opt, "on-error-execute"))
 		    arg = opt_arg(opt, "on-error-execute");
 		else if((cpt = cfgopt(copt, "OnErrorExecute"))->enabled)
 		    arg = cpt->strarg;
 
 		if(arg)
-		    execute("OnErrorExecute", arg);
+		    execute("OnErrorExecute", arg, opt);
+
+		arg = NULL;
 	    }
 
 	    logg("#--------------------------------------\n");
@@ -574,19 +576,18 @@ int main(int argc, char **argv)
 	}
 
     } else
-	ret = download(copt, opt, newdir);
+	ret = download(copt, opt, newdir, cfgfile);
 
-    if(opt_check(opt, "on-error-execute")) {
-	if(ret > 1)
-	    if(system(opt_arg(opt, "on-error-execute")) == -1)
-		logg("!system(%s) failed\n", opt_arg(opt, "on-error-execute"));
+    if(ret > 1) {
+	if(opt_check(opt, "on-error-execute"))
+	    arg = opt_arg(opt, "on-error-execute");
+	else if((cpt = cfgopt(copt, "OnErrorExecute"))->enabled)
+	    arg = cpt->strarg;
 
-    } else if((cpt = cfgopt(copt, "OnErrorExecute"))->enabled) {
-	if(ret > 1)
-	    if(system(cpt->strarg) == -1)
-		logg("!system(%s) failed\n", cpt->strarg);
-
+	if(arg)
+            execute("OnErrorExecute", arg, opt);
     }
+
     if (pidfile) {
         unlink(pidfile);
     }

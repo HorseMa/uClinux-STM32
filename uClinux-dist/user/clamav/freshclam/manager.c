@@ -32,29 +32,34 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#ifdef	HAVE_UNISTD_H
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 #include <string.h>
 #include <ctype.h>
-#ifndef	C_WINDOWS
+#ifndef C_WINDOWS
 #include <netinet/in.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #endif
 #include <sys/types.h>
 #ifdef FILTER_RULES
 #include <sys/wait.h>
 #endif
-#ifndef	C_WINDOWS
+#ifndef C_WINDOWS
 #include <sys/socket.h>
 #include <sys/time.h>
 #endif
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#ifndef C_WINDOWS
 #include <dirent.h>
+#endif
 #include <errno.h>
 #include <zlib.h>
+
+#include "target.h"
 
 #include "manager.h"
 #include "notify.h"
@@ -79,18 +84,47 @@
 #define	O_BINARY	0
 #endif
 
-#ifndef	C_WINDOWS
+#ifndef C_WINDOWS
 #define	closesocket(s)	close(s)
 #endif
 
-static int getclientsock(const char *localip)
+#define CHDIR_ERR(x)				\
+	if(chdir(x) == -1)			\
+	    logg("!Can't chdir to %s\n", x);
+
+#ifndef SUPPORT_IPv6
+static const char *ghbn_err(int err) /* hstrerror() */
+{
+    switch(err) {
+	case HOST_NOT_FOUND:
+	    return "Host not found";
+
+	case NO_DATA:
+	    return "No IP address";
+
+	case NO_RECOVERY:
+	    return "Unrecoverable DNS error";
+
+	case TRY_AGAIN:
+	    return "Temporary DNS error";
+
+	default:
+	    return "Unknown error";
+    }
+}
+#endif
+
+static int getclientsock(const char *localip, int prot)
 {
 	int socketfd = -1;
 
-#ifdef PF_INET
-    socketfd = socket(PF_INET, SOCK_STREAM, 0);
+#ifdef SUPPORT_IPv6
+    if(prot == PF_INET6)
+	socketfd = socket(PF_INET6, SOCK_STREAM, 0);
+    else
+	socketfd = socket(PF_INET, SOCK_STREAM, 0);
 #else
-    socketfd = socket(AF_INET, SOCK_STREAM, 0);
+    socketfd = socket(PF_INET, SOCK_STREAM, 0);
 #endif
 
     if(socketfd < 0) {
@@ -99,42 +133,49 @@ static int getclientsock(const char *localip)
     }
 
     if(localip) {
-	struct hostent *he;
+#ifdef SUPPORT_IPv6
+	    struct addrinfo *res;
+	    int ret;
 
-	if((he = gethostbyname(localip)) == NULL) {
-	    const char *herr;
-	    switch(h_errno) {
-	        case HOST_NOT_FOUND:
-		    herr = "Host not found";
-		    break;
-
-		case NO_DATA:
-		    herr = "No IP address";
-		    break;
-
-		case NO_RECOVERY:
-		    herr = "Unrecoverable DNS error";
-		    break;
-
-		case TRY_AGAIN:
-		    herr = "Temporary DNS error";
-		    break;
-
-		default:
-		    herr = "Unknown error";
-		    break;
-	    }
-	    logg("!Could not resolve local ip address '%s': %s\n", localip, herr);
+	ret = getaddrinfo(localip, NULL, NULL, &res);
+	if(ret) {
+	    logg("!Could not resolve local ip address '%s': %s\n", localip, gai_strerror(ret));
 	    logg("^Using standard local ip address and port for fetching.\n");
 	} else {
-	    struct sockaddr_in client;
-	    unsigned char *ia;
-	    char ipaddr[16];
+		char ipaddr[46];
 
-	    memset ((char *) &client, 0, sizeof(struct sockaddr_in));
+	    if(bind(socketfd, res->ai_addr, res->ai_addrlen) != 0) {
+		logg("!Could not bind to local ip address '%s': %s\n", localip, strerror(errno));
+		logg("^Using default client ip.\n");
+	    } else {
+		    void *addr;
+
+		if(res->ai_family == AF_INET6)
+		    addr = &((struct sockaddr_in6 *) res->ai_addr)->sin6_addr;
+		else
+		    addr = &((struct sockaddr_in *) res->ai_addr)->sin_addr;
+
+		if(inet_ntop(res->ai_family, addr, ipaddr, sizeof(ipaddr)))
+		    logg("*Using ip '%s' for fetching.\n", ipaddr);
+	    }
+	    freeaddrinfo(res);
+	}
+
+#else /* IPv4 */
+	    struct hostent *he;
+
+	if(!(he = gethostbyname(localip))) {
+	    logg("!Could not resolve local ip address '%s': %s\n", localip, ghbn_err(h_errno));
+	    logg("^Using standard local ip address and port for fetching.\n");
+	} else {
+		struct sockaddr_in client;
+		unsigned char *ia;
+		char ipaddr[16];
+
+	    memset((char *) &client, 0, sizeof(client));
 	    client.sin_family = AF_INET;
 	    client.sin_addr = *(struct in_addr *) he->h_addr_list[0];
-	    if (bind(socketfd, (struct sockaddr *) &client, sizeof(struct sockaddr_in)) != 0) {
+	    if(bind(socketfd, (struct sockaddr *) &client, sizeof(struct sockaddr_in)) != 0) {
 		logg("!Could not bind to local ip address '%s': %s\n", localip, strerror(errno));
 		logg("^Using default client ip.\n");
 	    } else {
@@ -143,34 +184,37 @@ static int getclientsock(const char *localip)
 		logg("*Using ip '%s' for fetching.\n", ipaddr);
 	    }
 	}
+#endif
     }
 
     return socketfd;
 }
 
-static int wwwconnect(const char *server, const char *proxy, int pport, char *ip, const char *localip, int ctimeout, struct mirdat *mdat, int logerr)
+static int wwwconnect(const char *server, const char *proxy, int pport, char *ip, const char *localip, int ctimeout, struct mirdat *mdat, int logerr, unsigned int can_whitelist)
 {
-	int socketfd = -1, port, i, ret;
+	int socketfd, port, ret;
+	unsigned int ips = 0, ignored = 0;
+#ifdef SUPPORT_IPv6
+	struct addrinfo hints, *res = NULL, *rp, *loadbal_rp = NULL;
+	char port_s[6], loadbal_ipaddr[46];
+	uint32_t loadbal = 1, minsucc = 0xffffffff, minfail = 0xffffffff;
+	struct mirdat_ip *md;
+#else
 	struct sockaddr_in name;
 	struct hostent *host;
-	char ipaddr[16];
 	unsigned char *ia;
+	int i;
+#endif
+	char ipaddr[46];
 	const char *hostpt;
 
     if(ip)
 	strcpy(ip, "???");
 
-    socketfd = getclientsock(localip);
-    if(socketfd < 0)
-	return -1;
-
-    name.sin_family = AF_INET;
-
     if(proxy) {
 	hostpt = proxy;
 
 	if(!(port = pport)) {
-#ifndef C_CYGWIN
 		const struct servent *webcache = getservbyname("webcache", "TCP");
 
 		if(webcache)
@@ -181,9 +225,6 @@ static int wwwconnect(const char *server, const char *proxy, int pport, char *ip
 #ifndef	C_WINDOWS
 		endservent();
 #endif
-#else
-		port = 8080;
-#endif
 	}
 
     } else {
@@ -191,31 +232,115 @@ static int wwwconnect(const char *server, const char *proxy, int pport, char *ip
 	port = 80;
     }
 
-    if((host = gethostbyname(hostpt)) == NULL) {
-	const char *herr;
-	switch(h_errno) {
-	    case HOST_NOT_FOUND:
-		herr = "Host not found";
-		break;
+#ifdef SUPPORT_IPv6
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    snprintf(port_s, sizeof(port_s), "%d", port);
+    port_s[sizeof(port_s) - 1] = 0;
+    ret = getaddrinfo(hostpt, port_s, &hints, &res);
+    if(ret) {
+	logg("%cCan't get information about %s: %s\n", logerr ? '!' : '^', hostpt, gai_strerror(ret));
+	return -1;
+    }
 
-	    case NO_DATA:
-		herr = "No IP address";
-		break;
+    for(rp = res; rp; rp = rp->ai_next) {
+	    void *addr;
 
-	    case NO_RECOVERY:
-		herr = "Unrecoverable DNS error";
-		break;
+	ips++;
+	if(rp->ai_family == AF_INET6)
+	    addr = &((struct sockaddr_in6 *) rp->ai_addr)->sin6_addr;
+	else
+	    addr = &((struct sockaddr_in *) rp->ai_addr)->sin_addr;
 
-	    case TRY_AGAIN:
-		herr = "Temporary DNS error";
-		break;
-
-	    default:
-		herr = "Unknown error";
-		break;
+	if(!inet_ntop(rp->ai_family, addr, ipaddr, sizeof(ipaddr))) {
+	    logg("%cinet_ntop() failed\n", logerr ? '!' : '^');
+	    freeaddrinfo(res);
+	    return -1;
 	}
-        logg("%cCan't get information about %s: %s\n", logerr ? '!' : '^', hostpt, herr);
-	close(socketfd);
+
+	if((ret = mirman_check(addr, rp->ai_family, mdat, &md))) {
+	    if(ret == 1)
+		logg("Ignoring mirror %s (due to previous errors)\n", ipaddr);
+	    else
+		logg("Ignoring mirror %s (has connected too many times with an outdated version)\n", ipaddr);
+
+	    ignored++;
+	    if(!loadbal || rp->ai_next)
+		continue;
+	}
+
+	if(loadbal) {
+	    if(!ret) {
+		if(!md) {
+		    loadbal_rp = rp;
+		    strncpy(loadbal_ipaddr, ipaddr, sizeof(loadbal_ipaddr));
+		} else {
+		    if(md->succ < minsucc && md->fail <= minfail) {
+			minsucc = md->succ;
+			minfail = md->fail;
+			loadbal_rp = rp;
+			strncpy(loadbal_ipaddr, ipaddr, sizeof(loadbal_ipaddr));
+		    }
+		    if(rp->ai_next)
+			continue;
+		}
+	    }
+
+	    if(!loadbal_rp) {
+		if(!rp->ai_next) {
+		    loadbal = 0;
+		    rp = res;
+		}
+		continue;
+	    }
+	    rp = loadbal_rp;
+	    strncpy(ipaddr, loadbal_ipaddr, sizeof(ipaddr));
+
+	} else if(loadbal_rp == rp) {
+	    continue;
+	}
+
+	if(ip)
+	    strcpy(ip, ipaddr);
+
+	if(rp != res)
+	    logg("Trying host %s (%s)...\n", hostpt, ipaddr);
+
+	socketfd = getclientsock(localip, rp->ai_family);
+	if(socketfd < 0) {
+	    freeaddrinfo(res);
+	    return -1;
+	}
+
+#ifdef SO_ERROR
+	if(wait_connect(socketfd, rp->ai_addr, rp->ai_addrlen, ctimeout) == -1) {
+#else
+	if(connect(socketfd, rp->ai_addr, rp->ai_addrlen) == -1) {
+#endif
+	    logg("Can't connect to port %d of host %s (IP: %s)\n", port, hostpt, ipaddr);
+	    closesocket(socketfd);
+	    if(loadbal) {
+		loadbal = 0;
+		rp = res;
+	    }
+	    continue;
+	} else {
+	    if(rp->ai_family == AF_INET)
+		mdat->currip[0] = *((uint32_t *) addr);
+	    else
+		memcpy(mdat->currip, addr, 4 * sizeof(uint32_t));
+	    mdat->af = rp->ai_family;
+	    freeaddrinfo(res);
+	    return socketfd;
+	}
+    }
+    freeaddrinfo(res);
+
+#else /* IPv4 */
+
+    if((host = gethostbyname(hostpt)) == NULL) {
+        logg("%cCan't get information about %s: %s\n", logerr ? '!' : '^', hostpt, ghbn_err(h_errno));
 	return -1;
     }
 
@@ -224,11 +349,13 @@ static int wwwconnect(const char *server, const char *proxy, int pport, char *ip
 	ia = (unsigned char *) host->h_addr_list[i];
 	sprintf(ipaddr, "%u.%u.%u.%u", ia[0], ia[1], ia[2], ia[3]);
 
-	if((ret = mirman_check(((struct in_addr *) ia)->s_addr, mdat))) {
+	ips++;
+	if((ret = mirman_check(&((struct in_addr *) ia)->s_addr, AF_INET, mdat, NULL))) {
 	    if(ret == 1)
 		logg("Ignoring mirror %s (due to previous errors)\n", ipaddr);
 	    else
 		logg("Ignoring mirror %s (has connected too many times with an outdated version)\n", ipaddr);
+	    ignored++;
 	    continue;
 	}
 
@@ -238,8 +365,14 @@ static int wwwconnect(const char *server, const char *proxy, int pport, char *ip
 	if(i > 0)
 	    logg("Trying host %s (%s)...\n", hostpt, ipaddr);
 
+	memset ((char *) &name, 0, sizeof(name));
+	name.sin_family = AF_INET;
 	name.sin_addr = *((struct in_addr *) host->h_addr_list[i]);
 	name.sin_port = htons(port);
+
+	socketfd = getclientsock(localip, AF_INET);
+	if(socketfd < 0)
+	    return -1;
 
 #ifdef SO_ERROR
 	if(wait_connect(socketfd, (struct sockaddr *) &name, sizeof(struct sockaddr_in), ctimeout) == -1) {
@@ -247,18 +380,19 @@ static int wwwconnect(const char *server, const char *proxy, int pport, char *ip
 	if(connect(socketfd, (struct sockaddr *) &name, sizeof(struct sockaddr_in)) == -1) {
 #endif
 	    logg("Can't connect to port %d of host %s (IP: %s)\n", port, hostpt, ipaddr);
-	    close(socketfd);
-	    if((socketfd = getclientsock(localip)) == -1)
-		return -1;
-
+	    closesocket(socketfd);
 	    continue;
 	} else {
-	    mdat->currip = ((struct in_addr *) ia)->s_addr;
+	    mdat->currip[0] = ((struct in_addr *) ia)->s_addr;
+	    mdat->af = AF_INET;
 	    return socketfd;
 	}
     }
+#endif
 
-    close(socketfd);
+    if(can_whitelist && ips && (ips == ignored))
+	mirman_whitelist(mdat);
+
     return -2;
 }
 
@@ -328,6 +462,7 @@ static char *proxyauth(const char *user, const char *pass)
     buf[len] = '\0';
     auth = malloc(strlen(buf) + 30);
     if(!auth) {
+	free(buf);
 	logg("!proxyauth: Can't allocate memory for 'authorization'\n");
 	return NULL;
     }
@@ -338,15 +473,14 @@ static char *proxyauth(const char *user, const char *pass)
     return auth;
 }
 
-static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int *ims, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr)
+static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int *ims, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr, unsigned int can_whitelist)
 {
-	char cmd[512], head[513], buffer[FILEBUFF], ipaddr[16], *ch, *tmp;
+	char cmd[512], head[513], buffer[FILEBUFF], ipaddr[46], *ch, *tmp;
 	int bread, cnt, sd;
 	unsigned int i, j;
 	char *remotename = NULL, *authorization = NULL;
-	const char *agent;
 	struct cl_cvd *cvd;
-	char last_modified[36];
+	char last_modified[36], uastr[128];
 	struct stat sb;
 
 
@@ -360,8 +494,10 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
 
 	if(user) {
 	    authorization = proxyauth(user, pass);
-	    if(!authorization)
+	    if(!authorization) {
+		free(remotename);
 		return NULL;
+	    }
 	}
     }
 
@@ -379,13 +515,10 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
     logg("Reading CVD header (%s): ", file);
 
     if(uas)
-	agent = uas;
+	strncpy(uastr, uas, sizeof(uastr));
     else
-#ifdef CL_EXPERIMENTAL
-	agent = PACKAGE"/"VERSION"-exp";
-#else
-	agent = PACKAGE"/"VERSION;
-#endif
+	snprintf(uastr, sizeof(uastr), PACKAGE"/%s (OS: "TARGET_OS_TYPE", ARCH: "TARGET_ARCH_TYPE", CPU: "TARGET_CPU_TYPE")", get_version());
+    uastr[sizeof(uastr) - 1] = 0;
 
     snprintf(cmd, sizeof(cmd),
 	"GET %s/%s HTTP/1.0\r\n"
@@ -394,7 +527,7 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
 	"Connection: close\r\n"
 	"Range: bytes=0-511\r\n"
         "If-Modified-Since: %s\r\n"
-        "\r\n", (remotename != NULL) ? remotename : "", file, hostname, (authorization != NULL) ? authorization : "", agent, last_modified);
+        "\r\n", (remotename != NULL) ? remotename : "", file, hostname, (authorization != NULL) ? authorization : "", uastr, last_modified);
 
     free(remotename);
     free(authorization);
@@ -402,9 +535,9 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
     memset(ipaddr, 0, sizeof(ipaddr));
 
     if(ip[0]) /* use ip to connect */
-	sd = wwwconnect(ip, proxy, port, ipaddr, localip, ctimeout, mdat, logerr);
+	sd = wwwconnect(ip, proxy, port, ipaddr, localip, ctimeout, mdat, logerr, can_whitelist);
     else
-	sd = wwwconnect(hostname, proxy, port, ipaddr, localip, ctimeout, mdat, logerr);
+	sd = wwwconnect(hostname, proxy, port, ipaddr, localip, ctimeout, mdat, logerr, can_whitelist);
 
     if(sd < 0) {
 	return NULL;
@@ -438,7 +571,7 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
 
     if(bread == -1) {
 	logg("%cremote_cvdhead: Error while reading CVD header from %s\n", logerr ? '!' : '^', hostname);
-	mirman_update(mdat->currip, mdat, 1);
+	mirman_update(mdat->currip, mdat->af, mdat, 1);
 	return NULL;
     }
 
@@ -452,7 +585,7 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
     if((strstr(buffer, "HTTP/1.1 304")) != NULL || (strstr(buffer, "HTTP/1.0 304")) != NULL) { 
 	*ims = 0;
 	logg("OK (IMS)\n");
-	mirman_update(mdat->currip, mdat, 0);
+	mirman_update(mdat->currip, mdat->af, mdat, 0);
 	return NULL;
     } else {
 	*ims = 1;
@@ -461,7 +594,7 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
     if(!strstr(buffer, "HTTP/1.1 200") && !strstr(buffer, "HTTP/1.0 200") &&
        !strstr(buffer, "HTTP/1.1 206") && !strstr(buffer, "HTTP/1.0 206")) {
 	logg("%cUnknown response from remote server\n", logerr ? '!' : '^');
-	mirman_update(mdat->currip, mdat, 1);
+	mirman_update(mdat->currip, mdat->af, mdat, 1);
 	return NULL;
     }
 
@@ -479,7 +612,7 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
 
     if(sizeof(buffer) - i < 512) {
 	logg("%cremote_cvdhead: Malformed CVD header (too short)\n", logerr ? '!' : '^');
-	mirman_update(mdat->currip, mdat, 1);
+	mirman_update(mdat->currip, mdat->af, mdat, 1);
 	return NULL;
     }
 
@@ -488,7 +621,7 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
     for(j = 0; j < 512; j++) {
 	if(!ch || (ch && !*ch) || (ch && !isprint(ch[j]))) {
 	    logg("%cremote_cvdhead: Malformed CVD header (bad chars)\n", logerr ? '!' : '^');
-	    mirman_update(mdat->currip, mdat, 1);
+	    mirman_update(mdat->currip, mdat->af, mdat, 1);
 	    return NULL;
 	}
 	head[j] = ch[j];
@@ -496,23 +629,23 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
 
     if(!(cvd = cl_cvdparse(head))) {
 	logg("%cremote_cvdhead: Malformed CVD header (can't parse)\n", logerr ? '!' : '^');
-	mirman_update(mdat->currip, mdat, 1);
+	mirman_update(mdat->currip, mdat->af, mdat, 1);
     } else {
 	logg("OK\n");
-	mirman_update(mdat->currip, mdat, 0);
+	mirman_update(mdat->currip, mdat->af, mdat, 0);
     }
 
     return cvd;
 }
 
-static int getfile(const char *srcfile, const char *destfile, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr)
+static int getfile(const char *srcfile, const char *destfile, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr, unsigned int can_whitelist)
 {
-	char cmd[512], buffer[FILEBUFF], *ch;
+	char cmd[512], uastr[128], buffer[FILEBUFF], *ch;
 	int bread, fd, totalsize = 0,  rot = 0, totaldownloaded = 0,
 	    percentage = 0, sd;
 	unsigned int i;
-	char *remotename = NULL, *authorization = NULL, *headerline, ipaddr[16];
-	const char *rotation = "|/-\\", *agent;
+	char *remotename = NULL, *authorization = NULL, *headerline, ipaddr[46];
+	const char *rotation = "|/-\\";
 #ifdef FILTER_RULES
 	pid_t pid = -1;
 #endif
@@ -528,19 +661,18 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
 
 	if(user) {
 	    authorization = proxyauth(user, pass);
-	    if(!authorization)
+	    if(!authorization) {
+		free(remotename);
 		return 75; /* FIXME */
+	    }
 	}
     }
 
     if(uas)
-	agent = uas;
+	strncpy(uastr, uas, sizeof(uastr));
     else
-#ifdef CL_EXPERIMENTAL
-	agent = PACKAGE"/"VERSION"-exp";
-#else
-	agent = PACKAGE"/"VERSION;
-#endif
+	snprintf(uastr, sizeof(uastr), PACKAGE"/%s (OS: "TARGET_OS_TYPE", ARCH: "TARGET_ARCH_TYPE", CPU: "TARGET_CPU_TYPE")", get_version());
+    uastr[sizeof(uastr) - 1] = 0;
 
     snprintf(cmd, sizeof(cmd),
 	"GET %s/%s HTTP/1.0\r\n"
@@ -550,14 +682,19 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
 	"Cache-Control: no-cache\r\n"
 #endif
 	"Connection: close\r\n"
-	"\r\n", (remotename != NULL) ? remotename : "", srcfile, hostname, (authorization != NULL) ? authorization : "", agent);
+	"\r\n", (remotename != NULL) ? remotename : "", srcfile, hostname, (authorization != NULL) ? authorization : "", uastr);
+
+    if(remotename)
+	free(remotename);
+
+    if(authorization)
+	free(authorization);
 
     memset(ipaddr, 0, sizeof(ipaddr));
-
     if(ip[0]) /* use ip to connect */
-	sd = wwwconnect(ip, proxy, port, ipaddr, localip, ctimeout, mdat, logerr);
+	sd = wwwconnect(ip, proxy, port, ipaddr, localip, ctimeout, mdat, logerr, can_whitelist);
     else
-	sd = wwwconnect(hostname, proxy, port, ipaddr, localip, ctimeout, mdat, logerr);
+	sd = wwwconnect(hostname, proxy, port, ipaddr, localip, ctimeout, mdat, logerr, can_whitelist);
 
     if(sd < 0) {
 	return 52;
@@ -570,14 +707,9 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
 
     if(send(sd, cmd, strlen(cmd), 0) < 0) {
 	logg("%cgetfile: Can't write to socket\n", logerr ? '!' : '^');
+	closesocket(sd);
 	return 52;
     }
-
-    if(remotename)
-	free(remotename);
-
-    if(authorization)
-	free(authorization);
 
     /* read http headers */
     ch = buffer;
@@ -590,7 +722,8 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
 	if((i >= sizeof(buffer) - 1) || recv(sd, buffer + i, 1, 0) == -1) {
 #endif
 	    logg("%cgetfile: Error while reading database from %s (IP: %s)\n", logerr ? '!' : '^', hostname, ipaddr);
-	    mirman_update(mdat->currip, mdat, 1);
+	    mirman_update(mdat->currip, mdat->af, mdat, 1);
+	    closesocket(sd);
 	    return 52;
 	}
 
@@ -615,7 +748,7 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
     if(!strstr(buffer, "HTTP/1.1 200") && !strstr(buffer, "HTTP/1.0 200") &&
        !strstr(buffer, "HTTP/1.1 206") && !strstr(buffer, "HTTP/1.0 206")) {
 	logg("%cgetfile: Unknown response from remote server (IP: %s)\n", logerr ? '!' : '^', ipaddr);
-	mirman_update(mdat->currip, mdat, 1);
+	mirman_update(mdat->currip, mdat->af, mdat, 1);
 	closesocket(sd);
 	return 58;
     }
@@ -665,8 +798,11 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
     if((fd = open(destfile, O_WRONLY|O_CREAT|O_EXCL|O_BINARY, 0644)) == -1) {
 	    char currdir[512];
 
-	getcwd(currdir, sizeof(currdir));
-	logg("!getfile: Can't create new file %s in %s\n", destfile, currdir);
+	if(getcwd(currdir, sizeof(currdir)))
+	    logg("!getfile: Can't create new file %s in %s\n", destfile, currdir);
+	else
+	    logg("!getfile: Can't create new file %s in the current directory\n", destfile);
+
 	logg("Hint: The database directory must be writable for UID %d or GID %d\n", getuid(), getgid());
 	closesocket(sd);
 	return 57;
@@ -727,18 +863,18 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
     else
         logg("Downloading %s [*]\n", srcfile);
 
-    mirman_update(mdat->currip, mdat, 0);
+    mirman_update(mdat->currip, mdat->af, mdat, 0);
     return 0;
 }
 
-static int getcvd(const char *cvdfile, const char *newfile, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int nodb, unsigned int newver, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr)
+static int getcvd(const char *cvdfile, const char *newfile, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int nodb, unsigned int newver, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr, unsigned int can_whitelist)
 {
 	struct cl_cvd *cvd;
 	int ret;
 
 
     logg("*Retrieving http://%s/%s\n", hostname, cvdfile);
-    if((ret = getfile(cvdfile, newfile, hostname, ip, localip, proxy, port, user, pass, uas, ctimeout, rtimeout, mdat, logerr))) {
+    if((ret = getfile(cvdfile, newfile, hostname, ip, localip, proxy, port, user, pass, uas, ctimeout, rtimeout, mdat, logerr, can_whitelist))) {
         logg("%cCan't download %s from %s\n", logerr ? '!' : '^', cvdfile, hostname);
         unlink(newfile);
         return ret;
@@ -802,7 +938,7 @@ static int chdir_tmp(const char *dbname, const char *tmpdir)
     return 0;
 }
 
-static int getpatch(const char *dbname, const char *tmpdir, int version, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr)
+static int getpatch(const char *dbname, const char *tmpdir, int version, const char *hostname, char *ip, const char *localip, const char *proxy, int port, const char *user, const char *pass, const char *uas, int ctimeout, int rtimeout, struct mirdat *mdat, int logerr, unsigned int can_whitelist)
 {
 	char *tempname, patch[32], olddir[512];
 	int ret, fd;
@@ -820,11 +956,11 @@ static int getpatch(const char *dbname, const char *tmpdir, int version, const c
     snprintf(patch, sizeof(patch), "%s-%d.cdiff", dbname, version);
 
     logg("*Retrieving http://%s/%s\n", hostname, patch);
-    if((ret = getfile(patch, tempname, hostname, ip, localip, proxy, port, user, pass, uas, ctimeout, rtimeout, mdat, logerr))) {
+    if((ret = getfile(patch, tempname, hostname, ip, localip, proxy, port, user, pass, uas, ctimeout, rtimeout, mdat, logerr, can_whitelist))) {
         logg("%cgetpatch: Can't download %s from %s\n", logerr ? '!' : '^', patch, hostname);
         unlink(tempname);
         free(tempname);
-	chdir(olddir);
+	CHDIR_ERR(olddir);
         return ret;
     }
 
@@ -832,7 +968,7 @@ static int getpatch(const char *dbname, const char *tmpdir, int version, const c
 	logg("!getpatch: Can't open %s for reading\n", tempname);
         unlink(tempname);
         free(tempname);
-	chdir(olddir);
+	CHDIR_ERR(olddir);
 	return 55;
     }
 
@@ -841,14 +977,17 @@ static int getpatch(const char *dbname, const char *tmpdir, int version, const c
 	close(fd);
         unlink(tempname);
         free(tempname);
-	chdir(olddir);
+	CHDIR_ERR(olddir);
 	return 70; /* FIXME */
     }
 
     close(fd);
     unlink(tempname);
     free(tempname);
-    chdir(olddir);
+    if(chdir(olddir) == -1) {
+	logg("!getpatch: Can't chdir to %s\n", olddir);
+	return 50; /* FIXME */
+    }
     return 0;
 }
 
@@ -877,13 +1016,16 @@ static struct cl_cvd *currentdb(const char *dbname, char *localname)
 static int buildcld(const char *tmpdir, const char *dbname, const char *newfile, unsigned int compr)
 {
 	DIR *dir;
-	char cwd[512], info[32], buff[512], *pt;
+	char cwd[512], info[32], buff[513], *pt;
 	struct dirent *dent;
 	int fd, err = 0;
 	gzFile *gzs = NULL;
 
+    if(!getcwd(cwd, sizeof(cwd))) {
+	logg("!buildcld: Can't get path of current working directory\n");
+	return -1;
+    }
 
-    getcwd(cwd, sizeof(cwd));
     if(chdir(tmpdir) == -1) {
 	logg("!buildcld: Can't access directory %s\n", tmpdir);
 	return -1;
@@ -892,33 +1034,34 @@ static int buildcld(const char *tmpdir, const char *dbname, const char *newfile,
     snprintf(info, sizeof(info), "%s.info", dbname);
     if((fd = open(info, O_RDONLY|O_BINARY)) == -1) {
 	logg("!buildcld: Can't open %s\n", info);
-	chdir(cwd);
+	CHDIR_ERR(cwd);
 	return -1;
     }
 
     if(read(fd, buff, 512) == -1) {
 	logg("!buildcld: Can't read %s\n", info);
-	chdir(cwd);
+	CHDIR_ERR(cwd);
 	close(fd);
 	return -1;
     }
+    buff[512] = 0;
     close(fd);
 
     if(!(pt = strchr(buff, '\n'))) {
 	logg("!buildcld: Bad format of %s\n", info);
-	chdir(cwd);
+	CHDIR_ERR(cwd);
 	return -1;
     }
     memset(pt, ' ', 512 + buff - pt);
 
     if((fd = open(newfile, O_WRONLY|O_CREAT|O_EXCL|O_BINARY, 0644)) == -1) {
 	logg("!buildcld: Can't open %s for writing\n", newfile);
-	chdir(cwd);
+	CHDIR_ERR(cwd);
 	return -1;
     }
     if(write(fd, buff, 512) != 512) {
 	logg("!buildcld: Can't write to %s\n", newfile);
-	chdir(cwd);
+	CHDIR_ERR(cwd);
 	unlink(newfile);
 	close(fd);
 	return -1;
@@ -926,7 +1069,7 @@ static int buildcld(const char *tmpdir, const char *dbname, const char *newfile,
 
     if((dir = opendir(".")) == NULL) {
 	logg("!buildcld: Can't open directory %s\n", tmpdir);
-	chdir(cwd);
+	CHDIR_ERR(cwd);
 	unlink(newfile);
 	close(fd);
 	return -1;
@@ -936,7 +1079,7 @@ static int buildcld(const char *tmpdir, const char *dbname, const char *newfile,
 	close(fd);
 	if(!(gzs = gzopen(newfile, "ab"))) {
 	    logg("!buildcld: gzopen() failed for %s\n", newfile);
-	    chdir(cwd);
+	    CHDIR_ERR(cwd);
 	    unlink(newfile);
 	    closedir(dir);
 	    return -1;
@@ -961,7 +1104,7 @@ static int buildcld(const char *tmpdir, const char *dbname, const char *newfile,
     }
 
     if(err) {
-	chdir(cwd);
+	CHDIR_ERR(cwd);
 	if(gzs)
 	    gzclose(gzs);
 	else
@@ -971,7 +1114,7 @@ static int buildcld(const char *tmpdir, const char *dbname, const char *newfile,
     }
 
     while((dent = readdir(dir))) {
-#ifndef C_INTERIX
+#if !defined(C_INTERIX) && !defined(C_WINDOWS)
 	if(dent->d_ino)
 #endif
 	{
@@ -980,7 +1123,7 @@ static int buildcld(const char *tmpdir, const char *dbname, const char *newfile,
 
 	    if(tar_addfile(fd, gzs, dent->d_name) == -1) {
 		logg("!buildcld: Can't add %s to .cld file\n", dent->d_name);
-		chdir(cwd);
+		CHDIR_ERR(cwd);
 		if(gzs)
 		    gzclose(gzs);
 		else
@@ -1023,7 +1166,8 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
 	int ret, ims = -1;
 	char *pt, cvdfile[32], localname[32], *tmpdir = NULL, *newfile, newdb[32], cwd[512];
 	const char *proxy = NULL, *user = NULL, *pass = NULL, *uas = NULL;
-	unsigned int flevel = cl_retflevel(), maxattempts;
+	unsigned int flevel = cl_retflevel(), remote_flevel = 0, maxattempts;
+	unsigned int can_whitelist = 0;
 	int ctimeout, rtimeout;
 
 
@@ -1061,6 +1205,15 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
 	}
     }
 
+    if(dnsreply) {
+	if((pt = cli_strtok(dnsreply, 5, ":"))) {
+	    remote_flevel = atoi(pt);
+	    free(pt);
+	    if(remote_flevel && (remote_flevel - flevel < 4))
+		can_whitelist = 1;
+	}
+    }
+
     /* Initialize proxy settings */
     if((cpt = cfgopt(copt, "HTTPProxyServer"))->enabled) {
 	proxy = cpt->strarg;
@@ -1093,7 +1246,7 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
 
     if(!nodb && !newver) {
 
-	remote = remote_cvdhead(cvdfile, hostname, ip, localip, proxy, port, user, pass, uas, &ims, ctimeout, rtimeout, mdat, logerr);
+	remote = remote_cvdhead(cvdfile, hostname, ip, localip, proxy, port, user, pass, uas, &ims, ctimeout, rtimeout, mdat, logerr, can_whitelist);
 
 	if(!nodb && !ims) {
 	    logg("%s is up to date (version: %d, sigs: %d, f-level: %d, builder: %s)\n", localname, current->version, current->sigs, current->fl, current->builder);
@@ -1154,11 +1307,14 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
     if(!cfgopt(copt, "ScriptedUpdates")->enabled)
 	nodb = 1;
 
-    getcwd(cwd, sizeof(cwd));
+    if(!getcwd(cwd, sizeof(cwd))) {
+	logg("!updatedb: Can't get path of current working directory\n");
+	return 50; /* FIXME */
+    }
     newfile = cli_gentemp(cwd);
 
     if(nodb) {
-	ret = getcvd(cvdfile, newfile, hostname, ip, localip, proxy, port, user, pass, uas, nodb, newver, ctimeout, rtimeout, mdat, logerr);
+	ret = getcvd(cvdfile, newfile, hostname, ip, localip, proxy, port, user, pass, uas, nodb, newver, ctimeout, rtimeout, mdat, logerr, can_whitelist);
 	if(ret) {
 	    memset(ip, 0, 16);
 	    free(newfile);
@@ -1176,7 +1332,7 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
 		    int llogerr = logerr;
 		if(logerr)
 		    llogerr = (j == maxattempts - 1);
-		ret = getpatch(dbname, tmpdir, i, hostname, ip, localip, proxy, port, user, pass, uas, ctimeout, rtimeout, mdat, llogerr);
+		ret = getpatch(dbname, tmpdir, i, hostname, ip, localip, proxy, port, user, pass, uas, ctimeout, rtimeout, mdat, llogerr, can_whitelist);
 		if(ret == 52 || ret == 58) {
 		    memset(ip, 0, 16);
 		    continue;
@@ -1192,7 +1348,7 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
 	    cli_rmdirs(tmpdir);
 	    free(tmpdir);
 	    logg("^Incremental update failed, trying to download %s\n", cvdfile);
-	    ret = getcvd(cvdfile, newfile, hostname, ip, localip, proxy, port, user, pass, uas, 1, newver, ctimeout, rtimeout, mdat, logerr);
+	    ret = getcvd(cvdfile, newfile, hostname, ip, localip, proxy, port, user, pass, uas, 1, newver, ctimeout, rtimeout, mdat, logerr, can_whitelist);
 	    if(ret) {
 		free(newfile);
 		return ret;
@@ -1226,8 +1382,17 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
 	return 53;
     }
 
+#ifdef C_WINDOWS
+    if(!access(newdb, R_OK) && unlink(newdb)) {
+	logg("!Can't unlink %s. Please fix the problem manually and try again.\n", newdb);
+	unlink(newfile);
+	free(newfile);
+	return 53;
+    }
+#endif
+
     if(rename(newfile, newdb) == -1) {
-	logg("!Can't rename %s to %s\n", newfile, newdb);
+	logg("!Can't rename %s to %s: %s\n", newfile, newdb, strerror(errno));
 	unlink(newfile);
 	free(newfile);
 	return 57;
@@ -1237,9 +1402,10 @@ static int updatedb(const char *dbname, const char *hostname, char *ip, int *sig
     logg("%s updated (version: %d, sigs: %d, f-level: %d, builder: %s)\n", newdb, current->version, current->sigs, current->fl, current->builder);
 
     if(flevel < current->fl) {
-	logg("^Your ClamAV installation is OUTDATED!\n");
-	logg("^Current functionality level = %d, recommended = %d\n", flevel, current->fl);
-	logg("DON'T PANIC! Read http://www.clamav.net/support/faq\n");
+	logg("Your ClamAV installation is out of date.\n");
+	logg("Current functionality level = %d, recommended = %d\n", flevel, current->fl);
+	logg("A firmware upgrade might resolve this issue.\n");
+	logg("Also read http://sgkb.securecomputing.com/article.asp?article=11282&p=2\n");
     }
 
     *signo += current->sigs;
@@ -1252,7 +1418,7 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 	time_t currtime;
 	int ret, updated = 0, outdated = 0, signo = 0;
 	unsigned int ttl;
-	char ipaddr[16], *dnsreply = NULL, *pt, *localip = NULL, *newver = NULL;
+	char ipaddr[46], *dnsreply = NULL, *pt, *localip = NULL, *newver = NULL;
 	const char *arg = NULL;
 	const struct cfgstruct *cpt;
 	struct mirdat mdat;
@@ -1262,10 +1428,8 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 
     time(&currtime);
     logg("ClamAV update process started at %s", ctime(&currtime));
-
-#ifndef HAVE_LIBGMP
-    logg("SECURITY WARNING: NO SUPPORT FOR DIGITAL SIGNATURES\n");
-    logg("See the FAQ at http://www.clamav.net/support/faq for an explanation.\n");
+#ifdef SUPPORT_IPv6
+    logg("*Using IPv6 aware code\n");
 #endif
 
 #ifdef HAVE_RESOLV_H
@@ -1309,21 +1473,17 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 
 		    logg("*Software version from DNS: %s\n", newver);
 
-		    if(vwarning && !strstr(cl_retver(), "devel") && !strstr(cl_retver(), "rc")) {
-			if(strcmp(cl_retver(), newver)) {
-			    logg("^Your ClamAV installation is OUTDATED!\n");
-			    logg("^Local version: %s Recommended version: %s\n", cl_retver(), newver);
-			    logg("DON'T PANIC! Read http://www.clamav.net/support/faq\n");
+		    if(vwarning && !strstr(get_version(), "devel") && !strstr(get_version(), "rc")) {
+			if(strcmp(get_version(), newver)) {
+			    logg("Your ClamAV installation is out of date.\n");
+			    logg("^Local version: %s Recommended version: %s\n", get_version(), newver);
+			    logg("A firmware upgrade might resolve this issue..\n");
+			    logg("Also read http://sgkb.securecomputing.com/article.asp?article=11282&p=2\n");
 			    outdated = 1;
 			}
 		    }
 		}
 
-	    } else {
-		if(dnsreply) {
-		    free(dnsreply);
-		    dnsreply = NULL;
-		}
 	    }
 	}
 
@@ -1402,12 +1562,8 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 	else if((cpt = cfgopt(copt, "OnUpdateExecute"))->enabled)
 	    arg = cpt->strarg;
 
-	if(arg) {
-	    if(opt_check(opt, "daemon"))
-		execute("OnUpdateExecute", arg);
-            else if(system(arg) == -1)
-		logg("!system(%s) failed\n", arg);
-	}
+	if(arg)
+	    execute("OnUpdateExecute", arg, opt);
     }
 
     if(outdated) {
@@ -1451,12 +1607,9 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 		free(buffer);
 	    }
 
-	    if(newver) {
-		if(opt_check(opt, "daemon"))
-		    execute("OnOutdatedExecute", cmd);
-		else if(system(cmd) == -1)
-		logg("!system(%s) failed\n", cmd);
-	    }
+	    if(newver)
+		execute("OnOutdatedExecute", cmd, opt);
+
 	    free(cmd);
 	}
     }
@@ -1466,4 +1619,3 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 
     return updated ? 0 : 1;
 }
-

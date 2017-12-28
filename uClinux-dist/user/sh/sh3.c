@@ -337,7 +337,7 @@ int *pforked;
 	}
 	t->words = wp;
 	f = act;
-	if (shcom == NULL && (f & FEXEC) == 0) {
+	if ((shcom == NULL && (f & FEXEC) == 0) || ((pin == NULL && pout != NULL) && shcom != NULL && shcom != doexec)) {
 		forkp = 1;
 		hpin = pin;
 		hpout = pout;
@@ -391,12 +391,18 @@ int *pforked;
 		while ((cp = *owp++) != NULL && assign(cp, COPYV))
 			if (shcom == NULL)
 				export(lookup(cp));
-#ifdef COMPIPE
 	if ((pin != NULL || pout != NULL) && shcom != NULL && shcom != doexec) {
-		err("piping to/from shell builtins not yet done");
-		RETURN(-1);
+
+		if (pin == NULL ){ /* to pipe */
+			dup2(pout[1], 1);
+			EXIT(setstatus((*shcom)(t)));
+		}
+		else { /* from pipe*/
+			err("piping from shell builtins not yet done");
+			RETURN(-1);
+		}
 	}
-#endif
+
 	if (pin != NULL) {
 		dup2(pin[0], 0);
 		closepipe(pin);
@@ -956,6 +962,7 @@ struct op *t;
 				break;
 		}
 		*cp = 0;
+		nb = cp - e.linep;
 		if (nb <= 0)
 			break;
 		setval(lookup(*wp), e.linep);

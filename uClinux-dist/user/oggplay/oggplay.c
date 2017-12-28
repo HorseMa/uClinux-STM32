@@ -49,10 +49,17 @@
 #include <time.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <math.h>
 
 #ifdef CONFIG_USER_SETKEY_SETKEY
 #include <key/key.h>
 #endif
+
+#include "base64.h"
 
 /****************************************************************************/
 
@@ -66,7 +73,18 @@ static int	onlytags;
 static int	crypto_keylen = 0;
 static char	*crypto_key = NULL;
 static int	buffer_size = 8192;
+static int      advertisement;
+static char     *npip         = NULL;
+static char     *npproxy      = NULL;
+static time_t   npwait;		// select/socket timeout in msec
 
+#define MAX_BUF      4096
+#define MAX_HOSTNAME  256
+#define MAX_DISPLAY   60
+
+#define EREAD_TIMEOUT -2
+#define EREAD_ERROR   -1
+#define EREAD_EOF      0
 
 /****************************************************************************/
 
@@ -74,6 +92,7 @@ static int	buffer_size = 8192;
  *	OV data stream support.
  */
 static const char	 *trk_filename;
+static FILE		 *trk_fd;
 static OggVorbis_File	  vf;
 static int		  dspfd, dsphw;
 
@@ -90,6 +109,300 @@ static void usr1_handler(int ignore)
 }
 
 /****************************************************************************/
+/*
+ *  Encode a string for incorporation into a URL.  See this page
+ *  http://www.blooberry.com/indexdot/html/topics/urlencoding.htm
+ *
+ *  Reserved and Unsafe characters are combined into a single string
+ *  called unsafe.
+*/
+
+char *url_encode( char *str )
+{
+  int size = 0;
+  char *ch, *bk;
+  char *p, *buf;
+  static char unsafe[]     = "$&+,/:;=?@ \"'<>#%{}|\\^~[]`";
+  static char char2hex[16] = "0123456789ABCDEF";
+
+  bk = ch  = str;
+  if( str == NULL ) return(NULL);
+
+  do{
+    if( strchr( unsafe, *ch ))
+      size += 2;
+    ch++; size ++;
+  } while( *ch );
+
+  buf = (char*)malloc( size +1 );
+  p   = buf;
+  ch  = bk;
+  do{
+    if( strchr( unsafe, *ch )){
+      const char c = *ch;
+      *p++ = '%';
+      *p++ = char2hex[(c >> 4) & 0xf];
+      *p++ = char2hex[c & 0xf];
+    }
+    else{
+      *p++ = *ch;
+    }
+    ch ++;
+  } while( *ch );
+
+  *p = '\0';
+  return( buf );
+}
+
+/****************************************************************************
+ *	Implement the now playing HTTP GET feature
+ */
+
+/* time_t is specified in milliseconds, here is a chart, just to be clear
+ * on the orders of magnitude:
+ *
+ * timeout of 2500 milliseconds will set the timeval structure parameters
+ * to 
+ *   tv.tv_sec  = 2;          seconds
+ *   tv.tv_usec = 500,000;    MICROseconds where 1 million == 1 second
+ */
+static size_t np_read(int fd, char buf[], size_t len, time_t timeout)
+{
+  int n;
+  fd_set rset;
+  struct timeval tv;
+  FD_ZERO(&rset);
+  FD_SET(fd, &rset);
+  tv.tv_sec = timeout / 1000;
+  tv.tv_usec = (timeout % 1000) * 1000;
+  if (select(fd+1, &rset, NULL, NULL, &tv) > 0)
+    n = recv(fd, buf, len, MSG_DONTWAIT);
+  else
+    n = EREAD_TIMEOUT;
+  return n;
+}
+
+
+
+/***
+ * readln, with a timeout.
+ ***/
+static size_t np_readln(int fd, char buf[], size_t len, time_t timeout)
+{
+  size_t i = 0;
+  size_t n = 0;
+  char a[4];
+  while (i < (len-1)) {
+    n = np_read(fd, a, 1, timeout);
+    if (n == 1) {
+      buf[i++] = a[0];
+      if (a[0] == '\n')
+	break;
+    } else if ((n == EREAD_TIMEOUT) || (n == EREAD_ERROR) || (n == EREAD_EOF)) {
+      buf[i] = '\0';
+      return n;
+    }
+  }
+  buf[i] = '\0';
+  return i;
+}
+
+
+static int now_playing(char **user_comments)
+{
+  char *p;
+  char *title = NULL;
+  char *artist = NULL;
+  char *organization = NULL;
+  const char *song_id = NULL;
+  char hostname[MAX_HOSTNAME];
+  char remoteip[MAX_HOSTNAME];
+  char *proxy_ip = NULL;
+  int   proxy_port = 80;
+  char *proxy_username = NULL;
+  char *proxy_password = NULL;
+  char url[MAX_BUF];
+  char buf[MAX_BUF];
+  int  sock = 0;
+
+  struct hostent *host;
+  struct sockaddr_in sa;
+ 
+  while( user_comments && *user_comments ) {
+    p = *user_comments;
+    if (strncasecmp(p, "title=", sizeof("title=")-1) == 0) {
+      p += sizeof("title=")-1;
+      title = strdup(p);
+    } else if (strncasecmp(p, "artist=", sizeof("artist=")-1) == 0) {
+      p += sizeof("artist=")-1;
+      artist = strdup(p);
+    } else if (strncasecmp(p, "organization=", sizeof("organization=")-1) == 0) {
+      p += sizeof("organization=")-1;
+      organization = strdup(p);
+    }
+    user_comments++;
+  }
+  
+  song_id = strrchr(trk_filename, '/');
+  if(song_id == NULL)
+    song_id = trk_filename;
+  else
+    song_id++;
+  p = strchr(song_id, '.');
+  if( p != NULL )
+    *p = (int)NULL;
+
+  if( gethostname(hostname,sizeof(hostname)) != 0 ) {
+    fprintf(stderr, "now_playing: Unable to get mbox hostname, %d\n", errno);
+    return(0);
+  }
+     
+  /* build the URL */
+
+  title = title ? url_encode(title) : "";
+  artist = artist ? url_encode(artist) : "";
+  organization = organization ? url_encode(organization) : "";
+
+  memset(url,0,sizeof(url));
+
+  /* build the HTTP buffer */
+
+  memset(buf,0,sizeof(buf));
+
+  if( npproxy ) {
+    char *p;
+    int j;
+    p = strtok(npproxy, ":"); /* proxy_ip:port:username:password */
+    proxy_ip = strdup(p);
+    
+    if( (p = strtok(NULL, ":")) )
+      proxy_port = atoi(p);
+
+    if( (p = strtok(NULL, ":")) )
+      proxy_username = strdup(p);
+
+    if( (p = strtok(NULL, ":")) )
+      proxy_password = strdup(p);
+
+    j =  snprintf(buf, MAX_BUF, "GET http://%s/tsplay?mbox=%s&channel=%d&song_id=%s&title=%s&artist=%s&organization=%s&commercial=%d HTTP/1.0\r\nUser-Agent: trusonic-nowplaying 1.0\r\nHost: %s\r\n",
+		  npip, hostname, lcd_line, song_id, title, artist, organization, advertisement, npip);
+    if( j >= MAX_BUF ) {
+      fprintf(stderr, "now_playing: url construct exceeds max buffer size\n");
+      return(0);
+    }
+
+    if( proxy_username && proxy_password ) {
+      char plaintext[MAX_BUF];
+      char b64encoded[MAX_BUF];
+      memset(plaintext,0,sizeof(plaintext));
+      memset(b64encoded,0,sizeof(b64encoded));
+      if( snprintf(plaintext, MAX_BUF, "%s:%s", proxy_username, proxy_password) >= MAX_BUF ) {
+	fprintf(stderr, "now_playing: plaintext auth exceed max buffer size, %s\n", plaintext);
+	return(0);
+      }
+
+      base64_encode(b64encoded, plaintext, strlen(plaintext));
+      strcat(buf, "Proxy-Authorization: Basic ");
+      strcat(buf, b64encoded);
+      strcat(buf, "\r\n");
+    }
+    strcat(buf, "\r\n");	/* The final CRLF for the HTTP request */
+  } else {
+    int j;
+    /* No proxy involved, we're connecting directly to the server */
+    j =  snprintf(buf, MAX_BUF, "GET /tsplay?mbox=%s&channel=%d&song_id=%s&title=%s&artist=%s&organization=%s&commercial=%d HTTP/1.0\r\nUser-Agent: trusonic-nowplaying 1.0\r\n\r\n",
+		  hostname, lcd_line, song_id, title, artist, organization, advertisement);
+    if( j >= MAX_BUF ) {
+      fprintf(stderr, "now_playing: url construct exceeds max buffer size\n");
+      return(0);
+    }
+  }
+
+  /* We're ready to make the HTTP request */
+
+  strncpy(remoteip, proxy_ip ? proxy_ip : npip, sizeof(remoteip) ); /* Choose IP of proxy if present */
+
+  if( ((host = gethostbyname(remoteip)) == NULL) ) {
+    fprintf(stderr, "now_playing: Unable to resolve now playing ip: %s, %d\n", remoteip, errno);
+  } else if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    fprintf(stderr, "now_playing: Unable to open a socket, %d\n", errno);
+  } else {
+    long arg;
+    int res, status;
+    // set the socket non-blocking - just temporarily
+    arg = fcntl(sock, F_GETFL, NULL);
+    arg |= O_NONBLOCK;
+    fcntl(sock, F_SETFL, arg);
+
+    // Try to connect with a timeout set in npwait
+    status = 1;
+    sa.sin_family = AF_INET;
+    sa.sin_port   = htons(proxy_port);
+    memcpy(&(sa.sin_addr), host->h_addr, host->h_length);
+    res = connect(sock, (struct sockaddr *)&sa, sizeof(sa));
+    if( res < 0 ) {
+      if( errno == EINPROGRESS ) {
+	struct timeval tv;
+	fd_set myset;
+
+	tv.tv_sec = npwait / 1000;
+	tv.tv_usec = (npwait % 1000) * 1000;
+	FD_ZERO(&myset);
+	FD_SET(sock, &myset);
+	if( select(sock+1, NULL, &myset, NULL, &tv) > 0 ) {
+	  int valopt;
+	  socklen_t lon;
+	  lon = sizeof(int);
+	  getsockopt(sock, SOL_SOCKET, SO_ERROR, (void*)(&valopt), &lon);
+	  if( valopt ) {
+	    fprintf(stderr, "now_playing: can't connect() %d - %s\n", valopt, strerror(valopt));
+	    status = 0;
+	  }
+	} else {
+	  fprintf(stderr, "now_playing: connect() timeout or error %d - %s, waited %d msec\n", errno, strerror(errno), (int)npwait);
+	  status = 0;
+	}
+      } else {
+	fprintf(stderr, "now_playing: connect() error %d - %s\n", errno, strerror(errno));
+	status = 0;
+      }
+    }
+    if( status ) {
+      int n;
+
+      // Set to blocking mode again
+      arg = fcntl(sock, F_GETFL, NULL); 
+      arg &= (~O_NONBLOCK); 
+      fcntl(sock, F_SETFL, arg); 
+
+      // Send the GET request
+      n = send(sock, buf, strlen(buf), 0);
+      if (n < strlen(buf)) {
+	fprintf(stderr, "now_playing: Unable to write to %s, %d\n", remoteip, errno);
+      } else {
+	char respbuf[MAX_BUF];
+	memset(respbuf,0,sizeof(respbuf));
+	while ((n = np_readln(sock, respbuf, sizeof(respbuf), npwait)) != EREAD_EOF) {
+	  if (n == EREAD_TIMEOUT) {
+	    fprintf(stderr, "now_playing: Read HTTP response timed out, %d\n", (int)npwait);
+	    break;
+	  } else if (n == 2)
+	    break;		/* a blank line */
+	  else if (strncmp(respbuf, "HTTP/1.", 7) == 0) {
+	    int response;
+	    response = atoi(respbuf+9);
+	    if( response != 200 )
+	      fprintf(stderr, "now_playing: unexpected HTTP response %d, remote_ip %s, %s\n", response, remoteip, buf);
+	  }
+	}
+      }
+      close(sock);
+    }
+  }
+  return(1);
+}
+
+/****************************************************************************/
 
 /*
  *	Print out the name on a display device if present.
@@ -97,12 +410,14 @@ static void usr1_handler(int ignore)
 
 static void lcdtitle(char **user_comments)
 {
-	const char	*name;
+	const char *title = NULL;
+	const char *artist = NULL;
+	char displaybuf[MAX_DISPLAY];
 	int	ivp;
 	struct  iovec iv[4];
 	char	prebuf[10];
 	char	*p;
-	int	namelen;
+	int	j;
 
 	/* Install a signal handler to allow updates to be forced */
 	signal(SIGUSR1, usr1_handler);
@@ -110,24 +425,38 @@ static void lcdtitle(char **user_comments)
 	/* Determine the name to display.  We use the tag if it is
 	 * present and the basename of the file if not.
 	 */
-	if (user_comments != NULL && *user_comments != NULL) {
-		name = *user_comments;
-		if (strncasecmp(name, "title=", sizeof("title=")-1) == 0)
-			name += sizeof("title=")-1;
-		namelen = strlen(name);
-	} else {
-		name = strrchr(trk_filename, '/');
-		if (name == NULL)
-			name = trk_filename;
-		else
-			name++;
-		p = strchr(name, '.');
-		if (p == NULL)
-			namelen = strlen(name);
-		else
-			namelen = p - name;
+	while( user_comments && *user_comments ) {
+	  p = *user_comments;
+	  if (strncasecmp(p, "title=", sizeof("title=")-1) == 0) {
+	    p += sizeof("title=")-1;
+	    title = strdup(p);
+	  } else if (strncasecmp(p, "artist=", sizeof("artist=")-1) == 0) {
+	    p += sizeof("artist=")-1;
+	    artist = strdup(p);
+	  }
+	  user_comments++;
 	}
 
+	/* There is not title in the Ogg comments, so use the filename */
+
+	if( title == NULL ) {
+	  title = strrchr(trk_filename, '/');
+	  if (title == NULL)
+	    title = trk_filename;
+	  else
+	    title++;
+	  p = strchr(title, '.');
+	  if( p != NULL)
+	    *p = (int) NULL;
+	  j = snprintf(displaybuf, MAX_DISPLAY, "%s", title);
+	  if( j >= MAX_DISPLAY )
+	    displaybuf[MAX_DISPLAY] = '\0'; /* output truncated, make sure last char is null */
+	} else {
+	  j = snprintf(displaybuf, MAX_DISPLAY, "%s / %s", title, artist);
+	  if( j >= MAX_DISPLAY )
+	    displaybuf[MAX_BUF] = '\0'; /* output truncated, make sure last char is null */
+	}
+	    
 	if (lcd_line) {
 		/* Lock the file so we can access it... */
 		if (flock(lcdfd, LOCK_SH | LOCK_NB) == -1)
@@ -149,8 +478,8 @@ static void lcdtitle(char **user_comments)
 		iv[ivp].iov_len = strlen(prebuf) * sizeof(char);
 		iv[ivp++].iov_base = prebuf;
 		
-		iv[ivp].iov_len = namelen * sizeof(char);
-		iv[ivp++].iov_base = (void *)name;
+		iv[ivp].iov_len = strlen(displaybuf) * sizeof(char);
+		iv[ivp++].iov_base = (void *)displaybuf;
 		
 		//postbuf = '\n';
 		//iv[ivp].iov_len = sizeof(char);
@@ -244,11 +573,15 @@ static void usage(int rc)
 		"\t\t-P            print time to decode/play\n"
 		"\t\t-s <time>     sleep between playing tracks\n"
 		"\t\t-d <device>   audio device for playback\n"
-		"\t\t-D            configure audio device as per a DSP device\n"
+		"\t\t-D            don't configure audio device as per a DSP device\n"
 		"\t\t-l <line>     display title on LCD line (0,1,2) (0 = no title)\n"
 		"\t\t-t <line>     display time on LCD line (1,2)\n"
 		"\t\t-c <key>      decrypt using key\n"
 		"\t\t-0 <bytes>    emit <bytes> zero bytes after playing a track\n"
+	        "\t\t-m <ip>       enables Now Playing feature to IP address\n"
+	        "\t\t-a            commercial (advertisement) flag\n"
+	        "\t\t-p <ip:port:username:password>  use proxy for now playing feature\n"
+	        "\t\t-w <msec>     now playing HTTP GET timeout in milliseconds\n"
 		);
 	exit(rc);
 }
@@ -256,16 +589,7 @@ static void usage(int rc)
 /****************************************************************************/
 /* define custom OV decode call backs so that we can handle encrypted content.
  */
-#include <sys/stat.h>
-#include <sys/mman.h>
 
-static long filelen;
-static int fd;
-static char *fmem;
-static long fps;
-static int aggressive = 0;
-
-#if 0
 static int fread_wrap(unsigned char *ptr, size_t sz, size_t n, FILE *f) {
 	if (f == NULL)
 		return -1;
@@ -283,88 +607,17 @@ static int fread_wrap(unsigned char *ptr, size_t sz, size_t n, FILE *f) {
 	return r;
 }
 
-static int fseek_wrap(FILE *f, ogg_int64_t off, int whence) {
+static int fseek_wrap(FILE *f, ogg_int64_t off, int whence){
 	if (f == NULL)
 		return -1;
 	return fseek(f, (int)off, whence);
-}
-#endif
-static int fread_wrap(unsigned char *ptr, size_t sz, size_t n, FILE *f) {
-	int bytes = sz * n;
-
-	if (fps + bytes >= filelen) {
-		n = (filelen - fps) / sz;
-		bytes = sz * n;
-	}
-	if (n > 0) {
-		memcpy(ptr, fmem + fps, bytes);
-		if (crypto_keylen > 0) {
-			long pos = fps % crypto_keylen;
-			int i;
-
-			for (i=0; i<bytes; i++) {
-				ptr[i] ^= crypto_key[pos++];
-				if (pos >= crypto_keylen)
-					pos = 0;
-			}
-		}
-		fps += bytes;
-	}
-	return n;
-}
-
-static int fseek_wrap(FILE *f, ogg_int64_t off, int whence) {
-	switch(whence) {
-	case SEEK_SET:
-		fps = off;
-		if (fps == 0) {
-			aggressive = 1;
-			madvise(fmem, filelen, MADV_SEQUENTIAL);
-		}
-		break;
-	case SEEK_CUR:
-		fps += off;
-		break;
-	case SEEK_END:
-		fps = filelen + off;
-		break;
-	default:
-		errno = EINVAL;
-		return -1;
-	}
-	if (fps < 0)
-		fps = 0;
-	else if (fps > filelen)
-		fps = filelen;
-	return 0;
-}
-
-static long ftell_wrap(FILE *f) {
-	return fps;
-}
-static int fclose_wrap(FILE *f) {
-	munmap(fmem, filelen);
-	return close(fd);
-}
-
-static FILE *fopen_wrap(const char *fname, const char *mode) {
-	struct stat st;
-
-	fd = open(fname, O_RDONLY);
-	if (fd == -1)
-		return NULL;
-	fstat(fd, &st);
-	filelen = st.st_size;
-	fmem = mmap(NULL, filelen, PROT_READ, MAP_SHARED, fd, 0);
-	fps = 0;
-	return (FILE *) fmem;
 }
 
 static ov_callbacks ovcb = {
 	(size_t (*)(void *, size_t, size_t, void *))	&fread_wrap,
 	(int (*)(void *, ogg_int64_t, int))		&fseek_wrap,
-	(int (*)(void *))				&fclose_wrap,
-	(long (*)(void *))				&ftell_wrap
+	(int (*)(void *))				&fclose,
+	(long (*)(void *))				&ftell
 };
 
 /****************************************************************************/
@@ -376,26 +629,24 @@ static int play_one(const char *file) {
 	unsigned long	us;
 	struct timeval	tvstart, tvend;
 	char		**user_comments = NULL;
-	FILE		 *trk_fd;
 
 	trk_filename = file;
 
-	trk_fd = fopen_wrap(trk_filename, "r");
+	trk_fd = fopen(trk_filename, "r");
 
 	if (trk_fd == NULL) {
 		fprintf(stderr, "ERROR: Unable to open '%s', errno=%d\n",
 			trk_filename, errno);
 		return 1;
 	}
-	//setvbuf(trk_fd, NULL, _IOFBF, buffer_size);
-retry:	aggressive = 0;
-	if (ov_open_callbacks(trk_fd, &vf, NULL, 0, ovcb) < 0) {
+	setvbuf(trk_fd, NULL, _IOFBF, buffer_size);
+retry:	if (ov_open_callbacks(trk_fd, &vf, NULL, 0, ovcb) < 0) {
 		if (crypto_keylen > 0) {
 			crypto_keylen = 0;
-			fseek_wrap(trk_fd, 0L, SEEK_SET);
+			rewind(trk_fd);
 			goto retry;
 		}
-		fclose_wrap(trk_fd);
+		fclose(trk_fd);
 		fprintf(stderr, "ERROR: Unable to ov_open '%s', errno=%d\n",
 			trk_filename, errno);
 		return 1;
@@ -416,6 +667,15 @@ retry:	aggressive = 0;
 	if (lcd_line)
 		lcdtitle(user_comments);
 
+	if (npip) {
+	  pid_t np_pid;
+	  np_pid = fork();
+	  if( np_pid == 0) {
+	    exit(now_playing(user_comments));
+	  }
+	  /* Let init automatically clean up our child processes */
+	  signal(SIGCHLD, SIG_IGN);
+	}
 	gettimeofday(&tvstart, NULL);
 	sttime = time(NULL);
 
@@ -444,7 +704,7 @@ retry:	aggressive = 0;
 		us = ((tvend.tv_sec - tvstart.tv_sec) * 1000000) +
 		    (tvend.tv_usec - tvstart.tv_usec);
 		printf("Total time = %d.%06d seconds\n",
-			(us / 1000000), (us % 1000000));
+		       (int)(us / 1000000), (int)(us % 1000000));
 	}
 	return 0;
 }
@@ -492,8 +752,9 @@ int main(int argc, char *argv[])
 	dsphw = 0;
 	onlytags = 0;
 	zerobytes = 0;
+	advertisement = 0;
 
-	while ((c = getopt(argc, argv, "?himvqzt:RZPs:d:Dl:Vc:b:0:")) >= 0) {
+	while ((c = getopt(argc, argv, "?hivqzt:RZPs:d:Dl:Vc:b:0:m:ap:w:")) >= 0) {
 		switch (c) {
 		case 'b':
 			buffer_size = atoi(optarg);
@@ -554,6 +815,20 @@ int main(int argc, char *argv[])
 			if (zerobytes < 0)
 				zerobytes = 0;
 			break;
+		case 'm':
+		  npip = strdup(optarg);
+		  break;
+		case 'a':
+		  advertisement = 1;
+		  break;
+		case 'p':
+		  npproxy = strdup(optarg); /* proxy_ip:port:username:password */
+		  break;
+		case 'w':
+		  npwait = atoi(optarg);
+		  if( npwait < 250 || npwait> 10000 )
+		    npwait = 250; /* just a safety measure */
+		  break;
 		case 'h':
 		case '?':
 			usage(0);
@@ -581,7 +856,7 @@ int main(int argc, char *argv[])
 #endif
 
 	/* Make ourselves the top priority process! */
-	setpriority(PRIO_PROCESS, 0, -10);
+	setpriority(PRIO_PROCESS, 0, -20);
 	srandom(time(NULL) ^ getpid());
 
 	/* Open the audio playback device */
@@ -603,14 +878,12 @@ int main(int argc, char *argv[])
 nextall:
 	/* Shuffle tracks if slected */
 	if (shuffle) {
-		for (c = 0; (c < 10000); c++) {
-			i = (((unsigned int) random()) % (argc - startargnr)) +
-				startargnr;
-			j = (((unsigned int) random()) % (argc - startargnr)) +
-				startargnr;
-			argvtmp = argv[i];
-			argv[i] = argv[j];
-			argv[j] = argvtmp;
+		rand = 0;
+		for (i=startargnr; i<argc-1; i++) {
+			j = (((unsigned int) random()) % (argc - i)) + i;
+			argvtmp = argv[j];
+			argv[j] = argv[i];
+			argv[i] = argvtmp;
 		}
 	}
 

@@ -95,8 +95,8 @@ static char sccsid[] = "@(#)portmap.c 1.32 87/08/06 Copyr 1984 Sun Micro";
 #include <netinet/in.h>
 #endif
 
-extern char *strerror();
 #include <stdlib.h>
+#include <errno.h>
 
 #ifndef LOG_PERROR
 #define LOG_PERROR 0

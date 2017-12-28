@@ -131,10 +131,6 @@ int flat1_restorefs(int version, int dowrite)
 	unsigned char buf[BUF_SIZE];
 	char *confbuf;
 	mode_t mode;
-#ifndef HAS_RTC
-	char *confline, *confdata;
-	time_t t;
-#endif
 	int fdfile, rc;
 
 	if ((rc = flat1_checkfs()) != 0)
@@ -186,20 +182,7 @@ int flat1_restorefs(int version, int dowrite)
 					return ERROR_CODE();
 
 #ifndef HAS_RTC
-				confline = strtok(confbuf, "\n");
-				while (confline) {
-					confdata = strchr(confline, ' ');
-					if (confdata) {
-						*confdata = '\0';
-						confdata++;
-						if (!strcmp(confline, "time")) {
-							t = atol(confdata);
-							if (t > time(NULL))
-								stime(&t);
-						}
-					}
-					confline = strtok(NULL, "\n");
-				}
+				parseconfig(confbuf);
 #endif
 				free(confbuf);
 			}

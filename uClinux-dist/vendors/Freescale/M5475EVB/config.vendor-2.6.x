@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Mon Jul 28 18:28:09 2008
+# Mon Aug 11 18:39:07 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -12,12 +12,11 @@ CONFIG_DISTVERSION="4.0"
 #
 # Force build (normally built when required)
 #
+# CONFIG_LIB_BITVECTOR is not set
 # CONFIG_LIB_FLEX is not set
 # CONFIG_LIB_BFD is not set
 # CONFIG_LIB_LIBIBERTY is not set
 # CONFIG_LIB_POPT is not set
-# CONFIG_LIB_LIBAES is not set
-# CONFIG_LIB_LIBDES is not set
 # CONFIG_LIB_LIBSSL is not set
 # CONFIG_LIB_LIBGMP is not set
 CONFIG_LIB_LIBG=y
@@ -71,7 +70,6 @@ CONFIG_LIB_LIBG=y
 # CONFIG_USER_FIREWALL_TOOLS is not set
 # CONFIG_USER_AES_PERF is not set
 # CONFIG_USER_BR_BR is not set
-# CONFIG_USER_DESTEST_DESTEST is not set
 # CONFIG_USER_DESTEST_DESPERF is not set
 # CONFIG_USER_EMCTEST_EMCECHO is not set
 # CONFIG_USER_EMCTEST_EMCTEST is not set
@@ -106,6 +104,7 @@ CONFIG_LIB_LIBG=y
 # CONFIG_LANG_ENGLISH_TAMS is not set
 # CONFIG_LANG_ENGLISH_TELCOTECH is not set
 # CONFIG_LANG_ENGLISH_TELTRONICS is not set
+# CONFIG_LANG_MAROCTELECOM is not set
 # CONFIG_LANG_CHINESE is not set
 # CONFIG_LANG_JAPANESE is not set
 # CONFIG_LANG_DEBUG is not set
@@ -389,6 +388,7 @@ CONFIG_USER_PPPD_PPPD_PPPD=y
 # CONFIG_USER_ROUTED_ROUTED is not set
 # CONFIG_USER_RP_PPPOE_PPPOE is not set
 # CONFIG_USER_RSYNC_RSYNC is not set
+# CONFIG_USER_RSYSLOG_RSYSLOGD is not set
 # CONFIG_USER_RSYSLOGD_RSYSLOGD is not set
 # CONFIG_USER_SER_SER is not set
 # CONFIG_USER_SETHDLC_SETHDLC is not set
@@ -480,6 +480,8 @@ CONFIG_USER_CHAT_CHAT=y
 # CONFIG_USER_HD_HD is not set
 # CONFIG_USER_CAN_HORCH is not set
 # CONFIG_USER_JAMVM_JAMVM is not set
+# CONFIG_USER_KEXEC_KEXEC is not set
+# CONFIG_USER_SGUTOOL_SGUTOOL is not set
 # CONFIG_USER_LCD_LCD is not set
 # CONFIG_USER_LEDCON_LEDCON is not set
 # CONFIG_USER_LHA_LHA is not set

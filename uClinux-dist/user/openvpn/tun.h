@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -231,8 +231,6 @@ void do_ifconfig (struct tuntap *tt,
 		  int tun_mtu,
 		  const struct env_set *es);
 
-const char *dev_component_in_dev_node (const char *dev_node);
-
 bool is_dev_type (const char *dev, const char *dev_type, const char *match_type);
 int dev_type_enum (const char *dev, const char *dev_type);
 const char *dev_type_string (const char *dev, const char *dev_type);
@@ -240,6 +238,12 @@ const char *dev_type_string (const char *dev, const char *dev_type);
 const char *ifconfig_options_string (const struct tuntap* tt, bool remote, bool disable, struct gc_arena *gc);
 
 bool is_tun_p2p (const struct tuntap *tt);
+
+void check_subnet_conflict (const in_addr_t ip,
+			    const in_addr_t netmask,
+			    const char *prefix);
+
+void warn_on_use_of_common_subnets (void);
 
 /*
  * Inline functions
@@ -313,7 +317,11 @@ const IP_ADAPTER_INFO *get_adapter (const IP_ADAPTER_INFO *ai, DWORD index);
 
 bool is_adapter_up (const struct tuntap *tt, const IP_ADAPTER_INFO *list);
 bool is_ip_in_adapter_subnet (const IP_ADAPTER_INFO *ai, const in_addr_t ip, in_addr_t *highest_netmask);
-DWORD adapter_index_of_ip (const IP_ADAPTER_INFO *list, const in_addr_t ip, int *count);
+
+DWORD adapter_index_of_ip (const IP_ADAPTER_INFO *list,
+			   const in_addr_t ip,
+			   int *count,
+			   in_addr_t *netmask);
 
 void show_tap_win32_adapters (int msglev, int warnlev);
 void show_adapters (int msglev);

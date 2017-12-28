@@ -1255,6 +1255,17 @@ static void __inline__ fec_request_intrs(struct net_device *dev)
 	*icrp = 0x00000ddd;
 	icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
 	*icrp = 0x0d000000;
+
+#if defined(CONFIG_M5272C3)
+{
+	u32 v;
+
+	/* Enable the lines for the FEC */
+	v = readl(MCF_MBAR + MCFSIM_PBCNT);
+	v = (v & ~0xffff0000) | 0x55550000;
+	writel(v, MCF_MBAR + MCFSIM_PBCNT);
+}
+#endif
 }
 
 static void __inline__ fec_set_mii(struct net_device *dev, struct fec_enet_private *fep)

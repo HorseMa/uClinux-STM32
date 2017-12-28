@@ -16,6 +16,7 @@
 #include <limits.h>
 #include <string.h>
 #include <syslog.h>
+#include <errno.h>
 
 #if 0
 /* Defining this symbol turns off the closing of *all* FDs prior to execution.

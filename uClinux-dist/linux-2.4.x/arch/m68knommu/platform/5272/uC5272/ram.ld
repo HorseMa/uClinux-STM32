@@ -33,6 +33,8 @@ SECTIONS {
 		__start___ksymtab = .;  /* Kernel symbol table          */
 		*(__ksymtab)
 		__stop___ksymtab = .;
+		. = ALIGN(0x4);
+		*(.eh_frame)
 		. = ALIGN(4) ;
 		_etext = . ;
 	} > ram

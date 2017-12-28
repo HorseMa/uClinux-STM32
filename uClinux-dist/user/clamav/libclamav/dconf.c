@@ -90,6 +90,7 @@ static struct dconf_module modules[] = {
     { "DOCUMENT",   "PDF",	    DOC_CONF_PDF,	    1 },
     { "DOCUMENT",   "SCRIPT",	    DOC_CONF_SCRIPT,	    1 },
     { "DOCUMENT",   "HTMLSKIPRAW",  DOC_CONF_HTML_SKIPRAW,  1 },
+    { "DOCUMENT",   "JSNORM",       DOC_CONF_JSNORM,        1 },
 
     { "MAIL",	    "MBOX",	    MAIL_CONF_MBOX,	    1 },
     { "MAIL",	    "TNEF",	    MAIL_CONF_TNEF,	    1 },
@@ -99,6 +100,7 @@ static struct dconf_module modules[] = {
     { "OTHER",	    "RIFF",	    OTHER_CONF_RIFF,	    1 },
     { "OTHER",	    "JPEG",	    OTHER_CONF_JPEG,	    1 },
     { "OTHER",	    "CRYPTFF",	    OTHER_CONF_CRYPTFF,	    1 },
+    { "OTHER",	    "DLP",	    OTHER_CONF_DLP,	    1 },
 
     { "PHISHING",   "ENGINE",       PHISHING_CONF_ENGINE,   1 },
     { "PHISHING",   "ENTCONV",      PHISHING_CONF_ENTCONV,  1 },
@@ -263,7 +265,7 @@ static int chkflevel(const char *entry, int field)
     return 1;
 }
 
-int cli_dconf_load(FILE *fs, struct cl_engine **engine, unsigned int options, gzFile *gzs, unsigned int gzrsize)
+int cli_dconf_load(FILE *fs, struct cl_engine **engine, unsigned int options, struct cli_dbio *dbio)
 {
 	char buffer[FILEBUFF];
 	unsigned int line = 0;
@@ -279,7 +281,7 @@ int cli_dconf_load(FILE *fs, struct cl_engine **engine, unsigned int options, gz
 
     dconf = (struct cli_dconf *) (*engine)->dconf;
 
-    while(cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize)) {
+    while(cli_dbgets(buffer, FILEBUFF, fs, dbio)) {
 	line++;
 	cli_chomp(buffer);
 

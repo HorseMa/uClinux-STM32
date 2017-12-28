@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -80,5 +80,10 @@ typedef unsigned long ptr_type;
 #if ENABLE_INLINE_FILES
 #define INLINE_FILE_TAG "[[INLINE]]"
 #endif
+
+/*
+ * Script security warning
+ */
+#define SCRIPT_SECURITY_WARNING "openvpn_execve: external program may not be called unless '--script-security 2' or higher is enabled.  Use '--script-security 3 system' for backward compatibility with 2.1_rc8 and earlier.  See --help text or man page for detailed info."
 
 #endif

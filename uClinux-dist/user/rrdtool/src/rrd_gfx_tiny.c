@@ -21,11 +21,17 @@
 #include "rrd_afm.h"
 #include "unused.h"
 
-
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <asm/byteorder.h>
+
+/* This defines the integer rescale we use for the real values in the polygon fill code.
+ * Be careful not to make it too large since that will cause overflow.
+ */
+#define ISCALE	16384
+
 
 typedef struct sImage *Image;
 
@@ -43,7 +49,7 @@ typedef struct {
 static int maxColour;
 static COLOUR colour_table[MAX_COLOUR];
 
-static int
+static inline int
 find_nearest_color(gfx_color_t c)
 {
 	int r = (c >> 24) & 0xff;
@@ -322,25 +328,6 @@ static void saveImage(Image i, FILE *f) {
 static inline void setpixel(Image i, int x, int y, Colour c) {
 	if (x >= 0 && x < i->w && y >= 0 && y < i->h)
 		i->data[x + y * i->w] = c;
-}
-
-static void fillbox(Image img, int x1, int y1, int x2, int y2, Colour c) {
-	int i, j;
-	int ix = 1, iy = 1;
-
-	if (x2 < x1)
-		ix = -1;
-	if (y2 < y1)
-		iy = -1;
-	for (j = y1; ; j += iy) {
-		for (i = x1; ; i += ix) {
-			setpixel(img, i, j, c);
-			if (i == x2)
-				break;
-		}
-		if (j == y2)
-			break;
-	}
 }
 
 void
@@ -687,20 +674,6 @@ gfx_close_path(gfx_node_t *node)
 		node->path[0].code = ART_MOVETO;
 }
 
-int
-pointInArea(int points, ArtVpath *point, double x, double y)
-{
-  int i, j, c = 0;
-  for (i = 0, j = points-1; i < points; j = i++) {
-	if ((((point[i].y <= y) && (y < point[j].y)) ||
-		 ((point[j].y <= y) && (y < point[i].y))) &&
-		(x < (point[j].x - point[i].x) * (y - point[i].y) /
-			(point[j].y - point[i].y) + point[i].x))
-	  c = !c;
-  }
-  return c;
-}
-
 static void
 drawtext(Image img, char *s, int x, int y, Colour c)
 {
@@ -741,6 +714,14 @@ drawtext_270(Image img, char *s, int x, int y, Colour c)
 	}
 }
 
+
+
+static int dcmp(const void *v1, const void *v2) {
+	const int d1 = *(const int *)v1;
+	const int d2 = *(const int *)v2;
+	return d1 - d2;
+}
+
 int
 gfx_render(
 	gfx_canvas_t *canvas,
@@ -752,85 +733,184 @@ gfx_render(
     gfx_node_t *node = canvas->firstnode;    
     unsigned long pys_width = width * canvas->zoom;
     unsigned long pys_height = height * canvas->zoom;
-	int i, j;
+    int i, j;
     
-	img = newImage(width, height);
+    img = newImage(width, height);
 
-	initColours();
+    initColours();
 
     while (node) {
         switch (node->type) {
         case GFX_AREA: {
-			int minx = width, miny = height, maxx = 0, maxy = 0;
-			for (i = 0; i < node->points - 1; i++) {
-				if ((int)node->path[i].x < minx)
-					minx = (int)node->path[i].x;
-				if ((int)node->path[i].y < miny)
-					miny = (int)node->path[i].y;
-				if ((int)node->path[i].x > maxx)
-					maxx = (int)node->path[i].x;
-				if ((int)node->path[i].y > maxy)
-					maxy = (int)node->path[i].y;
-			}
-			// very slow area fill
-			for (i = minx; i < maxx; i++)
-				for (j = miny; j < maxy; j++)
-					if (pointInArea(node->points -1, node->path,
-								(double) i, (double) j))
-						setpixel(img, i, j, find_nearest_color(node->color));
-			} break;
-        case GFX_LINE:
-		   for (i = 0; i < node->points; i++) {
-			 ArtVpath *vec = node->path + i;
-			 switch (vec->code) {
-			   case ART_MOVETO_OPEN: /* fall-through */
-			   case ART_MOVETO:
-				 break;
-			   case ART_LINETO:
-				 if (i > 0) {
-					 drawline(img, 
-							 (int)vec[-1].x, (int)vec[-1].y,
-							 (int)vec[0].x,    (int)vec[0].y,
-							 find_nearest_color(node->color),
-							 (int)node->dash_on, (int) node->dash_off);
-				 }
-				 break;
-			   case ART_CURVETO:
-				 fprintf(stderr, "cannot handle CURVETO"); /* unsupported */
-				 break;
-			   case ART_END:
-				 break;
-			 }
-		   }
-		   break;
-        case GFX_TEXT: {
-			int x = (int)node->x, y = (int)node->y;
-			int w = gfx_get_text_width(img, 0.0, node->filename,
-					node->size, node->tabwidth, node->text, node->angle);
-			int h = gfx_get_text_height(img, 0.0, node->filename,
-					node->size, node->tabwidth, node->text, node->angle);
+		// Copy the coordinates locally - we modify the y's sometimes and doing this
+		// makes things easier to read.
+		const int npm1 = node->points - 1;
+		int pathx[npm1], pathy[npm1];
+		int maxx, minx;
+		int maxy, miny;
 
-			switch (node->halign) {
-			case GFX_H_RIGHT:  x -= w; break;
-			case GFX_H_CENTER: x -= w/2; break;
-			case GFX_H_LEFT:   break;
-			case GFX_H_NULL:   break;
+		for (i=0; i<npm1; i++) {
+			pathx[i] = (int)(node->path[i].x * ISCALE);
+			pathy[i] = (int)(node->path[i].y * ISCALE);
+		}
+
+		// Determine the bounds
+		maxx = minx = pathx[0];
+		maxy = miny = pathy[0];
+		for (i = 1; i < npm1; i++) {
+			if (pathx[i] < minx)		minx = pathx[i];
+			else if (pathx[i] > maxx)	maxx = pathx[i];
+			if (pathy[i] < miny)		miny = pathy[i];
+			else if (pathy[i] > maxy)	maxy = pathy[i];
+		}
+
+		// Trick things to not be exactly on a scanline which is badness
+		{
+			const int midy = (miny + maxy) / 2;
+			const int eps = 1;
+
+			for (i=0; i<npm1; i++) {
+				int y = pathy[i];
+				if (y % ISCALE == 0) {
+					if (y < midy) {
+						y -= eps;
+						if (y < miny)	miny = y;
+					} else {
+						y += eps;
+						if (y > maxy)	maxy = y;
+					}
+					pathy[i] = y;
+				}
 			}
-			switch(node->valign){
-			case GFX_V_TOP:    break;
-			case GFX_V_CENTER: y -= h/2; break;
-			case GFX_V_BOTTOM: y -= h; break;
-			case GFX_V_NULL:   break;          
+		}
+
+		{
+			const int near_col = find_nearest_color(node->color);
+			int minscan = 1 + miny / ISCALE;
+			int maxscan = maxy / ISCALE;
+			int xary[npm1];
+			int y, yr;
+			int yposn;
+
+			if (minscan < 0)		minscan = 0;
+			if (maxscan >= img->h)	maxscan = img->h-1;
+			yposn = minscan * img->w;
+			yr = minscan * ISCALE;
+
+			for (y=minscan; y<=maxscan; y++) {
+				// Locate intersections
+				int xn = 0;
+				int x1 = pathx[npm1-1];
+				int y1 = pathy[npm1-1];
+
+				for (i=0; i<npm1; i++) {
+					const int x2 = pathx[i];
+					const int y2 = pathy[i];
+
+					// If the segment crosses this scan line, figure out where...
+					if (((yr < y1)?1:0) != ((yr < y2)?1:0))
+						xary[xn++] = ((yr - y1) / (y2 - y1)) * (x2 - x1) + x1;
+					x1 = x2;
+					y1 = y2;
+				}
+
+				if (xn > 0) {
+					// Sort the scan line intersections.
+					// Usually there are two elements so this is overkill.
+					qsort(xary, xn, sizeof(int), &dcmp);
+
+					// Step through the list pairwise and draw lines
+					// We avoid set pixel here since that involves a
+					// multiplication and range checking which we can do
+					// in bulk.
+					for (i=0; i<xn; i+=2) {
+						int st = (xary[i] + ISCALE / 2) / ISCALE;
+						int ed = (xary[i+1] + ISCALE / 2) / ISCALE;
+
+						if (st < 0)		st = 0;
+						if (ed >= img->w)	ed = img->w-1;
+						if (st <= ed)
+							memset(&img->data[st + yposn], near_col, ed-st+1);
+					}
+				}
+				yposn += img->w;
+				yr += ISCALE;
 			}
-			switch ((int) node->angle) {
-			case 270:
-			  drawtext_270(img,node->text,x,y,find_nearest_color(node->color));
-			  break;
-			default:
-			  drawtext(img, node->text, x, y, find_nearest_color(node->color));
-			  break;
+		}
+	    }
+	    break;
+        case GFX_LINE: {
+		const int near_col = find_nearest_color(node->color);
+		const int dash_on = (int)node->dash_on;
+		const int dash_off = (int)node->dash_off;
+		int pathx[node->points], pathy[node->points];
+
+		for (i=0; i < node->points; i++) {
+			pathx[i] = (int)node->path[i].x;
+			pathy[i] = (int)node->path[i].y;
+		}
+
+		for (i = 0; i < node->points; i++) {
+			switch (node->path[i].code) {
+			case ART_MOVETO_OPEN: /* fall-through */
+			case ART_MOVETO:
+				break;
+			case ART_LINETO:
+				if (i > 0) {
+					drawline(img,
+			        		 pathx[i-1], pathy[i-1], pathx[i], pathy[i],
+			        		 near_col, dash_on, dash_off);
+				}
+				break;
+			case ART_CURVETO:
+				fprintf(stderr, "cannot handle CURVETO"); /* unsupported */
+				break;
+			case ART_END:
+				break;
 			}
-			} break;
+		}
+	    }
+	    break;
+        case GFX_TEXT: {
+		int x = (int)node->x, y = (int)node->y;
+		const int w = gfx_get_text_width(img, 0.0, node->filename, node->size, node->tabwidth, node->text, node->angle);
+		const int h = gfx_get_text_height(img, 0.0, node->filename, node->size, node->tabwidth, node->text, node->angle);
+		const int near_col = find_nearest_color(node->color);
+
+		switch (node->halign) {
+		case GFX_H_RIGHT:
+			x -= w;
+			break;
+		case GFX_H_CENTER:
+			x -= w/2;
+			break;
+		case GFX_H_LEFT:
+			break;
+		case GFX_H_NULL:
+			break;
+		}
+		switch (node->valign) {
+		case GFX_V_TOP:
+			break;
+		case GFX_V_CENTER:
+			y -= h/2;
+			break;
+		case GFX_V_BOTTOM:
+			y -= h;
+			break;
+		case GFX_V_NULL:
+			break;
+		}
+		switch ((int) node->angle) {
+		case 270:
+			drawtext_270(img, node->text, x, y, near_col);
+			break;
+		default:
+			drawtext(img, node->text, x, y, near_col);
+			break;
+		}
+	    }
+	    break;
         }
         node = node->next;
     }  

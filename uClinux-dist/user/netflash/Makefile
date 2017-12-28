@@ -1,7 +1,15 @@
+ifndef CONFIG_USER_NETFLASH_NETFLASH
+# Not running under the uClinux build environment,
+# so build a host version for debugging.
+CFLAGS += -g -I../../include -DHOSTBUILD -DEMBED
+LIBCRYPTO = -lcrypto
+-include ../../config/.config
+endif
+
 CFLAGS += -Wall
 
 EXEC = netflash
-OBJS = tftpmain.o tftp.o tftpsubs.o http.o
+OBJS = tftpmain.o tftp.o tftpsubs.o http.o fileblock_ram.o
 COBJS = netflash.o
 
 ifdef CONFIG_USER_NETFLASH_WITH_FTP

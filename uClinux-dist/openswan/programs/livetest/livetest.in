@@ -1,5 +1,8 @@
 #!/bin/sh
 
+echo "currently not used"
+exit
+
 # Copyright (C) 2004  Michael Richardson	<mcr@xelerance.com>
 # 
 # This program is free software; you can redistribute it and/or modify it
@@ -12,7 +15,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: livetest.in,v 1.2 2005-07-15 16:39:25 paul Exp $
+# RCSID $Id: livetest.in,v 1.2 2005/07/15 16:39:25 paul Exp $
 
 if test " `id -u`" != " 0"
 then
@@ -41,12 +44,12 @@ wget -o /dev/null  -O /tmp/ipseclive.conn "http://192.168.0.1/olts/?leftid=$left
 sh < /tmp/ipseclive.conn
 ipsec eroute.pl
 leftid=`echo $leftid | sed "s/@//"`
-ipsec whack --delete --name olts-$leftid >> /tmp/ipsec.olts.local.log
+ipsec whack --name olts-$leftid --delete >> /tmp/ipsec.olts.local.log
 wget -o /dev/null -O /tmp/ipsec.olts.remote.log "http://192.168.0.1/olts/log.php?leftid=$leftid"
 
 #
 # $Log: livetest.in,v $
-# Revision 1.2  2005-07-15 16:39:25  paul
+# Revision 1.2  2005/07/15 16:39:25  paul
 # changed 'head -x' to 'head -n x' since this is apparently functionality
 # that will be removed from the head command soon.
 #

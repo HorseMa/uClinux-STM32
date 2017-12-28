@@ -13,7 +13,6 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: setup.in,v 1.122.6.8 2007-11-07 02:36:05 paul Exp $
 #
 # ipsec         init.d script for starting and stopping
 #               the IPsec security subsystem (KLIPS and Pluto).
@@ -87,7 +86,13 @@ done
 # Pick up IPsec configuration (until we have done this, successfully, we
 # do not know where errors should go, hence the explicit "daemon.error"s.)
 # Note the "--export", which exports the variables created.
-eval `ipsec _confread $config --optional --varprefix IPSEC --export --type config setup`
+variables=`ipsec addconn $config --varprefix IPSEC --configsetup`
+if [ $? != 0 ]
+then
+    echo "Failed to parse config setup portion of ipsec.conf"
+    exit $?
+fi
+eval $variables
 
 if test " $IPSEC_confreadstatus" != " "
 then
@@ -112,78 +117,84 @@ export IPSECsyslog
 umask 022
 
 mkdir -p /var/run/pluto
-mkdir -p /var/lock/subsys
 
+RETVAL=0
 
-# do it
-case "$1" in
-  start|--start|stop|--stop|_autostop|_autostart)
+start_stop() {
+	# remove for: @cygwin_START@ 
 	# portable way for checking for root
 	if [ ! -w / ]
 	then
-		
 		echo "permission denied (must be superuser)" |
 			logger -s -p $IPSECsyslog -t ipsec_setup 2>&1
 		exit 1
 	fi
-	# make sure all directories exist (mostly for openwrt)
-	if [ ! -d /var/run/pluto ]
-	then
-		mkdir -p /var/run/pluto
-	fi
-	if [ ! -d /var/lock/subsys ]
-	then
-		mkdir -p /var/lock/subsys
-	fi
-	tmp=/var/run/pluto/ipsec_setup.st
-	outtmp=/var/run/pluto/ipsec_setup.out
+	# remove for: @cygwin_END@
 	(
-		ipsec _realsetup $1
-		echo "$?" >$tmp
-	) > ${outtmp} 2>&1
-	st=$?
-	if test -f $tmp
-	then
-		st=`cat $tmp`
-		rm -f $tmp
-	fi
-	if [ -f ${outtmp} ]; then
-		cat ${outtmp} | logger -s -p $IPSECsyslog -t ipsec_setup 2>&1
-		rm -f ${outtmp}
-	fi
-	exit $st
+	ipsec _realsetup $1
+	RETVAL="$?" 
+	) 2>&1 | logger -s -p $IPSECsyslog -t ipsec_setup 2>&1  
+
+	return $RETVAL
+}
+
+
+restart_reload() {
+	$0 $IPSEC_setupflags stop
+	$0 $IPSEC_setupflags start
+}
+
+
+autorestart() {
+	$0 $IPSEC_setupflags _autostop
+	$0 $IPSEC_setupflags _autostart
+}
+
+version() {
+	ipsec version
+	RETVAL=$?
+	return $RETVAL
+}
+
+
+show_help() {
+	echo "Usage: $me [ --showonly ] {--start|--stop|--restart}"
+	echo "       $me --status"
+	RETVAL=0
+	return $RETVAL
+}
+
+# do it
+case "$1" in
+  start|--start|stop|--stop|_autostop|_autostart)
+	start_stop $1
 	;;
 
   restart|--restart|force-reload)
-	$0 $IPSEC_setupflags stop
-	$0 $IPSEC_setupflags start
+	restart_reload
 	;;
 
   _autorestart)			# for internal use only
-	$0 $IPSEC_setupflags _autostop
-	$0 $IPSEC_setupflags _autostart
+	autorestart
 	;;
 
   status|--status)
 	ipsec _realsetup $1
-	exit
+	RETVAL=$?
 	;;
 
-  --version)
-	echo "$me $IPSEC_VERSION"
-	exit 0
+  version|--version)
+	version
 	;;
 
-  --help)
-	echo "Usage: $me [ --showonly ] {--start|--stop|--restart}"
-	echo "       $me --status"
-	exit 0
+  help|--help)
+	show_help
 	;;
 
   *)
 	echo "Usage: $me [ --showonly ] {--start|--stop|--restart}"
 	echo "       $me --status"
-	exit 2
+	RETVAL=2
 esac
 
-exit 0
+exit $RETVAL

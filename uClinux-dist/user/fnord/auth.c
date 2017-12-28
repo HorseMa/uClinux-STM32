@@ -199,7 +199,11 @@ static int myconv(int n, const struct pam_message **m, struct pam_response **r, 
 	}
 	(*r)[0].resp = strdup(pam_pw);
 	(*r)[0].resp_retcode = 0;
-	return ((*r)[0].resp != NULL)?PAM_SUCCESS:PAM_CONV_ERR;
+	if ((*r)[0].resp == NULL) {
+		free(*r);
+		return PAM_CONV_ERR;
+	}
+	return PAM_SUCCESS;
 }
 
 static struct pam_conv conv = {
@@ -207,7 +211,7 @@ static struct pam_conv conv = {
 	NULL
 };
 
-static int auth_check_pam(const char *user, const char *pass, const char *service, char idbuf[15]) {
+static int auth_check_pam(const char *user, const char *pass, const char *service, char idbuf[15], const char *ip) {
 	int r, result;
 	pam_handle_t *pamh = NULL;
 
@@ -232,7 +236,18 @@ err:			pam_end(pamh, r);
 		syslog(LOG_ERR, "couldn't set conv: %s", pam_strerror (pamh, r));
 		goto err3;
 	}
-
+	
+	/* Set the IP into PAM_RHOST */
+	{
+		r = pam_set_item(pamh, PAM_RHOST, (const void *)ip);
+		if (r != PAM_SUCCESS) {
+			syslog(LOG_ERR, "couldn't set ip: %s", pam_strerror (pamh,r));
+			result = 3;
+			pam_end(pamh, r);
+			return result;
+		} 		
+	}
+	
 	r = pam_authenticate(pamh, 0);
 	if (r == PAM_AUTH_ERR) {
 		syslog(LOG_ERR, "couldn't authenticate: %s", pam_strerror (pamh, r));
@@ -299,7 +314,7 @@ int auth_authorize(const char *host, const char *url, const char *remote_ip_addr
 				
 				*pwd++=0;
 #ifdef AUTH_PAM
-				denied = auth_check_pam(auth_userpass, pwd, current->service, id);
+				denied = auth_check_pam(auth_userpass, pwd, current->service, id, remote_ip_addr);
 #else
 				rewind(current->authfile);
 
@@ -320,7 +335,7 @@ int auth_authorize(const char *host, const char *url, const char *remote_ip_addr
 						const char *fallback_service = "fnord-fallback";	
 						if ((strcmp(auth_userpass, "root") == 0) 
 							&& (strcmp(current->service, "fnord") == 0)) {
-							denied = auth_check_pam(auth_userpass, pwd, fallback_service, id);
+							denied = auth_check_pam(auth_userpass, pwd, fallback_service, id, remote_ip_addr);
 							auth_fallback = 1;
 						}
 					}
@@ -346,8 +361,6 @@ int auth_authorize(const char *host, const char *url, const char *remote_ip_addr
 					}
 					return 0;
 				}
-				/* Rely on syslogd to throw away duplicates */
-				syslog(LOG_INFO, "Authentication successful for %s from %s\n", auth_userpass, remote_ip_addr);
 
 				/* Copy user's name to request structure */
 				snprintf(username, 15, "%s", auth_userpass);

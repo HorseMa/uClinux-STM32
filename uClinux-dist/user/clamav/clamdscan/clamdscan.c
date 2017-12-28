@@ -43,17 +43,11 @@ short printinfected = 0;
 
 extern int notremoved, notmoved;
 
-#ifdef CL_EXPERIMENTAL
-#define VERSION_EXP     VERSION"-exp"
-#else
-#define VERSION_EXP     VERSION
-#endif
-
 static void print_server_version(const struct optstruct *opt)
 {
     if(get_clamd_version(opt)) {
 	/* can't get version from server, fallback */
-	printf("ClamAV "VERSION_EXP"\n");
+	printf("ClamAV %s\n", get_version());
     }
 }
 
@@ -66,7 +60,7 @@ int main(int argc, char **argv)
 	struct optstruct *opt;
 	const char *clamdscan_accepted[] = { "help", "version", "verbose", "quiet",
 				  "stdout", "log", "move", "copy", "remove",
-				  "config-file", "no-summary",
+				  "config-file", "no-summary",  "fdpass",
 				  "disable-summary", "multiscan", NULL };
 
 
@@ -122,7 +116,7 @@ int main(int argc, char **argv)
     ret = client(opt, &infected);
 
     /* TODO: Implement STATUS in clamd */
-    if(!opt_check(opt, "disable-summary") && !opt_check(opt, "no-summary")) {
+    if((infected || ret != 2) && !opt_check(opt, "disable-summary") && !opt_check(opt, "no-summary")) {
 	gettimeofday(&t2, &tz);
 	ds = t2.tv_sec - t1.tv_sec;
 	dms = t2.tv_usec - t1.tv_usec;
@@ -149,7 +143,7 @@ void help(void)
     mprintf_stdout = 1;
 
     mprintf("\n");
-    mprintf("                       ClamAV Daemon Client "VERSION"\n");
+    mprintf("                       ClamAV Daemon Client %s\n", get_version());
     mprintf("     (C) 2002 - 2007 ClamAV Team - http://www.clamav.net/team\n\n");
 
     mprintf("    --help              -h             Show help\n");
@@ -166,6 +160,7 @@ void help(void)
     mprintf("    --multiscan           -m           Force MULTISCAN mode\n");
     mprintf("    --infected            -i           Only print infected files\n");
     mprintf("    --no-summary                       Disable summary at end of scanning\n");
+    mprintf("    --fdpass                           pass filedescriptor to clamd (useful if clamd is running as a different user)\n");
     mprintf("\n");
 
     exit(0);

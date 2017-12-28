@@ -1,8 +1,14 @@
 #!/bin/sh
 
-# build the installer
+# load version.nsi definitions
+. autodefs/defs.sh
 
-cd install-win32
-rm -f *.exe
-'/c/Program Files/NSIS/makensis' openvpn.nsi &>makensis.log
+# build the installer
+rm -f $GENOUT/*.exe
+'/c/Program Files/NSIS/makensis' $GENOUT/nsi/openvpn.nsi &>makensis.log
 tail -20 makensis.log
+
+# sign the installer
+if [ -d "$SIGNTOOL" ]; then
+    TARGET_EXE="$(echo $(pwd)/$GENOUT/*.exe)" $SIGNTOOL/signexe
+fi

@@ -49,8 +49,9 @@ static __inline__ void __arch_decomp_setup(unsigned long arch_id)
 	else
 		uart_base = (volatile u32*) IXP4XX_UART1_BASE_PHYS;
 
-	if (machine_is_ess710() || machine_is_ivpn() || machine_is_sg560() ||
-	    machine_is_sg560usb() || machine_is_sg565() ||
+	if (machine_is_ess710() || machine_is_ivpn() || 
+	    machine_is_sg560() || machine_is_sg560usb() || 
+	    machine_is_sg560adsl() || machine_is_sg565() ||
 	    machine_is_sg580() || machine_is_sg720() ||
 	    machine_is_shiva1100() || machine_is_sg590() ||
 	    machine_is_sg8100())
@@ -67,8 +68,8 @@ static __inline__ void __arch_decomp_setup(unsigned long arch_id)
     defined(CONFIG_MACH_SG590) || defined(CONFIG_MACH_IVPN)
 #define arch_decomp_wdog() \
 	 *((volatile u32 *)(IXP4XX_GPIO_BASE_PHYS+IXP4XX_GPIO_GPOUTR_OFFSET)) ^= 0x00004000
-#elif defined(CONFIG_MACH_SG560USB) || defined(CONFIG_MACH_SG565) || \
-      defined(CONFIG_MACH_SHIVA1100)
+#elif defined(CONFIG_MACH_SG560USB) || defined(CONFIG_MACH_SG560ADSL) || \
+      defined(CONFIG_MACH_SG565) || defined(CONFIG_MACH_SHIVA1100)
 #define arch_decomp_wdog() \
 	*((volatile u8 *) (0x50000000 + (7 * 16*1024*1024))) = 0
 #else

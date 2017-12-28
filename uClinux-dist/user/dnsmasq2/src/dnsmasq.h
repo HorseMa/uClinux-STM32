@@ -265,7 +265,7 @@ struct crec {
       int uid;
     } cname;
   } addr;
-  unsigned short flags;
+  unsigned int flags;
   union {
     char sname[SMALLDNAME];
 #ifdef USE_BIGNAMES
@@ -697,7 +697,6 @@ pid_t tcp_pids[MAX_PROCS];
 
 /* cache.c */
 void cache_init(void);
-void incr_unresolved_counter(void);
 void log_query(unsigned short flags, char *name, struct all_addr *addr, char *arg); 
 char *record_source(struct hostsfile *addn_hosts, int index);
 void querystr(char *str, unsigned short type);

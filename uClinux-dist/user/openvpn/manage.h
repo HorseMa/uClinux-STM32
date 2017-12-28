@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -30,12 +30,31 @@
 #include "misc.h"
 #include "event.h"
 #include "socket.h"
+#include "mroute.h"
 
 #define MANAGEMENT_VERSION                      1
 #define MANAGEMENT_N_PASSWORD_RETRIES           3
 #define MANAGEMENT_LOG_HISTORY_INITIAL_SIZE   100
 #define MANAGEMENT_ECHO_BUFFER_SIZE           100
 #define MANAGEMENT_STATE_BUFFER_SIZE          100
+
+/*
+ * Management-interface-based deferred authentication
+ */
+#ifdef MANAGEMENT_DEF_AUTH
+struct man_def_auth_context {
+  unsigned long cid;
+
+#define DAF_CONNECTION_ESTABLISHED (1<<0)
+#define DAF_CONNECTION_CLOSED      (1<<1)
+#define DAF_INITIAL_AUTH           (1<<2)
+  unsigned int flags;
+
+  unsigned int mda_key_id_counter;
+
+  time_t bytecount_last_update;
+};
+#endif
 
 /*
  * Manage build-up of command line
@@ -53,34 +72,6 @@ void command_line_add (struct command_line *cl, const unsigned char *buf, const 
 const unsigned char *command_line_get (struct command_line *cl);
 void command_line_reset (struct command_line *cl);
 void command_line_next (struct command_line *cl);
-
-/*
- * Manage lists of output strings
- */
-
-struct output_entry
-{
-  struct buffer buf;
-  struct output_entry *next;
-};
-
-struct output_list
-{
-  struct output_entry *head; /* next item to pop/peek */
-  struct output_entry *tail; /* last item pushed */
-  int size;                  /* current number of entries */
-  int max_size;              /* maximum size list should grow to */
-};
-
-struct output_list *output_list_new (const int max_size);
-void output_list_free (struct output_list *ol);
-
-bool output_list_defined (const struct output_list *ol);
-void output_list_reset (struct output_list *ol);
-
-void output_list_push (struct output_list *ol, const unsigned char *str);
-const struct buffer *output_list_peek (struct output_list *ol);
-void output_list_advance (struct output_list *ol, int n);
 
 /*
  * Manage log file history
@@ -148,16 +139,35 @@ log_history_capacity (const struct log_history *h)
 }
 
 /*
- * Callbacks for 'status' and 'kill' commands
+ * Callbacks for 'status' and 'kill' commands.
+ * Also for management-based deferred authentication and packet filter.
  */
 struct management_callback
 {
   void *arg;
+
+# define MCF_SERVER (1<<0) /* is OpenVPN being run as a server? */
+  unsigned int flags;
+
   void (*status) (void *arg, const int version, struct status_output *so);
   void (*show_net) (void *arg, const int msglevel);
   int (*kill_by_cn) (void *arg, const char *common_name);
   int (*kill_by_addr) (void *arg, const in_addr_t addr, const int port);
   void (*delete_event) (void *arg, event_t event);
+#ifdef MANAGEMENT_DEF_AUTH
+  bool (*kill_by_cid) (void *arg, const unsigned long cid);
+  bool (*client_auth) (void *arg,
+		       const unsigned long cid,
+		       const unsigned int mda_key_id,
+		       const bool auth,
+		       const char *reason,
+		       struct buffer_list *cc_config); /* ownership transferred */
+#endif
+#ifdef MANAGEMENT_PF
+  bool (*client_pf) (void *arg,
+		     const unsigned long cid,
+		     struct buffer_list *pf_config);   /* ownership transferred */
+#endif
 };
 
 /*
@@ -196,19 +206,19 @@ struct man_persist {
 
 struct man_settings {
   bool defined;
+  unsigned int flags; /* MF_x flags */
   struct openvpn_sockaddr local;
-  bool up_query_passwords;
+#if UNIX_SOCK_SUPPORT
+  struct sockaddr_un local_unix;
+#endif
   bool management_over_tunnel;
   struct user_pass up;
   int log_history_cache;
   int echo_buffer_size;
   int state_buffer_size;
-  bool server;
-  bool hold;
-  bool signal_on_disconnect;
-  bool management_forget_disconnect;
-  bool connect_as_client;
   char *write_peer_info_file;
+  int client_uid;
+  int client_gid;
 
 /* flags for handling the management interface "signal" command */
 # define MANSIG_IGNORE_USR1_HUP  (1<<0)
@@ -222,6 +232,7 @@ struct man_settings {
 #define UP_QUERY_USER_PASS 1
 #define UP_QUERY_PASS      2
 #define UP_QUERY_NEED_OK   3
+#define UP_QUERY_NEED_STR  4
 
 /* states */
 #define MS_INITIAL          0  /* all sockets are closed */
@@ -245,8 +256,17 @@ struct man_connection {
   int password_tries;
 
   struct command_line *in;
-  struct output_list *out;
+  struct buffer_list *out;
 
+#ifdef MANAGEMENT_DEF_AUTH
+# define IEC_UNDEF       0
+# define IEC_CLIENT_AUTH 1
+# define IEC_CLIENT_PF   2
+  int in_extra_cmd;
+  unsigned long in_extra_cid;
+  unsigned int in_extra_kid;
+  struct buffer_list *in_extra;
+#endif
   struct event_set *es;
 
   bool state_realtime;
@@ -273,21 +293,33 @@ struct user_pass;
 
 struct management *management_init (void);
 
+/* management_open flags */
+# define MF_SERVER            (1<<0)
+# define MF_QUERY_PASSWORDS   (1<<1)
+# define MF_HOLD              (1<<2)
+# define MF_SIGNAL            (1<<3)
+# define MF_FORGET_DISCONNECT (1<<4)
+# define MF_CONNECT_AS_CLIENT (1<<5)
+#ifdef MANAGEMENT_DEF_AUTH
+# define MF_CLIENT_AUTH       (1<<6)
+#endif
+#ifdef MANAGEMENT_PF
+# define MF_CLIENT_PF         (1<<7)
+#endif
+# define MF_LISTEN_UNIX       (1<<8)
+
 bool management_open (struct management *man,
 		      const char *addr,
 		      const int port,
 		      const char *pass_file,
-		      const bool server,
-		      const bool query_passwords,
+		      const char *client_user,
+		      const char *client_group,
 		      const int log_history_cache,
 		      const int echo_buffer_size,
 		      const int state_buffer_size,
-		      const bool hold,
-		      const bool signal_on_disconnect,
-		      const bool management_forget_disconnect,
-		      const bool connect_as_client,
 		      const char *write_peer_info_file,
-		      const int remap_sigusr1);
+		      const int remap_sigusr1,
+		      const unsigned int flags);
 
 void management_close (struct management *man);
 
@@ -315,6 +347,25 @@ bool management_hold (struct management *man);
 
 void management_event_loop_n_seconds (struct management *man, int sec);
 
+#ifdef MANAGEMENT_DEF_AUTH
+void management_notify_client_needing_auth (struct management *management,
+					    const unsigned int auth_id,
+					    struct man_def_auth_context *mdac,
+					    const struct env_set *es);
+
+void management_connection_established (struct management *management,
+					struct man_def_auth_context *mdac);
+
+void management_notify_client_close (struct management *management,
+				     struct man_def_auth_context *mdac,
+				     const struct env_set *es);
+
+void management_learn_addr (struct management *management,
+			    struct man_def_auth_context *mdac,
+			    const struct mroute_addr *addr,
+			    const bool primary);
+#endif
+
 static inline bool
 management_connected (const struct management *man)
 {
@@ -324,8 +375,24 @@ management_connected (const struct management *man)
 static inline bool
 management_query_user_pass_enabled (const struct management *man)
 {
-  return man->settings.up_query_passwords;
+  return BOOL_CAST(man->settings.flags & MF_QUERY_PASSWORDS);
 }
+
+#ifdef MANAGEMENT_PF
+static inline bool
+management_enable_pf (const struct management *man)
+{
+  return man && BOOL_CAST(man->settings.flags & MF_CLIENT_PF);
+}
+#endif
+
+#ifdef MANAGEMENT_DEF_AUTH
+static inline bool
+management_enable_def_auth (const struct management *man)
+{
+  return man && BOOL_CAST(man->settings.flags & MF_CLIENT_AUTH);
+}
+#endif
 
 /*
  * OpenVPN tells the management layer what state it's in
@@ -371,31 +438,65 @@ void management_auth_failure (struct management *man, const char *type);
  * These functions drive the bytecount in/out counters.
  */
 
-void man_bytecount_output (struct management *man);
+void man_bytecount_output_client (struct management *man);
 
 static inline void
-man_bytecount_possible_output (struct management *man)
+man_bytecount_possible_output_client (struct management *man)
 {
   if (man->connection.bytecount_update_seconds > 0
       && now >= man->connection.bytecount_last_update
       + man->connection.bytecount_update_seconds)
-    man_bytecount_output (man);
+    man_bytecount_output_client (man);
+}
+
+static inline void
+management_bytes_out_client (struct management *man, const int size)
+{
+  man->persist.bytes_out += size;
+  man_bytecount_possible_output_client (man);
+}
+
+static inline void
+management_bytes_in_client (struct management *man, const int size)
+{
+  man->persist.bytes_in += size;
+  man_bytecount_possible_output_client (man);
 }
 
 static inline void
 management_bytes_out (struct management *man, const int size)
 {
-  man->persist.bytes_out += size;
-  man_bytecount_possible_output (man);
+  if (!(man->persist.callback.flags & MCF_SERVER))
+    management_bytes_out_client (man, size);
 }
 
 static inline void
 management_bytes_in (struct management *man, const int size)
 {
-  man->persist.bytes_in += size;
-  man_bytecount_possible_output (man);
+  if (!(man->persist.callback.flags & MCF_SERVER))
+    management_bytes_in_client (man, size);
 }
 
-#endif
+#ifdef MANAGEMENT_DEF_AUTH
 
+static inline void
+management_bytes_server (struct management *man,
+			 const counter_type *bytes_in_total,
+			 const counter_type *bytes_out_total,
+			 struct man_def_auth_context *mdac)
+{
+  void man_bytecount_output_server (struct management *man,
+				    const counter_type *bytes_in_total,
+				    const counter_type *bytes_out_total,
+				    struct man_def_auth_context *mdac);
+
+  if (man->connection.bytecount_update_seconds > 0
+      && now >= mdac->bytecount_last_update + man->connection.bytecount_update_seconds
+      && (mdac->flags & (DAF_CONNECTION_ESTABLISHED|DAF_CONNECTION_CLOSED)) == DAF_CONNECTION_ESTABLISHED)
+    man_bytecount_output_server (man, bytes_in_total, bytes_out_total, mdac);
+}
+
+#endif /* MANAGEMENT_DEF_AUTH */
+
+#endif
 #endif

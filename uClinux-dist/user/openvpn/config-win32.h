@@ -5,7 +5,7 @@
  *             packet encryption, packet authentication, and
  *             packet compression.
  *
- *  Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>
+ *  Copyright (C) 2002-2008 OpenVPN Technologies, Inc. <sales@openvpn.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -62,6 +62,7 @@ typedef unsigned long in_addr_t;
  *
  * The TAP-Win32 version number is defined in tap-win32/SOURCES
  */
+#define TAP_ID tap0901
 #define TAP_WIN32_MIN_MAJOR 9
 #define TAP_WIN32_MIN_MINOR 1
 
@@ -215,19 +216,19 @@ typedef unsigned long in_addr_t;
 #define HAVE_GETPASS 1
 
 /* Name of package */
-#define PACKAGE PRODUCT_UNIX_NAME
+#define PACKAGE openvpn
 
 /* Define to the address where bug reports for this package should be sent. */
 //#define PACKAGE_BUGREPORT "openvpn-users@lists.sourceforge.net"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME PRODUCT_NAME
+#define PACKAGE_NAME OpenVPN
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME PACKAGE
+#define PACKAGE_TARNAME openvpn
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION PRODUCT_VERSION
+#define PACKAGE_VERSION 2.1_rc15
 
 /* Define to the full name and version of this package. */
 #ifdef DEBUG_LABEL
@@ -318,4 +319,8 @@ typedef unsigned long in_addr_t;
 #define S_IWUSR 0
 typedef int intptr_t;
 #undef S_NORMAL
+/* Visual Studio 2005 supports vararg macros */
+#if _MSC_VER >= 1400
+#define HAVE_CPP_VARARG_MACRO_ISO 1
+#endif
 #endif

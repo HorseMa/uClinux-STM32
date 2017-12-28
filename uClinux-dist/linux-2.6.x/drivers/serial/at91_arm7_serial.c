@@ -1247,8 +1247,8 @@ static void rs_close(struct tty_struct *tty, struct file *filp)
 	 */
 
 	shutdown(info);
-	if (tty->driver->flush_buffer)
-		tty->driver->flush_buffer(tty);
+	if (tty->driver->ops->flush_buffer)
+		tty->driver->ops->flush_buffer(tty);
 	if (tty->ldisc.flush_buffer)
 		tty->ldisc.flush_buffer(tty);
 	tty->closing = 0;

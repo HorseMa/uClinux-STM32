@@ -18,8 +18,6 @@ ifeq ($(UCLINUX_COMMON_LIB),1)
 	SLIBFLEX	=	-lfl
 	SLIBC		=	-lc
 	SLIBM		=	-lm
-	SLIBAES		=	-laes
-	SLIBDES		=	-ldes
 	SLIBNETOLD		=	-lnetold
 	SLIBPCAP	=	-lpcap
 	ifdef DISABLE_SHARED_SSL
@@ -53,8 +51,6 @@ ifeq ($(UCLINUX_COMMON_LIB),1)
 	LIBFLEX		=	$(SLIBFLEX)
 	LIBC		=	$(SLIBC)
 	LIBM		=	$(SLIBM)
-	LIBAES		=	$(SLIBAES)
-	LIBDES		=	$(SLIBDES)
 	LIBNETOLD		=	$(SLIBNETOLD)
 	LIBPCAP		=	$(SLIBPCAP)
 	LIBSSL		=	$(SLIBSSL)

@@ -62,7 +62,7 @@
 char *libdes_version="libdes v 3.24 - 20-Apr-1996 - eay";
 char *DES_version="DES part of SSLeay 0.8.2b 08-Jan-1998";
 
-/* RCSID $Id: ecb_enc.c,v 1.8 2004-08-04 15:57:22 mcr Exp $ */
+/* RCSID $Id: ecb_enc.c,v 1.8 2004/08/04 15:57:22 mcr Exp $ */
 /* This function ifdef'ed out for FreeS/WAN project. */
 #ifdef notdef
 char *des_options()
@@ -115,13 +115,6 @@ int enc;
 	register DES_LONG l;
 	register unsigned char *in,*out;
 	DES_LONG ll[2];
-
-#ifdef OCF_ASSIST
-	if (ocf_des_assist() & OCF_PROVIDES_DES_3DES) {
-		ocf_des_ecb_encrypt(input, output, ks, enc);
-		return;
-	}
-#endif
 
 	in=(unsigned char *)input;
 	out=(unsigned char *)output;

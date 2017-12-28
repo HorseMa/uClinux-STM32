@@ -74,7 +74,8 @@
 
 typedef struct                   /*      Hex representation of a double.      */
       {
-#if (__BYTE_ORDER == __BIG_ENDIAN)
+#if (__BYTE_ORDER == __BIG_ENDIAN) || \
+		(!defined(__VFP_FP__) && (defined(__arm__) || defined(__thumb__)))
       uint32_t high;
       uint32_t low;
 #else

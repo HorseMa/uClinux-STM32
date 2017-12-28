@@ -275,6 +275,16 @@ config USER_NETFLASH_WITH_CGI
 	  This allows netflash to be invoked directly as part of a POST request
 	  to upgrade the firmware with minimal overhead.
 
+config USER_NETFLASH_WITH_FILE
+	bool "netflash defaults to writing out ordinary file"
+	depends on USER_NETFLASH_NETFLASH
+	help
+	  Some systems will not be using a traditional flash storage device
+	  for storing images. Some newer platforms use USB flash sticks, or
+	  Compact Flash devices as their promary storage. On these types of
+	  devices netflash should write out ordinay files. The usual checksum
+	  and decryption/decompression steps are carried out.
+
 config USER_NETFLASH_VERSION
 	bool "netflash recognises version"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
@@ -334,7 +344,6 @@ config USER_RECOVER_BIOS
 config USER_NETFLASH_CRYPTO
 	bool "netflash needs public key encryption"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
-	select LIB_LIBAES
 	select LIB_LIBSSL
 	help
 	  Netflash requires a public key authentication to be attached to an
@@ -344,7 +353,6 @@ config USER_NETFLASH_CRYPTO
 config USER_NETFLASH_CRYPTO_V2
 	bool "netflash supports public key encryption using SHA256 checksum"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
-	select LIB_LIBAES
 	select LIB_LIBSSL
 	select USER_NETFLASH_CRYPTO
 	help
@@ -470,7 +478,7 @@ config USER_MTDUTILS_MKFSJFFS
 	depends on USER_MTDUTILS
 
 config USER_MTDUTILS_MKFSJFFS2
-	bool "mkfs.jff2"
+	bool "mkfs.jffs2"
 	depends on USER_MTDUTILS
 
 config USER_MTDUTILS_NFTLDUMP
@@ -556,6 +564,14 @@ config USER_FLATFSD_DISKLIKE
 	bool "disk like"
 	help
 	  /dev/flash/config is a disk-like device.
+
+config USER_FLATFSD_CONFIG_BLOBS
+	bool "file blobs"
+	help
+	  The configuration filesystem storage is within a single file blob
+	  on some attached mass storage (could be flash or hard disk).
+	  There may be multiple of these configuration blobs on any mass
+	  storage device.
 
 endchoice
 
@@ -1183,7 +1199,6 @@ config USER_FREESWAN_PLUTO_PLUTO
 	bool "pluto"
 	depends on USER_FREESWAN
 	select LIB_LIBGMP
-	select LIB_LIBDES
 	help
 	  Freeswan pluto.
 	  Approx. binary size: 255k
@@ -1261,7 +1276,6 @@ config USER_OPENSWAN_PLUTO_PLUTO
 	bool "pluto"
 	depends on USER_OPENSWAN
 	select LIB_LIBGMP
-	select LIB_LIBDES
 	help
 
 config USER_OPENSWAN_PLUTO_WHACK
@@ -1295,6 +1309,11 @@ config USER_OPENSWAN_KLIPS_SPIGRP
 
 config USER_OPENSWAN_KLIPS_TNCFG
 	bool "tncfg"
+	depends on USER_OPENSWAN
+
+config USER_OPENSWAN_PROGRAMS_LWDNSQ
+	bool "lwdnsq (required)"
+	default y
 	depends on USER_OPENSWAN
 
 config IPSEC_CONNECTION_LIMIT_BOOL
@@ -2141,7 +2160,6 @@ config USER_PPPD_WITH_PAM
 config USER_PPPD_WITH_MPPE
 	bool "enable MPPE"
 	depends on USER_PPPD_PPPD_PPPD
-	select LIB_LIBDES
 	help
 	  If you want to run PPP/PPTP with encrypted connections, enable this.
 
@@ -2321,11 +2339,22 @@ config USER_RSYNC_RSYNC
 	  network file copying utility that copies only the differences
 	  between files Approx. binary size on SH4: 255k
 
+config USER_RSYSLOG_RSYSLOGD
+	bool "rsyslog"
+	help
+	  Full featured syslog daemon.
+
 config USER_RSYSLOGD_RSYSLOGD
 	bool "rsyslogd"
 	help
 	  Simple remote syslog receiver.
 
+config USER_LOGROTATE_LOGROTATE
+	bool "logrotate"
+	select LIB_POPT
+	help
+	  system log rotation/backup/compression utility
+  
 config USER_SER_SER
 	bool "ser"
 	help
@@ -2424,6 +2453,24 @@ config USER_SSH_SSHKEYGEN
 config USER_SSH_SCP
 	bool "scp"
 	depends on USER_SSH_SSH
+
+config USER_SSH_SFTP
+	bool "sftp"
+	depends on USER_SSH_SSH
+
+config USER_SSH_SFTP_SERVER
+	bool "sftp-server"
+	depends on USER_SSH_SSH
+
+config USER_SSH_SSH_KEYSIGN
+	bool "ssh-keysign"
+	depends on USER_SSH_SSH
+
+config USER_SSH_ONLY_RSA_V2_KEYGEN
+	bool "ssh-only-rsa-v2-keygen"
+	depends on USER_SSH_SSH
+	help
+	  This limits the SSH keys generated to RSAv2 only.
 
 config USER_STP_STP
 	bool "stp"
@@ -2526,6 +2573,11 @@ config USER_THTTPD_THTTPD
 	help
 	  Tiny HTTPD
 	  Approx. binary size: 52k
+
+config USER_TINYPROXY_TINYPROXY
+	bool "tinyproxy"
+	help
+	  Tiny HTTP proxy
 
 config USER_TRACEROUTE_TRACEROUTE
 	bool "traceroute"
@@ -2939,6 +2991,19 @@ config USER_JAMVM_JAMVM
 	bool "jamvm"
 	help
 	  Virtual machine which conforms to JVM specification 2
+
+config USER_KEXEC_KEXEC
+	bool "kexec loader"
+	help
+	  The kexec-tools "kexec" kernel loader.
+
+config USER_SGUTOOL_SGUTOOL
+	bool "sgutool"
+	help
+	  Tool that can manipulate SGU images. Options to extract the
+	  vendor, hardware and version fields and extract the old style
+	  checksums. Also ability to extract and write out the kernel and
+	  filesystem parts, and also extract crypto signature information.
 
 config USER_LCD_LCD
 	bool "lcd"

@@ -1,7 +1,7 @@
 /*
  * define path names
  *
- * $Id: pathnames.h,v 1.16 2007-11-23 06:12:46 asallawa Exp $
+ * $Id: pathnames.h,v 1.17 2008-10-23 01:21:53 asallawa Exp $
  */
 
 #ifdef HAVE_PATHS_H
@@ -43,7 +43,7 @@
 #define _PATH_TTYOPT	 _ROOT_PATH PATH_CONFIG "/options."
 #define _PATH_CONNERRS	 _ROOT_PATH PATH_LOG    "/connect-errors"
 #define _PATH_PEERFILES	 _ROOT_PATH PATH_CONFIG "/peers/"
-#define _PATH_RESOLV	 _ROOT_PATH PATH_RESOLV "/resolv.conf"
+#define _PATH_RESOLV	 _ROOT_PATH PATH_RESOLV "/%s.resolv"
 
 #ifdef PATH_ETC_CONFIG
 #define _PATH_DEFAULT_IPUP	"/etc/default/ip-up"

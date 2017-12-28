@@ -1,10 +1,4 @@
-ifndef CONFIG_USER_FNORD_HTTPD
-# Not running under the uClinux build environment,
-# so build a host version for debugging.
-# This one runs in server mode so that we don't need tcpserver
-CFLAGS += -g -DHOSTBUILD -I../.. -DDEBUG -DLOG_TO_SYSLOG -DSERVER_MODE #-DCHECK_STR_COPY
-LDLIBS += -lcrypt
-endif
+-include hostbuild.mak
 
 #CFLAGS=-Os -fomit-frame-pointer
 VERSION=$(shell head -1 CHANGES|sed 's/://')
@@ -23,6 +17,9 @@ OBJS += httpd.o
 
 ifdef CONFIG_PROP_FNORD_SECURITY_COUNT
 CFLAGS += -DSECURITY_COUNTS
+endif
+ifdef CONFIG_USER_FNORD_404_REDIR
+CFLAGS += -DAUTO_REDIRECT
 endif
 
 ifndef CONFIG_USER_FNORD_NOAUTH

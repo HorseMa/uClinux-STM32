@@ -21691,9 +21691,9 @@ cat >>confdefs.h <<\_ACEOF
 _ACEOF
 
     use_zip_yes=
-    use_zip_no='#'
+    use_zip_no=':'
 else
-    use_zip_yes='#'
+    use_zip_yes=':'
     use_zip_no=
 fi
 

@@ -232,18 +232,29 @@ static void __init gen_tabs(void)
 	ctx->key_enc[8 * i + 15] = t;			\
 } while (0)
 
-int crypto_aes_set_key(struct crypto_tfm *tfm, const u8 *in_key,
+/**
+ * crypto_aes_expand_key - Expands the AES key as described in FIPS-197
+ * @ctx:	The location where the computed key will be stored.
+ * @in_key:	The supplied key.
+ * @key_len:	The length of the supplied key.
+ *
+ * Returns 0 on success. The function fails only if an invalid key size (or
+ * pointer) is supplied.
+ * The expanded key size is 240 bytes (max of 14 rounds with a unique 16 bytes
+ * key schedule plus a 16 bytes key which is used before the first round).
+ * The decryption key is prepared for the "Equivalent Inverse Cipher" as
+ * described in FIPS-197. The first slot (16 bytes) of each key (enc or dec) is
+ * for the initial combination, the second slot for the first round and so on.
+ */
+int crypto_aes_expand_key(struct crypto_aes_ctx *ctx, const u8 *in_key,
 		unsigned int key_len)
 {
-	struct crypto_aes_ctx *ctx = crypto_tfm_ctx(tfm);
 	const __le32 *key = (const __le32 *)in_key;
-	u32 *flags = &tfm->crt_flags;
 	u32 i, t, u, v, w, j;
 
-	if (key_len % 8) {
-		*flags |= CRYPTO_TFM_RES_BAD_KEY_LEN;
+	if (key_len != AES_KEYSIZE_128 && key_len != AES_KEYSIZE_192 &&
+			key_len != AES_KEYSIZE_256)
 		return -EINVAL;
-	}
 
 	ctx->key_length = key_len;
 
@@ -253,20 +264,20 @@ int crypto_aes_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	ctx->key_dec[key_len + 27] = ctx->key_enc[3] = le32_to_cpu(key[3]);
 
 	switch (key_len) {
-	case 16:
+	case AES_KEYSIZE_128:
 		t = ctx->key_enc[3];
 		for (i = 0; i < 10; ++i)
 			loop4(i);
 		break;
 
-	case 24:
+	case AES_KEYSIZE_192:
 		ctx->key_enc[4] = le32_to_cpu(key[4]);
 		t = ctx->key_enc[5] = le32_to_cpu(key[5]);
 		for (i = 0; i < 8; ++i)
 			loop6(i);
 		break;
 
-	case 32:
+	case AES_KEYSIZE_256:
 		ctx->key_enc[4] = le32_to_cpu(key[4]);
 		ctx->key_enc[5] = le32_to_cpu(key[5]);
 		ctx->key_enc[6] = le32_to_cpu(key[6]);
@@ -287,29 +298,58 @@ int crypto_aes_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(crypto_aes_expand_key);
+
+/**
+ * crypto_aes_set_key - Set the AES key.
+ * @tfm:	The %crypto_tfm that is used in the context.
+ * @in_key:	The input key.
+ * @key_len:	The size of the key.
+ *
+ * Returns 0 on success, on failure the %CRYPTO_TFM_RES_BAD_KEY_LEN flag in tfm
+ * is set. The function uses crypto_aes_expand_key() to expand the key.
+ * &crypto_aes_ctx _must_ be the private data embedded in @tfm which is
+ * retrieved with crypto_tfm_ctx().
+ */
+static int __crypto_aes_set_key(struct crypto_aes_ctx *ctx, u32 *flags,
+		const u8 *in_key, unsigned int key_len)
+{
+	int ret;
+
+	ret = crypto_aes_expand_key(ctx, in_key, key_len);
+	if (!ret)
+		return 0;
+
+	*flags |= CRYPTO_TFM_RES_BAD_KEY_LEN;
+	return -EINVAL;
+}
+
+int crypto_aes_set_key(struct crypto_tfm *tfm, const u8 *in_key,
+		unsigned int key_len)
+{
+	return __crypto_aes_set_key(crypto_tfm_ctx(tfm), &tfm->crt_flags,
+			in_key, key_len);
+}
 EXPORT_SYMBOL_GPL(crypto_aes_set_key);
 
 #ifdef CONFIG_FIPS_RNG
 /* For use by get_random_bytes() before crypto module loaded,
  * when using the FIPS RNG in the kernel.
  */
-int rand_aes_set_key(struct crypto_tfm *tfm, const u8 *in_key,
-		       unsigned int key_len)
+int rand_aes_set_key(struct crypto_aes_ctx *ctx, const u8 *in_key,
+		unsigned int key_len)
 {
 	static int configured = 0;
-	int ret = 0;
+	u32 flags;
 
 	if (!configured) {
 		gen_tabs();
 		configured = 1;
 	}
 
-	ret = crypto_aes_set_key(tfm, in_key, key_len);
-
-	return ret;
+	return __crypto_aes_set_key(ctx, &flags, in_key, key_len);
 }
-EXPORT_SYMBOL(rand_aes_set_key);
-#endif /* #ifdef CONFIG_FIPS_RNG */
+#endif
 
 /* encrypt a block of text */
 
@@ -342,9 +382,9 @@ EXPORT_SYMBOL(rand_aes_set_key);
 	f_rl(bo, bi, 3, k);	\
 } while (0)
 
-static void aes_encrypt(struct crypto_tfm *tfm, u8 *out, const u8 *in)
+static void __aes_encrypt(const struct crypto_aes_ctx *ctx, u8 *out,
+		const u8 *in)
 {
-	const struct crypto_aes_ctx *ctx = crypto_tfm_ctx(tfm);
 	const __le32 *src = (const __le32 *)in;
 	__le32 *dst = (__le32 *)out;
 	u32 b0[4], b1[4];
@@ -383,16 +423,21 @@ static void aes_encrypt(struct crypto_tfm *tfm, u8 *out, const u8 *in)
 	dst[3] = cpu_to_le32(b0[3]);
 }
 
+static void aes_encrypt(struct crypto_tfm *tfm, u8 *out, const u8 *in)
+{
+	__aes_encrypt(crypto_tfm_ctx(tfm), out, in);
+}
+
 #ifdef CONFIG_FIPS_RNG
 /* For use by get_random_bytes() before crypto module loaded,
  * when using the FIPS RNG in the kernel.
  */
-void rand_aes_encrypt(struct crypto_tfm *tfm, u8 *out, const u8 *in)
+void rand_aes_encrypt(const struct crypto_aes_ctx *ctx, u8 *out,
+		const u8 *in)
 {
-	aes_encrypt(tfm, out, in);
+	__aes_encrypt(ctx, out, in);
 }
-EXPORT_SYMBOL(rand_aes_encrypt);
-#endif /* #ifdef CONFIG_FIPS_RNG */
+#endif
 
 /* decrypt a block of text */
 

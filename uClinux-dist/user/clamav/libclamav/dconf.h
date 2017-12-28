@@ -27,6 +27,7 @@
 
 #include "clamav.h"
 #include "cltypes.h"
+#include "cvd.h"
 
 struct cli_dconf {
     uint32_t pe;
@@ -77,7 +78,8 @@ struct cli_dconf {
 #define DOC_CONF_RTF		0x2
 #define DOC_CONF_PDF		0x4
 #define DOC_CONF_SCRIPT 	0x8
-#define DOC_CONF_HTML_SKIPRAW	0x16
+#define DOC_CONF_HTML_SKIPRAW	0x10
+#define DOC_CONF_JSNORM         0x20
 
 /* Mail flags */
 #define MAIL_CONF_MBOX	    0x1
@@ -89,6 +91,7 @@ struct cli_dconf {
 #define OTHER_CONF_RIFF	    0x4
 #define OTHER_CONF_JPEG	    0x8
 #define OTHER_CONF_CRYPTFF  0x10
+#define OTHER_CONF_DLP	    0x20
 
 /* Phishing flags */
 #define PHISHING_CONF_ENGINE   0x1
@@ -96,5 +99,5 @@ struct cli_dconf {
 
 struct cli_dconf *cli_dconf_init(void);
 void cli_dconf_print(struct cli_dconf *dconf);
-int cli_dconf_load(FILE *fs, struct cl_engine **engine, unsigned int options, gzFile *gzs, unsigned int gzrsize);
+int cli_dconf_load(FILE *fs, struct cl_engine **engine, unsigned int options, struct cli_dbio *dbio);
 #endif

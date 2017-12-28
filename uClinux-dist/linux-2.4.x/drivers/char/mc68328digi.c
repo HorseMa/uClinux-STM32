@@ -59,6 +59,41 @@
  *     ADS7843: /PENIRQ ----+----[100k resistor]---- EZ328: PD4
  *                          |
  *                          +----------------------- EZ328: /IRQ5
+ * PSW uCdimm plus LCD module
+ * Connectivity:  Burr-Brown        DragonBall
+ *                PENIRQ     ---->  PD0  &  PD4 (with a 100k resistor)
+ *                BUSY       ---->  PA7 (87) port k7
+ *                CS         ---->  PA6 (86) port k6
+ *                DIN        ---->  PE0
+ *                DOUT       ---->  PE1
+ *                DCLK       ---->  PE2
+ *
+ *     ADS7843: /PENIRQ ----+----[100k resistor]-+-- EZ328: PD4
+ *                          |                    |
+ *                          |    +----|>|--------+
+ *                          |    |    in914 diode
+ *                          +----+------------------ EZ328: PD0 /INT0
+ *
+ * note that to make this work on the uCevolution board
+ * the extra in914 diode has to be added due to
+ * the extra pull up resistors found around pb0 
+ *
+ *  pulling PD4 low will for sure turn off the bias
+ *  but to check for pen down the following sequence is used.
+ *  turn off PD0 irqs 
+ *  turn PD0 into a level sensitive input 
+ *  set PD4 high
+ *  look at the state of PD0
+ *  if 1 the pen is down
+ *  set PD4 low and continue
+ *
+ *  after the final time out we need to do this
+ *
+ *  turn PD0 into a -ve edge  sensitive input 
+ *  set PD4 high
+ *  turn on PD0 irqs 
+ *   
+ * 
  *
  * States graph:
  *
@@ -116,10 +151,11 @@
                               * once for each clock tick; thus it's incremented
 			      * HZ times per secondes.*/
 #include <linux/mm.h>        /* for verify_area */
-#include <linux/malloc.h>    /* for kmalloc */
+#include <linux/slab.h>    /* for kmalloc */
 #include <linux/init.h>
 
 #include <asm/irq.h>         /* For IRQ_MACHSPEC */
+#include <asm/delay.h>         /* For udelay */
 
 /*----------------------------------------------------------------------------*/
 
@@ -172,7 +208,7 @@
 
 static const char* __file__ = __FILE__;
 
-/*----------------------------------------------------------------------------*//*
+/*----------------------------------------------------------------------------
  * Kernel compatibility.
  * Kernel > 2.2.3, include/linux/version.h contain a macro for KERNEL_VERSION
  */
@@ -210,6 +246,15 @@ static const char* __file__ = __FILE__;
  * Size of the buffer for the event queue
  */
 #define TS_BUF_SIZE        32*DATA_LENGTH
+
+/*
+ * new copy less pointer structure
+ */
+#define TSP_MAX 32
+static volatile int tsp_next;
+static volatile int tsp_read;
+static volatile int tsp_current;
+static struct ts_pen_info tsp_data[TSP_MAX];
 
 /*
  * Minor number for the touch screen device. Major is 10 because of the misc 
@@ -293,27 +338,45 @@ static const char* __file__ = __FILE__;
  * Useful masks.
  */
 #if defined (CONFIG_UCDIMM)
-#define PEN_MASK	PD_IRQ6  /* pen irq signal from the Burr-Brown is */
+/* PSW notes
+ *  PD_IRQ6 = 0x80  (PD7)   <== not used
+ *  PD_IRQ1 = 0x10  (PD4)   <== set to 0 for bias off
+ *  PD_INT0 = 0x01  (PD0)   <== interrupt
+
+ *  USE_PENIRQ_PULLUP needs to be defined to allow the use of the pullup
+
+ *  PSW SYSTEM CHECKING
+ *  PEN_MASK_2 is OK need to define USE_PENIRQ_PULLUP though
+ *  PEN_MASK moved from PD_IRQ6 to PD_INT0
+ */
+#define USE_PENIRQ_PULLUP   /*PSW*/
+
+#define PEN_MASK	PD_INT0  /* pen irq signal from the Burr-Brown is */
 #define PEN_MASK_2	PD_IRQ1  /* connected to 2 pins of the DragonBall */
                              /* (bit 2 port F and bit 4 port D)       */
-#define BUSY_MASK	PF_A22
-#define CS_MASK		PF_CSA1
+#define BUSY_MASK	PK_LD7   /* 0x80  */
+#define CS_MASK		PK_LD6   /* 0x40 */
 #define PESEL_MASK	0x07
 #define CONV_MASK	0x0FFF   /* 12 bit conversion */
 
-#define PEN_IRQ_NUM	IRQ6_IRQ_NUM
+/*#define PEN_IRQ_NUM	IRQ6_IRQ_NUM */
+#define PEN_IRQ_NUM	INT0_IRQ_NUM  /* PSW */
 
-#define CS_DATA		PFDATA
-#define CS_PUEN		PFPUEN
-#define CS_DIR		PFDIR
-#define CS_SEL		PFSEL
+#define CS_DATA		PKDATA   /* All OK now PSW */
+#define CS_PUEN		PKPUEN
+#define CS_DIR		PKDIR
+#define CS_SEL		PKSEL
 
 #define PENIRQ_DATA 	PDDATA
 #define PENIRQ_PUEN	PDPUEN
 #define PENIRQ_DIR	PDDIR
 #define PENIRQ_SEL	PDSEL
-#define ICR_PENPOL	ICR_POL6
-#define IMR_MPEN	IMR_MIRQ6
+#define PENIRQ_POL	PDPOL     /* OK PSW 1= active low 0 = active hi */
+#define PENIRQ_IRQEN	PDIRQEN   /* OK PSW 1=enabled 0=disabled */
+#define PENIRQ_IQEG	PDIQEG    /* OK PSW 0=level 1=edge */
+#define PENIRQ_KBEN	PDKBEN    /* OK PSW */
+#define ICR_PENPOL	ICR_POL6  /* Not used PSW */
+#define IMR_MPEN	IMR_MINT0 /* OK PSW */
 
 #else
 #error "unexpected"
@@ -375,13 +438,50 @@ static const char* __file__ = __FILE__;
 #ifdef CONFIG_XCOPILOT_BUGS
 # define IS_PEN_DOWN    ((IPR&IPR_PEN)!=0)
 #else
-# define IS_PEN_DOWN	((PENIRQ_DATA & PEN_MASK)==ST_PEN_DOWN)
+/*# define IS_PEN_DOWN	((PENIRQ_DATA & PEN_MASK)==ST_PEN_DOWN) */
+# define IS_PEN_DOWN	is_pen_down()
 #endif
+
+int is_pen_down(void)
+{
+  int penirq;
+  int penlvl;
+  int pendown;
+
+  penirq = PENIRQ_IRQEN & PEN_MASK;
+  penlvl = PENIRQ_IQEG & PEN_MASK;
+
+  /* turn off pen irqs */
+  PENIRQ_IRQEN &=  ~PEN_MASK;  /* PD0 disable IRQ */
+
+  /* turn pen level sensitive */
+  PENIRQ_IQEG  &=  ~PEN_MASK;  /* PD0 disable IRQ edge */
+  /* turn off PD4 */
+  PDDATA |= PEN_MASK_2;    /* PD4 = 0 */
+  udelay(1);
+
+  /* inspect */
+  pendown = PENIRQ_DATA & PEN_MASK;
+
+  /* turn off  PD4 */
+  PDDATA &= ~PEN_MASK_2;    /* PD4 = 1  */
+
+
+
+  /* turn pen edge sensitive */
+  if ( penlvl )
+    PENIRQ_IQEG  |=  PEN_MASK;  /* PD0 enable IRQ edge */
+
+  /* turn on pen irqs */
+  if ( penirq )
+    PENIRQ_IRQEN |=  PEN_MASK;  /* PD0 enable IRQ */  
+  return pendown;
+}
 
 /*
  * State of the BUSY signal of the SPIM.
  */
-#define IS_BUSY_ENDED   ((PFDATA & BUSY_MASK)==0)
+#define IS_BUSY_ENDED   ((PKDATA & BUSY_MASK)==0)
 
 /*
  * Write the SPIM (data and control).
@@ -400,8 +500,8 @@ static const char* __file__ = __FILE__;
 # define CARD_SELECT   
 # define CARD_DESELECT 
 #else
-# define CARD_SELECT   { CS_DATA &= ~CS_MASK; }     /* PB4 active (=low)       */
-# define CARD_DESELECT { CS_DATA |=  CS_MASK; }     /* PB4 inactive (=high)    */
+# define CARD_SELECT   { CS_DATA &= ~CS_MASK; }     /* PK6 active (=low)       */
+# define CARD_DESELECT { CS_DATA |=  CS_MASK; }     /* PK6 inactive (=high)    */
 #endif
 /*----------------------------------------------------------------------------*/
 
@@ -413,12 +513,21 @@ static const char* __file__ = __FILE__;
 
 #define CLEAR_SPIM_IRQ    { SPIMCONT &= ~SPIMCONT_IRQ; }
 
+#define ENABLE_PENINT { PDDATA |= PEN_MASK_2; }
+#define DISABLE_PENINT { PDDATA &= ~PEN_MASK_2; }
+
 /*----------------------------------------------------------------------------*/
 /* predefinitions ------------------------------------------------------------*/
 
 static void handle_timeout(void);
 static void handle_pen_irq(int irq, void *dev_id, struct pt_regs *regs);
-static void handle_spi_irq(void);
+static void handle_spi_irq(int irq, void *dev_id, struct pt_regs *regs);
+
+static struct ts_pen_info * get_curr_tsp(void);
+static struct ts_pen_info * get_prev_tsp(void);
+static struct ts_pen_info * get_next_tsp(void);
+
+/*static void handle_spi_irq(void);*/
 
 /*----------------------------------------------------------------------------*/
 /* structure -----------------------------------------------------------------*/
@@ -430,7 +539,7 @@ struct ts_queue {
   unsigned long tail;
   wait_queue_head_t proc_list;
   struct fasync_struct *fasync;
-  unsigned char buf[TS_BUF_SIZE];
+  /*unsigned char buf[TS_BUF_SIZE];*/
 };
 
 /*----------------------------------------------------------------------------*/
@@ -471,8 +580,8 @@ static int                       sample_ticks;
 /*
  * pen info variables.
  */
-static struct ts_pen_info        ts_pen;
-static struct ts_pen_info        ts_pen_prev;
+/*static struct ts_pen_info        ts_pen; */
+/*static struct ts_pen_info        ts_pen_prev; */
 static struct ts_pen_position    current_pos;
 
 /*
@@ -492,20 +601,29 @@ static void init_ts_state(void) {
 
   ts_drv_state = TS_DRV_IDLE;
   state_counter = 0;
-
-  ENABLE_PEN_IRQ;        /* Enable interrupt IRQ5  */
+  ENABLE_PENINT ;        /* enable penint diode */
+  ENABLE_PEN_IRQ;        /* Enable interrupt INT0  */
+}
+static int init_new_tsp(void) {
+  tsp_current = tsp_read = tsp_next = 1;
+  return 0;
 }
 
 static void init_ts_pen_values(void) {
-  ts_pen.x = 0;ts_pen.y = 0;
-  ts_pen.dx = 0;ts_pen.dy = 0;
-  ts_pen.event = EV_PEN_UP;
-  ts_pen.state &= 0;ts_pen.state |= ST_PEN_UP;
+  struct ts_pen_info * ts_p =get_curr_tsp();
+  struct ts_pen_info * ts_p_prev = get_prev_tsp();
 
-  ts_pen_prev.x = 0;ts_pen_prev.y = 0;
-  ts_pen_prev.dx = 0;ts_pen_prev.dy = 0;
-  ts_pen_prev.event = EV_PEN_UP;
-  ts_pen_prev.state &= 0;ts_pen_prev.state |= ST_PEN_UP;
+  ts_p->id = 0;
+
+  ts_p->x = 0;ts_p->y = 0;
+  ts_p->dx = 0;ts_p->dy = 0;
+  ts_p->event = EV_PEN_UP;
+  ts_p->state &= 0;ts_p->state |= ST_PEN_UP;
+
+  ts_p_prev->x = 0;ts_p_prev->y = 0;
+  ts_p_prev->dx = 0;ts_p_prev->dy = 0;
+  ts_p_prev->event = EV_PEN_UP;
+  ts_p_prev->state &= 0;ts_p_prev->state |= ST_PEN_UP;
   
   new_pen_state = 0;
   ev_counter = 0;
@@ -540,40 +658,38 @@ static void init_ts_settings(void) {
   current_params.y_max = 4095;
   current_params.mv_thrs = 50;
   current_params.follow_thrs = 5;    /* to eliminate the conversion noise */
-  current_params.sample_ms = 20;
+  current_params.sample_ms = 100;
   current_params.deglitch_on = 1;
   current_params.event_queue_on = 1;
   sample_ticks = TICKS(current_params.sample_ms);
 }
 
 static void init_ts_hardware(void) {
-  /* Set bit 2 of port F for interrupt (IRQ5 for pen_irq)                 */
-#if 0
-  PENIRQ_PUEN |= PEN_MASK;     /* Port F as pull-up			*/
-#endif
-  PENIRQ_DIR &= ~PEN_MASK;    /* PF1 as input                                 */
-  PENIRQ_SEL &= ~PEN_MASK;    /* PF1 internal chip function is connected
-			       */
-#if 0
-  /* Set polarity of IRQ5 as low (interrupt occure when signal is low)    */
-  ICR &= ~ICR_PENPOL;
-#endif
+  /*PENIRQ_PUEN  &=  ~PEN_MASK; Port D no pull-up	always busy */
+  PENIRQ_PUEN  |=  PEN_MASK;  /* Port D as pull-up	try this */
+
+  PENIRQ_DIR   &= ~PEN_MASK;  /* PD0 as input                             */
+  /*PENIRQ_SEL &= ~PEN_MASK;  PD0 internal chip function is connected     */
+  PENIRQ_POL   |=  PEN_MASK;  /* PD0 polarity is active LOW               */
+  PENIRQ_KBEN  &= ~PEN_MASK;  /* PD0 disable keyboard                     */
+  PENIRQ_IQEG  |=  PEN_MASK;  /* PD0 enable IRQ edge                      */
+  PENIRQ_IRQEN |=  PEN_MASK;  /* PD0 enable IRQ                           */
 
   /* Init stuff for port E. The 3 LSB are multiplexed with the SPIM       */
   PESEL &= ~PESEL_MASK;
   
-  /* Set bit 4 of port B for the CARD_SELECT signal of ADS7843 as output. */
+  /* Set bit 6 of port K for the CARD_SELECT signal of ADS7843 as output. */
 #ifndef CONFIG_XCOPILOT_BUGS
-  CS_PUEN |= CS_MASK;       /* Port B as pull-up                           */
-  CS_DIR  |= CS_MASK;       /* PB4 as output                               */
-  CS_DATA |= CS_MASK;       /* PB4 inactive (=high)                        */
-  CS_SEL  |= CS_MASK;       /* PB4 as I/O not dedicated                    */
+  CS_PUEN |= CS_MASK;       /* Port K as pull-up                           */
+  CS_DIR  |= CS_MASK;       /* PK6 as output                               */
+  CS_DATA |= CS_MASK;       /* PK6 inactive (=high)                        */
+  CS_SEL  |= CS_MASK;       /* PK6 as I/O not dedicated                    */
 #endif
   
-  /* Set bit 5 of port F for the BUSY signal of ADS7843 as input          */
-  PFPUEN |= BUSY_MASK;     /* Port F as pull-up                           */
-  PFDIR  &= ~BUSY_MASK;    /* PF5 as input                                */
-  PFSEL  |= BUSY_MASK;     /* PF5 I/O port function pin is connected      */
+  /* Set bit 7 of port K for the BUSY signal of ADS7843 as input          */
+  PKPUEN |= BUSY_MASK;     /* Port K as pull-up                           */
+  PKDIR  &= ~BUSY_MASK;    /* PK7 as input                                */
+  PKSEL  |= BUSY_MASK;     /* PK7 I/O port function pin is connected      */
 
 #ifdef USE_PENIRQ_PULLUP
   /* Set bit 4 of port D for the pen irq pull-up of ADS7843 as output.    */
@@ -604,24 +720,25 @@ static void release_ts_hardware(void) {
   PDPUEN |= PEN_MASK_2;   /* PDPUEN     0xFF          */
   PDSEL  |= PEN_MASK_2;   /* PDSEL      0xF0          */
 #endif
-  PENIRQ_PUEN |= PEN_MASK;     /* PFPUEN     0xFF          */
-  PENIRQ_DIR  &= ~PEN_MASK;    /* PFDIR      0x00          */
-  PENIRQ_SEL  |= PEN_MASK;     /* PFSEL      0xFF          */
+  PENIRQ_PUEN |= PEN_MASK;     /* PDPUEN     0xFF          */
+  PENIRQ_DIR  &= ~PEN_MASK;    /* PDDIR      0x00          */
+  PENIRQ_SEL  |= PEN_MASK;     /* PDSEL      0xFF          */
 #endif
   IMR    |= IMR_MPEN;     /* IMR        0xFFFFFFFF    */
                           /* I release it anyway!     */ 
 }
 
 static void init_ts_drv(void) {
-  printk("a\n");
+  /*printk("a\n");*/
   init_ts_state();
-  printk("b\n");
+  /*printk("b\n");*/
+  init_new_tsp();
   init_ts_pen_values();
-  printk("c\n");
+  /*printk("c\n");*/
   init_ts_timer(&ts_wake_time);
-  printk("d\n");
+  /*printk("d\n");*/
   init_ts_hardware();
-  printk("e\n");
+  /*printk("e\n");*/
 }
 
 static void release_ts_drv(void) {
@@ -752,8 +869,11 @@ static void set_SPIM_transfert(void) {
 #ifdef USE_PENIRQ_PULLUP
   PDDATA &= ~PEN_MASK_2;        /* Pull down I/0 2 of PENIRQ */
 #endif
+#if 0
+  /* PSW no longer effective */
   PENIRQ_DIR  |= PEN_MASK;      /* I/O 1 of PENIRQ as output */
   PENIRQ_DATA &= ~PEN_MASK;     /* Pull down I/O 2 of PENIRQ */
+#endif
 
   /* Initiate selection and parameters for using the Burr-Brown ADS7843
    * and the DragonBall SPIM.
@@ -766,7 +886,7 @@ static void set_SPIM_transfert(void) {
 /*
  * Clock the Burr-Brown to fall the AD_BUSY. 
  * With a 'start' bit and PD1,PD0 = 00 to enable PENIRQ.
- * Used for the first pen irq after booting. And when error occures during
+ * Used for the first pen irq after booting. And when error occurs during
  * conversion that need an initialisation.
  */
 static void fall_BUSY_enable_PENIRQ(void) {
@@ -784,8 +904,11 @@ static void release_SPIM_transfert(void) {
 #ifdef USE_PENIRQ_PULLUP
   PDDATA |= PEN_MASK_2;       /* Pull up I/0 2 of PENIRQ   */
 #endif
+#if 0
+  /* PSW no longer effective */
   PENIRQ_DIR  &= ~PEN_MASK;   /* I/O 1 of PENIRQ as input  */
   PENIRQ_DATA |= PEN_MASK;    /* Pull down I/O 2 of PENIRQ */
+#endif
 }
 
 /*
@@ -860,7 +983,7 @@ static void put_in_queue(char *in, int len) {
       head++;
       head &= (TS_BUF_SIZE - 1);
     }
-  //else printk("%0: Queue is full !!!!\n", __file__);
+  /*else printk("%0: Queue is full !!!!\n", __file__); */
   queue->head = head;
 }
 
@@ -879,16 +1002,22 @@ static int is_moving(void) {
   int threshold;
   int dx, dy;
   
-  threshold=((ts_pen_prev.event & EV_PEN_MOVE) > 0 ?
+  struct ts_pen_info * ts_p_prev;
+  ts_p_prev = get_curr_tsp();
+
+  threshold=((ts_p_prev->event & EV_PEN_MOVE) > 0 ?
              current_params.follow_thrs : current_params.mv_thrs);
-  dx = current_pos.x-ts_pen_prev.x;
-  dy = current_pos.y-ts_pen_prev.y;
+  dx = current_pos.x-ts_p_prev->x;
+  dy = current_pos.y-ts_p_prev->y;
   if(dx < 0) dx = -dx; /* abs() */
   if(dy < 0) dy = -dy;
   return (dx > threshold ? 1 :
 	  (dy > threshold ? 1 : 0));
 }
 
+
+/*
+PSW NO LONGER NEEDED
 static void copy_info(void) {
   ts_pen_prev.x = ts_pen.x;
   ts_pen_prev.y = ts_pen.y;
@@ -899,6 +1028,7 @@ static void copy_info(void) {
   ts_pen_prev.ev_no = ts_pen.ev_no;
   ts_pen_prev.ev_time = ts_pen.ev_time;
 }
+*/
 
 unsigned long set_ev_time(void) {
   struct timeval now;
@@ -908,24 +1038,88 @@ unsigned long set_ev_time(void) {
          (now.tv_usec-first_tick.tv_usec)/1000;
 }
 
+
+
+static struct ts_pen_info * get_next_tsp(void)
+{
+  return &tsp_data[tsp_next];
+}
+
+
+static struct ts_pen_info * get_curr_tsp(void)
+{
+  return &tsp_data[tsp_current];
+}
+
+static struct ts_pen_info * get_prev_tsp(void)
+{
+  if (tsp_current > 0) 
+    return &tsp_data[tsp_current-1];
+  else 
+    return &tsp_data[TSP_MAX-1];
+}
+
+
+static struct ts_pen_info * get_read_tsp(void)
+{
+  return &tsp_data[tsp_read];
+}
+
+
+static int set_tsp_next(void)
+{
+  int temp;
+  tsp_current = tsp_next;
+
+  temp = tsp_next++;
+  temp++;
+  if ( temp >= TSP_MAX ) temp = 0;
+  tsp_next = temp;
+
+  return tsp_next;
+
+}
+
+static int set_next_read(void)
+{
+  tsp_read++;
+  if ( tsp_read >= TSP_MAX ) tsp_read = 0;
+  return tsp_read;
+
+}
+
+
 static void cause_event(int conv) {
+  struct ts_pen_info * ts_p;
+  struct ts_pen_info * ts_p_prev;
+
+  ts_p = get_next_tsp();
+  ts_p_prev = get_curr_tsp();
 
   switch(conv) {
 
   case CONV_ERROR: /* error occure during conversion */
-    ts_pen.state &= 0;            /* clear */
-    ts_pen.state |= ST_PEN_UP;    /* recover a stable state for the drv.      */
-    ts_pen.state |= ST_PEN_ERROR; /* tell that the state is due to an error   */
-    ts_pen.event = EV_PEN_UP;     /* event = pen go to up */
-    ts_pen.x = ts_pen_prev.x;     /* get previous coord as current to by-pass */
-    ts_pen.y = ts_pen_prev.y;     /* possible errors                          */
-    ts_pen.dx = 0;
-    ts_pen.dy = 0;
-    ts_pen.ev_no = ev_counter++;    /* get no of event   */
-    ts_pen.ev_time = set_ev_time(); /* get time of event */
+    ts_p->id = TS_INFO_ID;
+    ts_p->state = 0;            /* clear */
+    ts_p->state |= ST_PEN_UP;    /* recover a stable state for the drv.     */
+    ts_p->state |= ST_PEN_ERROR; /* tell that the state is due to an error  */
+    ts_p->event = EV_PEN_UP;     /* event = pen go to up */
+    ts_p->x = ts_p_prev->x;     /* get prev coord as current to by-pass */
+    ts_p->y = ts_p_prev->y;     /* possible errors                         */
+    ts_p->dx = 0;
+    ts_p->dy = 0;
+    ts_p->ev_no = ev_counter++;    /* get no of event   */
+    ts_p->ev_time = set_ev_time(); /* get time of event */
+    ts_p->portd = PDDATA;
+    ts_p->portk = PKDATA;
+
+#if 0 /* not needed */
     copy_info();                    /* remember info */
     if(current_params.event_queue_on)
-      put_in_queue((char *)&ts_pen,DATA_LENGTH);  /* queue event */
+      put_in_queue((char *)ts_p,DATA_LENGTH);  /* queue event */
+#endif
+
+    set_tsp_next();  /* advance pointer */
 
     /* tell user space progs that a new state occure */
     new_pen_state = 1;
@@ -936,22 +1130,29 @@ static void cause_event(int conv) {
     break;
     
   case CONV_LOOP:  /* pen is down, conversion continue */    
-    ts_pen.state &= 0;          /* clear */
-    ts_pen.state &= ST_PEN_DOWN;
+    ts_p->id = TS_INFO_ID;
+    ts_p->state = 0;          /* clear */
+    ts_p->state &= ST_PEN_DOWN;
 
     switch(state_counter) {       /* It could be a move   */
 	    
     case 1:    /* the pen just went down, it's a new state */
-      ts_pen.x = current_pos.x;
-      ts_pen.y = current_pos.y;
-      ts_pen.dx = 0;
-      ts_pen.dy = 0;
-      ts_pen.event = EV_PEN_DOWN;      /* event = pen go to down */
-      ts_pen.ev_no = ev_counter++;     /* get no of event        */
-      ts_pen.ev_time = set_ev_time();  /* get time of event */
+      ts_p->x = current_pos.x;
+      ts_p->y = current_pos.y;
+      ts_p->dx = 0;
+      ts_p->dy = 0;
+      ts_p->event = EV_PEN_DOWN;      /* event = pen go to down */
+      ts_p->ev_no = ev_counter++;     /* get no of event        */
+      ts_p->ev_time = set_ev_time();  /* get time of event */
+      ts_p->portd = PDDATA;
+      ts_p->portk = PKDATA;
+
+      set_tsp_next();  /* advance pointer */
+#if 0 /* not needed */
       copy_info();                     /* remember info */
       if(current_params.event_queue_on)
-        put_in_queue((char *)&ts_pen,DATA_LENGTH);  /* queue event */
+        put_in_queue((char *)ts_p,DATA_LENGTH);  /* queue event */
+#endif
 
       /* tell user space progs that a new state occure */
       new_pen_state = 1;
@@ -964,16 +1165,23 @@ static void cause_event(int conv) {
     case 2:    /* the pen is down for at least 2 loop of the state machine */
 
       if(is_moving()) {
-        ts_pen.event = EV_PEN_MOVE;
-        ts_pen.x = current_pos.x;
-        ts_pen.y = current_pos.y;
-        ts_pen.dx = ts_pen.x - ts_pen_prev.x;
-        ts_pen.dy = ts_pen.y - ts_pen_prev.y;
-        ts_pen.ev_no = ev_counter++;    /* get no of event   */
-        ts_pen.ev_time = set_ev_time(); /* get time of event */
+        ts_p->event = EV_PEN_MOVE;
+        ts_p->x = current_pos.x;
+        ts_p->y = current_pos.y;
+        ts_p->dx = ts_p->x - ts_p_prev->x;
+        ts_p->dy = ts_p->y - ts_p_prev->y;
+        ts_p->ev_no = ev_counter++;    /* get no of event   */
+        ts_p->ev_time = set_ev_time(); /* get time of event */
+	ts_p->portd = PDDATA;
+	ts_p->portk = PKDATA;
+
+	set_tsp_next();  /* advance pointer */
+
+#if 0 /* not needed */
         copy_info();                    /* remember info */
         if(current_params.event_queue_on)
-          put_in_queue((char *)&ts_pen,DATA_LENGTH);  /* queue event */
+          put_in_queue((char *)ts_p,DATA_LENGTH);  /* queue event */
+#endif
 
         /*
 	 * pen is moving, then it's anyway a good reason to tell it to
@@ -986,31 +1194,43 @@ static void cause_event(int conv) {
         wake_up_interruptible(&queue->proc_list);
       }
       else {
-        if(ts_pen_prev.event == EV_PEN_MOVE)  /* if previous state was moving */
-	  ts_pen.event = EV_PEN_MOVE;         /* -> keep it!                  */
-        ts_pen.x = ts_pen_prev.x;       /* No coord passing to     */
-        ts_pen.y = ts_pen_prev.y;       /* avoid Parkinson effects */
-        ts_pen.dx = 0;
-	ts_pen.dy = 0;  /* no wake-up interruptible because nothing new */
+        if(ts_p_prev->event == EV_PEN_MOVE)  /* if previous state was moving*/
+	  ts_p->event = EV_PEN_MOVE;         /* -> keep it!                */
+        ts_p->x = ts_p_prev->x;       /* No coord passing to     */
+        ts_p->y = ts_p_prev->y;       /* avoid Parkinson effects */
+        ts_p->dx = 0;
+	ts_p->dy = 0;  /* no wake-up interruptible because nothing new */
+#if 0 /* not needed */
         copy_info();    /* remember info */
+#endif
       }
       break;
     }
     break;
 
   case CONV_END:   /* pen is up, conversion ends */
-    ts_pen.state &= 0;         /* clear */
-    ts_pen.state |= ST_PEN_UP;
-    ts_pen.event = EV_PEN_UP;
-    ts_pen.x = current_pos.x;
-    ts_pen.y = current_pos.y;
-    ts_pen.dx = ts_pen.x - ts_pen_prev.x;
-    ts_pen.dy = ts_pen.y - ts_pen_prev.y;
-    ts_pen.ev_time = set_ev_time();  /* get time of event */
-    ts_pen.ev_no = ev_counter++;     /* get no of event   */
+    ts_p->id = TS_INFO_ID;
+    ts_p->state &= 0;         /* clear */
+    ts_p->state |= ST_PEN_UP;
+    ts_p->event = EV_PEN_UP;
+    ts_p->x = current_pos.x;
+    ts_p->y = current_pos.y;
+    ts_p->dx = ts_p->x - ts_p_prev->x;
+    ts_p->dy = ts_p->y - ts_p_prev->y;
+    ts_p->ev_time = set_ev_time();  /* get time of event */
+    ts_p->ev_no = ev_counter++;     /* get no of event   */
+    ts_p->portd = PDDATA;
+    ts_p->portk = PKDATA;
+    set_tsp_next();  /* advance pointer */
+
+    /*printk("CONV_END event id %d tsp_r %x tsp_c %x\n", ev_counter-1, 
+    	   tsp_read,tsp_current);*/
+
+#if 0 /* not needed */
     copy_info();                     /* remember info */
     if(current_params.event_queue_on)
-      put_in_queue((char *)&ts_pen,DATA_LENGTH);  /* queue event */
+      put_in_queue((char *)ts_p,DATA_LENGTH);  /* queue event */
+#endif
 
     /* tell user space progs that a new state occure */
     new_pen_state = 1;
@@ -1032,11 +1252,15 @@ static void handle_pen_irq(int irq, void *dev_id, struct pt_regs *regs) {
   unsigned long flags;
   int bypass_initial_timer = 0;
 
+  /* PSW Write a 1 to the data to clear an edge triggered interrupt */
+  PENIRQ_DATA |= PEN_MASK;
+
   /* if unwanted interrupts come, trash them */ 
   if(!device_open)
     return;
 
-  PENIRQ_DATA &= ~PEN_MASK;
+  /* PSW ack the interrupt perhaps see below */
+  /*PENIRQ_DATA &= ~PEN_MASK; */
 
 #ifdef CONFIG_XCOPILOT_BUGS
   if(IMR&IMR_MPEN) {
@@ -1050,7 +1274,8 @@ static void handle_pen_irq(int irq, void *dev_id, struct pt_regs *regs) {
 
   case TS_DRV_IDLE:  
     DISABLE_PEN_IRQ;
-    ts_drv_state++;      /* update driver state */
+    ts_drv_state = TS_DRV_WAIT; /* PSW make it explicit */
+
     if(current_params.deglitch_on)
       set_timer_irq(&ts_wake_time,sample_ticks);
     else
@@ -1121,8 +1346,9 @@ static void handle_timeout(void) {
     if(IS_PEN_DOWN) {
       if(state_counter < 2) state_counter++;
       set_timer_irq(&ts_wake_time,TICKS(CONV_TIME_LIMIT));
-      set_SPIM_transfert();
-      ts_drv_state++;
+      set_SPIM_transfert(); /* reverse bias the diode */
+      ts_drv_state = TS_DRV_ASKX;
+
       CLEAR_SPIM_IRQ;            /* Consume residual irq from spim */
       ENABLE_SPIM_IRQ;
       fall_BUSY_enable_PENIRQ();
@@ -1152,26 +1378,32 @@ static void handle_timeout(void) {
 
 #ifdef CONFIG_XCOPILOT_BUGS
   if (ts_drv_state==TS_DRV_ASKX) {
-    handle_spi_irq();
+    handle_spi_irq(0,NULL,NULL);
   }
-  PENIRQ_DATA |= PEN_MASK;
+  /* PSW enable the interupts again perhaps */
+  /*PENIRQ_DATA |= PEN_MASK; */
 #endif
 }
 
+static int e_first=0;
 /*
  * spi irq.
  */
-static void handle_spi_irq(void) {
+static void handle_spi_irq(int irq, void *dev_id, struct pt_regs *regs) {
   unsigned long flags;
 
+
+  CLEAR_SPIM_IRQ;       /* clear source of interrupt */
+
   /* if unwanted interrupts come, trash them */ 
-  if(!device_open)
+  if(!device_open) {
+    printk(" dropping spim interupts ...\n");
     return;
-  
-  save_flags(flags);     /* disable interrupts */
+  }  
+  save_flags(flags);     /* disable interrupts why ?? PSW */
   cli();
   
-  CLEAR_SPIM_IRQ;       /* clear source of interrupt */
+
 
   switch(ts_drv_state) {
 
@@ -1190,19 +1422,20 @@ static void handle_spi_irq(void) {
 #endif
     if(IS_BUSY_ENDED) {     /* If first BUSY down, then */
       ask_x_conv();         /* go on with conversion    */
-      ts_drv_state++;
+      ts_drv_state = TS_DRV_ASKY;
+
     }
     else  fall_BUSY_enable_PENIRQ();  /* else, re-loop  */
     break;
 
   case TS_DRV_ASKY:
     ask_y_conv();
-    ts_drv_state++;
+    ts_drv_state = TS_DRV_READX;
     break;
 
   case TS_DRV_READX:
     read_x_conv();
-    ts_drv_state++;
+    ts_drv_state = TS_DRV_READY;
     break;
 
   case TS_DRV_READY:
@@ -1218,6 +1451,10 @@ static void handle_spi_irq(void) {
     break;
 
   case TS_DRV_ERROR:
+    if (e_first < 10 ) {
+      e_first++;
+      printk("spi driver error\n");
+    }
     if(IS_BUSY_ENDED) {              /* If BUSY down... */
       release_SPIM_transfert();
       cause_event(CONV_ERROR);
@@ -1242,43 +1479,33 @@ static void handle_spi_irq(void) {
 /*
  * Called whenever a process attempts to read the device it has already open.
  */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0))
 static ssize_t ts_read (struct file *file,
                         char *buff,       /* the buffer to fill with data */
 			size_t len,       /* the length of the buffer.    */
 			loff_t *offset) { /* Our offset in the file       */
-#else
-static int ts_read(struct inode *inode, struct file *file,
-		   char *buff,            /* the buffer to fill with data */
-		   int len) {             /* the length of the buffer.    */
-		                          /* NO WRITE beyond that !!!     */
-#endif
 
-  char *p_buffer;
-  char c;
-  int  i;
-  int  err;
+  int  i=0;
+  struct ts_pen_info * ts_p;
 
-  while(!new_pen_state) {    /* noting to read */
+  while(tsp_read == tsp_next) {    /* nothing to read */
     if(file->f_flags & O_NONBLOCK)
       return -EAGAIN;
-    interruptible_sleep_on(&queue->proc_list);
-
-#if (LINUX_VERSION_CODE >= 0x020100)
-    if(signal_pending(current))
-#else
-    if(current->signal & ~current->blocked)  /* a signal arrived */
-#endif
+    if (wait_event_interruptible(queue->proc_list,(tsp_read != tsp_next)))
       return -ERESTARTSYS;    /* tell the fs layer to handle it  */
     /* otherwise loop */
   }
 
-  /* Force length to the one available */
+  /* get the data pointer */
+  ts_p = get_read_tsp();
+
+  ts_p->id = (tsp_read << 8) + tsp_current;
+
+  /* Force length to the one available ... nasty PSW*/
   len = DATA_LENGTH;
 
   /* verify that the user space address to write is valid */
-  err = verify_area(VERIFY_WRITE,buff,len);
-  if(err) return err;
+  /*err = verify_area(VERIFY_WRITE,buff,len); */
+  /*if(err) return err; */
 
   /*
    * The events are anyway put in the queue.
@@ -1286,24 +1513,10 @@ static int ts_read(struct inode *inode, struct file *file,
    * This decision is controlled through the ioctl function.
    * When the read doesn't flush the queue, this last is always full.
    */
-  if(current_params.event_queue_on) {
-    i = len;
-    while((i>0) && !queue_empty()) {
-      c = get_char_from_queue();
-      put_user(c,buff++);
-      i--;
-    }
-  }
-  else {
-    p_buffer = (char *)&ts_pen;
-    for(i=len-1;i>=0;i--)   put_user(p_buffer[i],buff+i);
-/*    for(i=0;i<len;i++)   put_user(p_buffer[i],buff+i);*/
-  }
+  /* PSW always read from the circular buffer  */
+  copy_to_user(buff,(char *)ts_p,len);
+  set_next_read();
 
-  if(queue_empty() || !current_params.event_queue_on)
-    new_pen_state = 0;  /* queue events fully consumned */
-  else
-    new_pen_state = 1;  /* queue not empty              */
 
   if(len-i) {
       file->f_dentry->d_inode->i_atime = CURRENT_TIME; /* nfi */
@@ -1321,7 +1534,7 @@ static int ts_read(struct inode *inode, struct file *file,
 static unsigned int ts_poll(struct file *file, poll_table *table) {
 
   poll_wait(file,&queue->proc_list,table);
-  if (new_pen_state)
+  if (tsp_read != tsp_current )
     return POLLIN | POLLRDNORM;
   return 0;
 
@@ -1417,7 +1630,7 @@ static int ts_open(struct inode *inode, struct file *file) {
    */
   /* IRQ for pen */
   err = request_irq(PEN_IRQ_NUM, handle_pen_irq,
-		    IRQ_FLG_STD,"touch_screen",NULL);
+		    0/*IRQ_FLG_STD*/,"touch_screen",NULL);
   if(err) {
     printk("%s: Error. Cannot attach IRQ %d to touch screen device\n",
 	   __file__, PEN_IRQ_NUM);
@@ -1428,7 +1641,7 @@ static int ts_open(struct inode *inode, struct file *file) {
 
   /* IRQ for SPIM */
   err = request_irq(SPI_IRQ_NUM, handle_spi_irq,
-		    IRQ_FLG_STD,"spi_irq",NULL);
+		    0/*IRQ_FLG_STD*/,"spi_irq",NULL);
   if(err) {
     printk("%s: Error. Cannot attach IRQ %d to SPIM device\n",
            __file__, SPI_IRQ_NUM);
@@ -1456,18 +1669,23 @@ static int ts_open(struct inode *inode, struct file *file) {
   /* And my own counter too */
   device_open++;
 
+  CARD_SELECT;          /* Select ADS7843.     */
+  SPIM_ENABLE;          /* Enable SPIM         */
+  /*SPIM_INIT;*/            /* Set SPIM parameters */
+
+
+  /* enable this here*/
+  CLEAR_SPIM_IRQ;              /* Consume residual irq from spim */
+  fall_BUSY_enable_PENIRQ();
+
   return 0;  /* open succeed */
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0))
-static int ts_fasync(int inode, struct file *file, int mode) {
-#else
-static int ts_fasync(struct inode *inode, struct file *file, int mode) {
-#endif
 
+static int ts_fasync(int fd, struct file *file, int mode) {
   int retval;
   
-  retval = fasync_helper(inode,file,mode,&queue->fasync);
+  retval = fasync_helper(fd,file,mode,&queue->fasync);
   if(retval < 0)
     return retval;
   return 0;
@@ -1476,22 +1694,20 @@ static int ts_fasync(struct inode *inode, struct file *file, int mode) {
 /*
  * Called whenever a process attempts to close the device file.
  */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0))
 static int ts_release(struct inode *inode, struct file *file) {
-#else
-static void ts_release(struct inode *inode, struct file *file) {
-#endif
+  int ts_st;
+  ts_st = ts_drv_state;
 
   /* Remove this file from the asynchronously notified file's */
-  ts_fasync(inode,file,0);
-
+  ts_fasync(-1,file,0);
+  
   /* Release hardware */
   release_ts_drv();
 
   /* Free the allocated memory for the queue */
   kfree(queue);
 
-  /* IRQ have to be freed after the hardware is instructed not to interrupt
+  /* IRQ is freed after the hardware is instructed not to interrupt
    * the processor any more.
    */
   free_irq(SPI_IRQ_NUM,NULL);
@@ -1504,10 +1720,7 @@ static void ts_release(struct inode *inode, struct file *file) {
 
   /* And my own counter too */
   device_open--;
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,0))
   return 0;
-#endif
 }
 
 
@@ -1556,8 +1769,10 @@ static struct miscdevice mc68328_digi = {
  */
 static int __init mc68328digi_init(void) {
   int err;
+  int i;
 
   printk("%s: MC68328DIGI touch screen driver\n", __file__);
+  printk("MC68328DIGI info size %d\n", (int)DATA_LENGTH);
 
   /* Register the misc device driver */
   err = misc_register(&mc68328_digi);
@@ -1567,8 +1782,39 @@ static int __init mc68328digi_init(void) {
     printk("%s: Device register with name: %s and number: %d %d\n",
 	   __file__, mc68328_digi.name, MC68328DIGI_MAJOR, mc68328_digi.minor);
 
-  /* Init prameters settings at boot time */
+  /* Init parameters settings at boot time */
   init_ts_settings();
+
+  /* Init hardware as a test*/
+  /*init_ts_drv();*/
+
+  /* init hardware */
+  init_ts_hardware();
+
+  /* no irq's */
+  PDIRQEN =0;
+  CLEAR_SPIM_IRQ;              /* Consume residual irq from spim */
+  fall_BUSY_enable_PENIRQ();
+  /* all level */
+  PDIQEG = 0;
+
+  /* Write a 1 to the data to clear an edge triggered interrupt */
+  PENIRQ_DATA |= PEN_MASK;
+
+  PDPUEN &= ~1; /* no pullup on port 0 */
+
+  /* PSW tests xxxx */
+  PDDIR  |= PEN_MASK_2;    /* PD4 as output                               */
+  PDDATA |= PEN_MASK_2;    /* PD4 = 1                            */
+  for (i = 0 ; i < 500 ; i++ )
+    udelay(1000);
+  PDDATA &= ~PEN_MASK_2;    /* PD4 = 0                    */
+  for (i = 0 ; i < 500 ; i++ )
+    udelay(1000);
+
+  PDDATA |= PEN_MASK_2;    /* PD4 = 1                    */
+  for (i = 0 ; i < 500 ; i++ )
+    udelay(1000);
 
   return err;     /* A non zero value means that init_module failed */
 }
@@ -1583,3 +1829,5 @@ void mc68328digi_cleanup(void) {
 
 module_init(mc68328digi_init);
 module_exit(mc68328digi_cleanup);
+
+MODULE_LICENSE("GPL");

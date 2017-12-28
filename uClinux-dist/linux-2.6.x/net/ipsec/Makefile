@@ -9,6 +9,8 @@ EXTRA_CFLAGS += -I$(OPENSWANSRCDIR) -I$(OPENSWANSRCDIR)/openswan/lib \
 
 $(obj)/.linked:
 	ln -fs $(OPENSWANSRCDIR)/linux/net/ipsec/*.[cS] $(obj)/.
+	ln -fs $(OPENSWANSRCDIR)/linux/net/ipsec/aes/*.[cS] $(obj)/aes/.
+	ln -fs $(OPENSWANSRCDIR)/linux/net/ipsec/des/*.[cS] $(obj)/des/.
 	touch $(obj)/.linked
 
 -include $(obj)/.linked

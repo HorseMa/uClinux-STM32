@@ -427,10 +427,13 @@ int ledman_serialmap[8] = {
 };
 #endif
 
-#if defined(CONFIG_ARCH_SE4000) || defined(CONFIG_MACH_ESS710) || \
+#if defined(CONFIG_ARCH_SE4000) || defined(CONFIG_MACH_MONTEJADE) || \
     defined(CONFIG_MACH_SG560) || defined(CONFIG_MACH_SG560USB) || \
-    defined(CONFIG_MACH_SG580) || defined(CONFIG_MACH_MONTEJADE) || \
-    defined(CONFIG_MACH_SG565) || defined(CONFIG_MACH_SG590)
+    defined(CONFIG_MACH_SG560ADSL) || defined(CONFIG_MACH_SG565) || \
+    defined(CONFIG_MACH_SG580) || defined(CONFIG_MACH_SG590) || \
+    defined(CONFIG_MACH_ESS710) || defined(CONFIG_MACH_SG720) || \
+    defined(CONFIG_MACH_SE5100) || defined(CONFIG_MACH_SG8100) || \
+    defined(CONFIG_MACH_SHIVA1100)
 /*
  *	The XSCALE/IXP425 does not wire out the DCD and DTR lines.
  *	We implement them using GPIO lines on the SnapGear boards.

@@ -12,7 +12,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: oswlog.c,v 1.3 2004-10-16 23:42:13 mcr Exp $
+ * RCSID $Id: oswlog.c,v 1.3 2004/10/16 23:42:13 mcr Exp $
  */
 
 #include <stdio.h>
@@ -33,6 +33,7 @@
 
 #include "constants.h"
 #include "oswlog.h"
+#include "openswan/pfkey_debug.h"
 
 bool
     log_to_stderr = TRUE,	/* should log go to stderr? */
@@ -52,6 +53,9 @@ tool_init_log(void)
 	setbuf(stderr, NULL);
     if (log_to_syslog)
 	openlog(progname, LOG_CONS | LOG_NDELAY | LOG_PID, LOG_AUTHPRIV);
+
+    pfkey_error_func = printf;
+    pfkey_debug_func = printf;
 }
 
 void
@@ -80,6 +84,7 @@ fmt_log(char *buf, size_t buf_len,
     {
 	/* start with name of connection */
 	strncat(buf, progname, buf_len);
+	strncat(buf, " ", buf_len);
     }
 
     ps = strlen(buf);
@@ -88,7 +93,7 @@ fmt_log(char *buf, size_t buf_len,
 	(void)sanitize_string(buf, buf_len);
 }
 
-void
+int
 openswan_log(const char *message, ...)
 {
     va_list args;
@@ -102,6 +107,8 @@ openswan_log(const char *message, ...)
 	fprintf(stderr, "%s\n", m);
     if (log_to_syslog)
 	syslog(LOG_WARNING, "%s", m);
+    
+    return 0;
 }
 
 void
@@ -172,6 +179,13 @@ openswan_exit_log_errno_routine(int e, const char *message, ...)
     exit_tool(1);
 }
 
+void
+openswan_log_abort(const char *file_str, int line_no)
+{
+	openswan_loglog(RC_LOG_SERIOUS, "ABORT at %s:%lu", file_str, line_no);
+	abort();
+}
+
 /* Debugging message support */
 
 #if !defined(NO_DEBUG)
@@ -216,7 +230,7 @@ set_debugging(lset_t deb)
 
 /* log a debugging message (prefixed by "| ") */
 
-void
+int
 openswan_DBG_log(const char *message, ...)
 {
     va_list args;
@@ -233,6 +247,8 @@ openswan_DBG_log(const char *message, ...)
 	fprintf(stderr, "| %s\n", m);
     if (log_to_syslog)
 	syslog(LOG_DEBUG, "| %s", m);
+
+    return 0;
 }
 
 /* dump raw bytes in hex to stderr (for lack of any better destination) */

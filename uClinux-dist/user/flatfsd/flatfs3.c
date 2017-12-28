@@ -337,31 +337,6 @@ unsigned int flat3_gethdr(void)
 
 /*****************************************************************************/
 
-#ifndef HAS_RTC
-static void parseconfig(char *buf)
-{
-	char *confline, *confdata;
-
-	confline = strtok(buf, "\n");
-	while (confline) {
-		confdata = strchr(confline, ' ');
-		if (confdata) {
-			*confdata = '\0';
-			confdata++;
-			if (!strcmp(confline, "time")) {
-				time_t t;
-				t = atol(confdata);
-				if (t > time(NULL))
-					stime(&t);
-			}
-		}
-		confline = strtok(NULL, "\n");
-	}
-}
-#endif
-
-/*****************************************************************************/
-
 /*
  * The stored filename may have directory path components. Scan the filename
  * and build the directories as required.
@@ -516,8 +491,8 @@ static int flat3_restorefsoffset(off_t offset, int dowrite)
 
 		}
 
-		/*fprintf(stderr, "filename - %s, mode - %o, namelen - %d\n",
-				filename, mode, ent.namelen);*/
+		/* fprintf(stderr, "filename - %s, mode - %o, namelen - %d\n",
+				filename, ent2.mode, ent.namelen); */
 
 		if (S_ISDIR(ent2.mode)) {
 			rc = restoredirectory(filename, &ent, &ent2, dowrite);

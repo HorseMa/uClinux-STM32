@@ -72,6 +72,7 @@ CROSS_COMPILE  = mips-linux-
 endif
 endif
 
+CROSS = $(CROSS_COMPILE)
 CONFIGURE_HOST = mips-linux
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
@@ -93,7 +94,7 @@ include $(ROOTDIR)/vendors/config/common/config.arch
 # Either configure $(CONFIGURE_OPTS)
 # or     configure --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
 #
-TARGETARCH    := mips-linux
+TARGETARCH    ?= mips-linux
 HOSTARCH      := $(shell sh $(ROOTDIR)/tools/config.guess)
 CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
 
@@ -168,7 +169,7 @@ endif
 ifeq ($(UCLINUX_BUILD_SET),1)
 	EXTRA_CFLAGS := $(CPUFLAGS)
 
-	CXXLIBS = $(LIBSTDCPP) $(CXXSUP)
+	CXXLIBS =
   	 
 	LDLIBS = $(LIBBIND)
 	SH_LDFLAGS = $(LDFLAGS)

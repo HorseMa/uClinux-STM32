@@ -120,6 +120,11 @@ Default: 120
 Waiting for a new job will timeout after this time (seconds).
 .br 
 Default: 30
+.TP
+\fBExcludePath REGEX\fR
+Don't scan files and directories matching REGEX. This directive can be used multiple times.
+.br
+Default: scan all
 .TP 
 \fBMaxDirectoryRecursion NUMBER\fR
 Maximum depth directories are scanned at.
@@ -194,6 +199,16 @@ Default: 2048
 Detect Possibly Unwanted Applications.
 .br 
 Default: No
+.TP
+\fBExcludePUA CATEGORY\fR
+Exclude a specific PUA category. This directive can be used multiple times. See http://www.clamav.net/support/pua for the complete list of PUA categories.
+.br
+Default: Load all categories (if DetectPUA is activated)
+.TP
+\fBIncludePUA CATEGORY\fR
+Only include a specific PUA category. This directive can be used multiple times. See http://www.clamav.net/support/pua for the complete list of PUA categories.
+.br
+Default: Load all categories (if DetectPUA is activated)
 .TP 
 \fBAlgorithmicDetection BOOL\fR
 In some cases (eg. complex malware, exploits in graphic files, and others), ClamAV uses special algorithms to provide accurate detection. This option controls the algorithmic detection.
@@ -240,6 +255,11 @@ If an email contains URLs ClamAV can download and scan them. \fBWARNING: This op
 .br 
 Default: no
 .TP
+\fBScanPartialMessages BOOL\fR
+Scan RFC1341 messages split over many emails. You will need to periodically clean up $TemporaryDirectory/clamav-partial directory. \fBWARNING: This option may open your system to a DoS attack. Never use it on loaded servers.\fR
+.br
+Default: no
+.TP
 \fBMailMaxRecursion NUMBER (OBSOLETE)\fR
 \fBWARNING:\fR This option is no longer accepted. See \fBMaxRecursion\fR.
 .TP 
@@ -262,6 +282,36 @@ Default: no
 Always block cloaked URLs, even if URL isn't in database. This can lead to false positives.
 .br
 Default: no
+.TP
+\fBHeuristicScanPrecedence BOOL\fR
+Allow heuristic match to take precedence. When enabled, if a heuristic scan (such as phishingScan) detects a possible virus/phishing it will stop scanning immediately. Recommended, saves CPU scan-time. When disabled, virus/phishing detected by heuristic scans will be reported only at the end of a scan. If an archive contains both a heuristically detected virus/phishing, and a real malware, the real malware will be reported. Keep this disabled if you intend to handle "*.Heuristics.*" viruses  differently from "real" malware. If a non-heuristically-detected virus (signature-based) is found first, the scan is interrupted immediately, regardless of this config option.
+.br
+Default: no
+.TP
+\fBStructuredDataDetection BOOL\fR
+Enable the DLP module.
+.br 
+Default: no
+.TP
+\fBStructuredMinCreditCardCount NUMBER\fR
+This option sets the lowest number of Credit Card numbers found in a file to generate a detect.
+.br 
+Default: 3
+.TP
+\fBStructuredMinSSNCount NUMBER\fR
+This option sets the lowest number of Social Security Numbers found in a file to generate a detect.
+.br 
+Default: 3
+.TP
+\fBStructuredSSNFormatNormal BOOL\fR
+With this option enabled the DLP module will search for valid SSNs formatted as xxx-yy-zzzz.
+.br 
+Default: Yes
+.TP
+\fBStructuredSSNFormatStripped BOOL\fR
+With this option enabled the DLP module will search for valid SSNs formatted as xxxyyzzzz.
+.br 
+Default: No
 .TP
 \fBScanArchive BOOL\fR
 Enable archive scanning.

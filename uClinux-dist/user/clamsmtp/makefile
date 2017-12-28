@@ -5,10 +5,10 @@ CONFOPTS :=	--enable-dependency-tracking		\
 TS_LIBS :=
 
 ifdef CONFIG_USER_TRUSTEDSOURCE_V2
-TS_LIBS := -lrep -lsnapgear
+TS_LIBS := -lrep -lsnapgear -lutil
 else 
 ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
-TS_LIBS := -lsnapgear
+TS_LIBS := -lsnapgear -lutil
 endif
 endif
 

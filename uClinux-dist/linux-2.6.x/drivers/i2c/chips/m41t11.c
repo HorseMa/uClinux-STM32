@@ -64,6 +64,8 @@ static ssize_t m41t11_read(struct file *fp, char __user *buf, size_t count, loff
 {
 	int total;
 
+	if (! client)
+		return -ENODEV;
 	if (fp->f_pos >= M41T11_MSIZE)
 		return 0;
 
@@ -84,6 +86,8 @@ static ssize_t m41t11_write(struct file *fp, const char __user *buf, size_t coun
 	int total;
 	char val;
 
+	if (! client)
+		return -ENODEV;
 	if (fp->f_pos >= M41T11_MSIZE)
 		return 0;
 
@@ -157,6 +161,9 @@ static void m41t11_settime(struct rtc_time *rtime)
 static int m41t11_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct rtc_time rtime;
+
+	if (! client)
+		return -ENODEV;
 
 	switch (cmd) {
 

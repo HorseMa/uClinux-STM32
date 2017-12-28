@@ -273,7 +273,7 @@ static inline void __iomem * __ioremap_mode(phys_t offset, unsigned long size,
  * memory-like regions on I/O busses.
  */
 #define ioremap_cachable(offset, size)					\
-	__ioremap_mode((offset), (size), PAGE_CACHABLE_DEFAULT)
+	__ioremap_mode((offset), (size), _page_cachable_default)
 
 /*
  * These two are MIPS specific ioremap variant.  ioremap_cacheable_cow
@@ -302,6 +302,12 @@ static inline void iounmap(const volatile void __iomem *addr)
 #undef __IS_KSEG1
 }
 
+#ifdef CONFIG_CPU_CAVIUM_OCTEON
+#define war_octeon_io_reorder_wmb()  		wmb()
+#else
+#define war_octeon_io_reorder_wmb()		do { } while (0)
+#endif
+
 #define __BUILD_MEMORY_SINGLE(pfx, bwlq, type, irq)			\
 									\
 static inline void pfx##write##bwlq(type val,				\
@@ -309,6 +315,8 @@ static inline void pfx##write##bwlq(type val,				\
 {									\
 	volatile type *__mem;						\
 	type __val;							\
+									\
+	war_octeon_io_reorder_wmb();					\
 									\
 	__mem = (void *)__swizzle_addr_##bwlq((unsigned long)(mem));	\
 									\
@@ -376,6 +384,8 @@ static inline void pfx##out##bwlq##p(type val, unsigned long port)	\
 {									\
 	volatile type *__addr;						\
 	type __val;							\
+									\
+	war_octeon_io_reorder_wmb();					\
 									\
 	__addr = (void *)__swizzle_addr_##bwlq(mips_io_port_base + port); \
 									\
@@ -511,8 +521,12 @@ BUILDSTRING(q, u64)
 #endif
 
 
+#ifdef CONFIG_CPU_CAVIUM_OCTEON
+#define mmiowb() wmb()
+#else
 /* Depends on MIPS II instruction set */
 #define mmiowb() asm volatile ("sync" ::: "memory")
+#endif
 
 static inline void memset_io(volatile void __iomem *addr, unsigned char val, int count)
 {

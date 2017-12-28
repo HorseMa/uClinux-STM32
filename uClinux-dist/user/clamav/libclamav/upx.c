@@ -56,6 +56,7 @@
 #include "others.h"
 #include "upx.h"
 #include "str.h"
+#include "lzma_iface.h"
 
 #define PEALIGN(o,a) (((a))?(((o)/(a))*(a)):(o))
 #define PESALIGN(o,a) (((a))?(((o)/(a)+((o)%(a)!=0))*(a)):(o))
@@ -117,7 +118,7 @@ static char *checkpe(char *dst, uint32_t dsize, char *pehdr, uint32_t *valign, u
 
 static int pefromupx (char *src, uint32_t ssize, char *dst, uint32_t *dsize, uint32_t ep, uint32_t upx0, uint32_t upx1, uint32_t *magic, uint32_t dend)
 {
-  char *imports, *sections, *pehdr=NULL, *newbuf;
+  char *imports, *sections=NULL, *pehdr=NULL, *newbuf;
   unsigned int sectcnt=0, upd=1;
   uint32_t realstuffsz=0, valign=0;
   uint32_t foffset=0xd0+0xf8;
@@ -133,10 +134,10 @@ static int pefromupx (char *src, uint32_t ssize, char *dst, uint32_t *dsize, uin
   }
 
   if (!valign && ep - upx1 + 0x80 < ssize-8) {
-    char *pt = &src[ep - upx1 + 0x80];
+    const char *pt = &src[ep - upx1 + 0x80];
     cli_dbgmsg("UPX: bad magic - scanning for imports\n");
     
-    while ((pt=(char *)cli_memstr(pt, ssize - (pt-src) - 8, "\x8d\xbe", 2))) {
+    while ((pt=cli_memstr(pt, ssize - (pt-src) - 8, "\x8d\xbe", 2))) {
       if (pt[6] == '\x8b' && pt[7] == '\x07') { /* lea edi, [esi+imports] / mov eax, [edi] */
 	valign=pt-src+2-ep+upx1;
 	break;
@@ -519,4 +520,25 @@ int upx_inflate2e(char *src, uint32_t ssize, char *dst, uint32_t *dsize, uint32_
   }
 
   return pefromupx (src, ssize, dst, dsize, ep, upx0, upx1, magic, dcur);
+}
+
+int upx_inflatelzma(char *src, uint32_t ssize, char *dst, uint32_t *dsize, uint32_t upx0, uint32_t upx1, uint32_t ep) {
+  CLI_LZMA *lz = NULL;
+  struct stream_state s;
+  uint32_t magic[]={0xb16,0xb1e,0};
+
+  cli_LzmaInitUPX(&lz, *dsize);
+  s.avail_in = ssize;
+  s.avail_out = *dsize;
+  s.next_in = src+2;
+  s.next_out = dst;
+
+  if(cli_LzmaDecode(&lz, &s)==LZMA_RESULT_DATA_ERROR) {
+/*     __asm__ __volatile__("int3"); */
+    cli_LzmaShutdown(&lz);
+    return -1;
+  }
+  cli_LzmaShutdown(&lz);
+
+  return pefromupx (src, ssize, dst, dsize, ep, upx0, upx1, magic, *dsize);
 }

@@ -38,5 +38,6 @@ int filecopy(const char *src, const char *dest);
 int dircopy(const char *src, const char *dest);
 int cvd_unpack(const char *cvd, const char *destdir);
 int daemonize(void);
-
+const char *get_version(void);
+int match_regex(const char *filename, const char *pattern);
 #endif

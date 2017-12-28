@@ -150,6 +150,9 @@ int syslogd_load_config(const char *filename, syslogd_config_t *config)
 								else if (strcmp(token, "port") == 0) {
 									remote->port = atoi(value);
 								}
+								else if (strcmp(token, "name") == 0) {
+									remote->name = strdup(value);
+								}
 								else {
 									debug_printf("Unknown %s: %s=%s", type, token, value);
 								}
@@ -220,6 +223,7 @@ void syslogd_discard_config(syslogd_config_t *config)
 					syslogd_remote_config_t *remote = (syslogd_remote_config_t *)target;
 
 					free(remote->host);
+					free(remote->name);
 				}
 				break;
 #endif
